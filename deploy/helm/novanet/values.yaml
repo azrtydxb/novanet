@@ -1,0 +1,66 @@
+image:
+  agent:
+    repository: ghcr.io/piwi3910/novanet-agent
+    tag: latest
+    pullPolicy: IfNotPresent
+  dataplane:
+    repository: ghcr.io/piwi3910/novanet-dataplane
+    tag: latest
+    pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+config:
+  clusterCIDR: "10.244.0.0/16"
+  nodeCIDRMaskSize: 24
+  tunnelProtocol: "geneve"  # geneve or vxlan
+  routingMode: "overlay"     # overlay or native
+  logLevel: "info"
+
+novaroute:
+  enabled: false
+  socket: "/run/novaroute/novaroute.sock"
+  token: ""
+  protocol: "bgp"  # bgp or ospf
+
+egress:
+  masqueradeEnabled: true
+
+policy:
+  defaultDeny: false
+
+metrics:
+  enabled: true
+  port: 9103
+
+tolerations:
+  - operator: Exists
+    effect: NoSchedule
+  - operator: Exists
+    effect: NoExecute
+
+nodeSelector:
+  kubernetes.io/os: linux
+
+resources:
+  agent:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  dataplane:
+    requests:
+      cpu: 100m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 128Mi
+
+priorityClassName: system-node-critical
+
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1

@@ -1,0 +1,45 @@
+# Dockerfile.build — Rust/eBPF builder for macOS development.
+# Builds the eBPF programs and the novanet-dataplane binary inside Docker
+# so developers on macOS (or any non-Linux host) can produce Linux binaries.
+#
+# Usage:
+#   docker build -f Dockerfile.build -t novanet-builder .
+#   docker create --name novanet-extract novanet-builder /bin/true
+#   docker cp novanet-extract:/build/dataplane/target/bpfel-unknown-none/release/novanet-ebpf bin/
+#   docker cp novanet-extract:/build/dataplane/target/release/novanet-dataplane bin/
+#   docker rm novanet-extract
+
+FROM rust:nightly-bookworm AS builder
+
+# Install system dependencies for eBPF compilation and protobuf.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    clang \
+    llvm \
+    libelf-dev \
+    linux-headers-generic \
+    pkg-config \
+    protobuf-compiler \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install bpf-linker for eBPF linking.
+RUN cargo install bpf-linker
+
+# Add the eBPF target.
+RUN rustup component add rust-src
+
+WORKDIR /build
+
+# Copy the dataplane workspace and api definitions.
+COPY dataplane/ dataplane/
+COPY api/ api/
+
+WORKDIR /build/dataplane
+
+# Stage 1: Build eBPF programs targeting bpfel-unknown-none.
+RUN cargo +nightly build --package novanet-ebpf \
+    --target bpfel-unknown-none \
+    -Z build-std=core \
+    --release
+
+# Stage 2: Build the userspace dataplane binary.
+RUN cargo build --package novanet-dataplane --release

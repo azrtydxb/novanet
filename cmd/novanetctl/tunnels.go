@@ -1,0 +1,70 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"text/tabwriter"
+
+	pb "github.com/piwi3910/novanet/api/v1"
+
+	"github.com/spf13/cobra"
+)
+
+func newTunnelsCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "tunnels",
+		Short: "Show tunnel state",
+		Long:  "Display the current overlay tunnel table showing peer nodes and their tunnel interfaces.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runTunnels()
+		},
+	}
+
+	return cmd
+}
+
+func runTunnels() error {
+	conn, err := connectAgent()
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	client := newAgentClient(conn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	// Get tunnel count from agent status.
+	status, err := client.GetAgentStatus(ctx, &pb.GetAgentStatusRequest{})
+	if err != nil {
+		return fmt.Errorf("GetAgentStatus failed: %w", err)
+	}
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	fmt.Fprintf(w, "TUNNEL STATE\n")
+	fmt.Fprintf(w, "============\n\n")
+	fmt.Fprintf(w, "Routing Mode:\t%s\n", status.RoutingMode)
+	fmt.Fprintf(w, "Tunnel Protocol:\t%s\n", status.TunnelProtocol)
+	fmt.Fprintf(w, "Active Tunnels:\t%d\n\n", status.TunnelCount)
+
+	if status.TunnelCount == 0 {
+		fmt.Fprintln(w, "No active tunnels.")
+		fmt.Fprintln(w)
+		if status.RoutingMode == "native" {
+			fmt.Fprintln(w, "Note: Tunnels are not used in native routing mode.")
+		} else {
+			fmt.Fprintln(w, "Note: Tunnels are created when remote nodes join the cluster.")
+		}
+	} else {
+		fmt.Fprintf(w, "NODE_IP\tIFINDEX\tPROTOCOL\n")
+		// Detailed tunnel information requires additional RPCs that are
+		// not yet exposed by the agent. The dataplane GetDataplaneStatus
+		// provides aggregate counts only. Individual tunnel state will
+		// be available once the agent exposes a ListTunnels RPC.
+		fmt.Fprintf(w, "(detailed tunnel listing requires ListTunnels RPC — coming soon)\n")
+	}
+
+	return w.Flush()
+}

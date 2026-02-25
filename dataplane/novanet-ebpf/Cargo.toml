@@ -1,0 +1,15 @@
+[package]
+name = "novanet-ebpf"
+version = "0.1.0"
+edition = "2021"
+description = "NovaNet eBPF programs for TC-based packet processing"
+
+[dependencies]
+aya-ebpf = "0.1"
+aya-log-ebpf = "0.1"
+novanet-common = { path = "../novanet-common" }
+network-types = "0.0.7"
+
+[[bin]]
+name = "novanet-ebpf"
+path = "src/main.rs"

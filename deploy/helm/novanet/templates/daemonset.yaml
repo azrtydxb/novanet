@@ -1,0 +1,214 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "novanet.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "novanet.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "novanet.selectorLabels" . | nindent 6 }}
+  updateStrategy:
+    {{- toYaml .Values.updateStrategy | nindent 4 }}
+  template:
+    metadata:
+      labels:
+        {{- include "novanet.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/cni-config: {{ include (print $.Template.BasePath "/cni-config.yaml") . | sha256sum }}
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      serviceAccountName: {{ include "novanet.serviceAccountName" . }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        - name: install-cni
+          image: {{ .Values.image.agent.repository }}:{{ .Values.image.agent.tag }}
+          imagePullPolicy: {{ .Values.image.agent.pullPolicy }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              # Copy the CNI binary to the host.
+              cp /usr/bin/novanet-cni /host/opt/cni/bin/novanet-cni
+              chmod 755 /host/opt/cni/bin/novanet-cni
+              # Write the CNI configuration to the host.
+              cp /cni-config/10-novanet.conflist /host/etc/cni/net.d/10-novanet.conflist
+              echo "CNI binary and config installed."
+          volumeMounts:
+            - name: cni-bin
+              mountPath: /host/opt/cni/bin
+            - name: cni-conf
+              mountPath: /host/etc/cni/net.d
+            - name: cni-config
+              mountPath: /cni-config
+              readOnly: true
+          securityContext:
+            privileged: false
+            capabilities:
+              drop:
+                - ALL
+      containers:
+        - name: agent
+          image: {{ .Values.image.agent.repository }}:{{ .Values.image.agent.tag }}
+          imagePullPolicy: {{ .Values.image.agent.pullPolicy }}
+          command:
+            - novanet-agent
+            - --config
+            - /etc/novanet/novanet.json
+          env:
+            - name: NOVANET_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: NOVANET_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: NOVANET_POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          {{- if .Values.metrics.enabled }}
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.metrics.port }}
+              protocol: TCP
+          {{- end }}
+          livenessProbe:
+            exec:
+              command:
+                - novanetctl
+                - health
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - novanetctl
+                - health
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.resources.agent | nindent 12 }}
+          securityContext:
+            privileged: false
+            capabilities:
+              add:
+                - NET_ADMIN
+                - SYS_ADMIN
+                - BPF
+                - NET_RAW
+              drop:
+                - ALL
+          volumeMounts:
+            - name: config
+              mountPath: /etc/novanet
+              readOnly: true
+            - name: run-novanet
+              mountPath: /run/novanet
+            {{- if .Values.novaroute.enabled }}
+            - name: run-novaroute
+              mountPath: /run/novaroute
+              readOnly: true
+            {{- end }}
+            - name: bpf-maps
+              mountPath: /sys/fs/bpf
+              mountPropagation: Bidirectional
+            - name: proc
+              mountPath: /proc
+              readOnly: true
+
+        - name: dataplane
+          image: {{ .Values.image.dataplane.repository }}:{{ .Values.image.dataplane.tag }}
+          imagePullPolicy: {{ .Values.image.dataplane.pullPolicy }}
+          command:
+            - novanet-dataplane
+            - --socket
+            - /run/novanet/dataplane.sock
+          livenessProbe:
+            exec:
+              command:
+                - test
+                - -S
+                - /run/novanet/dataplane.sock
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.resources.dataplane | nindent 12 }}
+          securityContext:
+            privileged: false
+            capabilities:
+              add:
+                - NET_ADMIN
+                - SYS_ADMIN
+                - BPF
+                - NET_RAW
+              drop:
+                - ALL
+          volumeMounts:
+            - name: run-novanet
+              mountPath: /run/novanet
+            - name: bpf-maps
+              mountPath: /sys/fs/bpf
+              mountPropagation: Bidirectional
+            - name: proc
+              mountPath: /proc
+              readOnly: true
+
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "novanet.fullname" . }}
+        - name: cni-config
+          configMap:
+            name: {{ include "novanet.fullname" . }}-cni
+        - name: run-novanet
+          hostPath:
+            path: /run/novanet
+            type: DirectoryOrCreate
+        {{- if .Values.novaroute.enabled }}
+        - name: run-novaroute
+          hostPath:
+            path: /run/novaroute
+            type: DirectoryOrCreate
+        {{- end }}
+        - name: cni-bin
+          hostPath:
+            path: /opt/cni/bin
+            type: DirectoryOrCreate
+        - name: cni-conf
+          hostPath:
+            path: /etc/cni/net.d
+            type: DirectoryOrCreate
+        - name: bpf-maps
+          hostPath:
+            path: /sys/fs/bpf
+            type: DirectoryOrCreate
+        - name: proc
+          hostPath:
+            path: /proc
+            type: Directory

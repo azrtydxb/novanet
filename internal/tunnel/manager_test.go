@@ -1,0 +1,309 @@
+package tunnel
+
+import (
+	"context"
+	"net"
+	"sync"
+	"testing"
+
+	"go.uber.org/zap"
+
+	"github.com/piwi3910/novanet/internal/dataplane"
+
+	pb "github.com/piwi3910/novanet/api/v1"
+)
+
+func testLogger() *zap.Logger {
+	logger, _ := zap.NewDevelopment()
+	return logger
+}
+
+// mockDPClient implements dataplane.ClientInterface for testing.
+type mockDPClient struct {
+	mu sync.Mutex
+	upsertTunnelCalls int
+	deleteTunnelCalls int
+}
+
+func (m *mockDPClient) Connect(ctx context.Context) error                                         { return nil }
+func (m *mockDPClient) UpsertEndpoint(ctx context.Context, ep *dataplane.Endpoint) error           { return nil }
+func (m *mockDPClient) DeleteEndpoint(ctx context.Context, ip uint32) error                        { return nil }
+func (m *mockDPClient) UpsertPolicy(ctx context.Context, rule *dataplane.PolicyRule) error         { return nil }
+func (m *mockDPClient) DeletePolicy(ctx context.Context, rule *dataplane.PolicyRule) error         { return nil }
+func (m *mockDPClient) SyncPolicies(ctx context.Context, rules []*dataplane.PolicyRule) (*dataplane.SyncResult, error) {
+	return &dataplane.SyncResult{}, nil
+}
+func (m *mockDPClient) UpdateConfig(ctx context.Context, entries map[uint32]uint64) error { return nil }
+func (m *mockDPClient) AttachProgram(ctx context.Context, iface string, attachType dataplane.AttachType) error {
+	return nil
+}
+func (m *mockDPClient) DetachProgram(ctx context.Context, iface string, attachType dataplane.AttachType) error {
+	return nil
+}
+func (m *mockDPClient) StreamFlows(ctx context.Context, identityFilter uint32) (<-chan *dataplane.FlowEvent, error) {
+	return nil, nil
+}
+func (m *mockDPClient) GetStatus(ctx context.Context) (*dataplane.DataplaneStatus, error) {
+	return &dataplane.DataplaneStatus{}, nil
+}
+func (m *mockDPClient) Close() error { return nil }
+
+func (m *mockDPClient) UpsertTunnel(ctx context.Context, nodeIP, ifindex, vni uint32) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.upsertTunnelCalls++
+	return nil
+}
+
+func (m *mockDPClient) DeleteTunnel(ctx context.Context, nodeIP uint32) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.deleteTunnelCalls++
+	return nil
+}
+
+// Unused but needed to show pb import is valid.
+var _ = pb.PolicyAction_POLICY_ACTION_ALLOW
+
+func testManager(protocol string) (*Manager, *mockDPClient) {
+	dp := &mockDPClient{}
+	m := NewManager(protocol, net.ParseIP("10.0.0.1"), 100, dp, testLogger())
+	return m, dp
+}
+
+func TestNewManager(t *testing.T) {
+	m, _ := testManager("geneve")
+	if m == nil {
+		t.Fatal("expected non-nil manager")
+	}
+	if m.Protocol() != "geneve" {
+		t.Fatalf("expected protocol geneve, got %s", m.Protocol())
+	}
+}
+
+func TestAddGeneveTunnel(t *testing.T) {
+	m, dp := testManager("geneve")
+
+	err := m.AddTunnel("node-2", "10.0.0.2")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if m.Count() != 1 {
+		t.Fatalf("expected 1 tunnel, got %d", m.Count())
+	}
+
+	info, ok := m.GetTunnel("node-2")
+	if !ok {
+		t.Fatal("expected to find tunnel")
+	}
+	if info.NodeName != "node-2" {
+		t.Fatalf("expected node-2, got %s", info.NodeName)
+	}
+	if info.NodeIP != "10.0.0.2" {
+		t.Fatalf("expected IP 10.0.0.2, got %s", info.NodeIP)
+	}
+	if info.Ifindex <= 0 {
+		t.Fatalf("expected positive ifindex, got %d", info.Ifindex)
+	}
+
+	dp.mu.Lock()
+	if dp.upsertTunnelCalls != 1 {
+		t.Fatalf("expected 1 upsert call, got %d", dp.upsertTunnelCalls)
+	}
+	dp.mu.Unlock()
+}
+
+func TestAddVxlanTunnel(t *testing.T) {
+	m, _ := testManager("vxlan")
+
+	err := m.AddTunnel("node-2", "10.0.0.2")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if m.Count() != 1 {
+		t.Fatalf("expected 1 tunnel, got %d", m.Count())
+	}
+}
+
+func TestAddTunnelUnsupportedProtocol(t *testing.T) {
+	m := NewManager("wireguard", net.ParseIP("10.0.0.1"), 100, nil, testLogger())
+
+	err := m.AddTunnel("node-2", "10.0.0.2")
+	if err == nil {
+		t.Fatal("expected error for unsupported protocol")
+	}
+}
+
+func TestAddTunnelUpdate(t *testing.T) {
+	m, dp := testManager("geneve")
+
+	m.AddTunnel("node-2", "10.0.0.2")
+	m.AddTunnel("node-2", "10.0.0.3") // Update with new IP.
+
+	if m.Count() != 1 {
+		t.Fatalf("expected 1 tunnel after update, got %d", m.Count())
+	}
+
+	info, _ := m.GetTunnel("node-2")
+	if info.NodeIP != "10.0.0.3" {
+		t.Fatalf("expected updated IP 10.0.0.3, got %s", info.NodeIP)
+	}
+
+	dp.mu.Lock()
+	// One delete for the old, two upserts total.
+	if dp.deleteTunnelCalls != 1 {
+		t.Fatalf("expected 1 delete call for update, got %d", dp.deleteTunnelCalls)
+	}
+	if dp.upsertTunnelCalls != 2 {
+		t.Fatalf("expected 2 upsert calls, got %d", dp.upsertTunnelCalls)
+	}
+	dp.mu.Unlock()
+}
+
+func TestRemoveTunnel(t *testing.T) {
+	m, dp := testManager("geneve")
+
+	m.AddTunnel("node-2", "10.0.0.2")
+	err := m.RemoveTunnel("node-2")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if m.Count() != 0 {
+		t.Fatalf("expected 0 tunnels, got %d", m.Count())
+	}
+
+	dp.mu.Lock()
+	if dp.deleteTunnelCalls != 1 {
+		t.Fatalf("expected 1 delete call, got %d", dp.deleteTunnelCalls)
+	}
+	dp.mu.Unlock()
+}
+
+func TestRemoveNonExistentTunnel(t *testing.T) {
+	m, _ := testManager("geneve")
+
+	err := m.RemoveTunnel("nonexistent")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestGetTunnelNotFound(t *testing.T) {
+	m, _ := testManager("geneve")
+
+	_, ok := m.GetTunnel("nonexistent")
+	if ok {
+		t.Fatal("expected not found")
+	}
+}
+
+func TestGetTunnelReturnsCopy(t *testing.T) {
+	m, _ := testManager("geneve")
+	m.AddTunnel("node-2", "10.0.0.2")
+
+	info, _ := m.GetTunnel("node-2")
+	info.NodeIP = "modified"
+
+	original, _ := m.GetTunnel("node-2")
+	if original.NodeIP != "10.0.0.2" {
+		t.Fatal("modifying returned tunnel affected stored tunnel")
+	}
+}
+
+func TestListTunnels(t *testing.T) {
+	m, _ := testManager("geneve")
+
+	m.AddTunnel("node-2", "10.0.0.2")
+	m.AddTunnel("node-3", "10.0.0.3")
+	m.AddTunnel("node-4", "10.0.0.4")
+
+	tunnels := m.ListTunnels()
+	if len(tunnels) != 3 {
+		t.Fatalf("expected 3 tunnels, got %d", len(tunnels))
+	}
+}
+
+func TestListTunnelsEmpty(t *testing.T) {
+	m, _ := testManager("geneve")
+
+	tunnels := m.ListTunnels()
+	if len(tunnels) != 0 {
+		t.Fatalf("expected 0 tunnels, got %d", len(tunnels))
+	}
+}
+
+func TestTunnelInterfaceName(t *testing.T) {
+	tests := []struct {
+		protocol string
+		nodeName string
+		expected string
+	}{
+		{"geneve", "node-2", "nv_node-2"},
+		{"vxlan", "node-2", "nvx_node-2"},
+		{"geneve", "very-long-node-name-that-exceeds", "nv_very-long-no"},
+	}
+
+	for _, tt := range tests {
+		got := tunnelInterfaceName(tt.protocol, tt.nodeName)
+		if got != tt.expected {
+			t.Errorf("tunnelInterfaceName(%s, %s) = %s, want %s", tt.protocol, tt.nodeName, got, tt.expected)
+		}
+		if len(got) > 15 {
+			t.Errorf("interface name %s exceeds 15 chars", got)
+		}
+	}
+}
+
+func TestIPToUint32(t *testing.T) {
+	tests := []struct {
+		ip       string
+		expected uint32
+	}{
+		{"10.0.0.1", 0x0A000001},
+		{"192.168.1.1", 0xC0A80101},
+		{"0.0.0.0", 0x00000000},
+	}
+
+	for _, tt := range tests {
+		got := ipToUint32(net.ParseIP(tt.ip))
+		if got != tt.expected {
+			t.Errorf("ipToUint32(%s) = 0x%08X, want 0x%08X", tt.ip, got, tt.expected)
+		}
+	}
+}
+
+func TestConcurrentAccess(t *testing.T) {
+	m, _ := testManager("geneve")
+
+	var wg sync.WaitGroup
+	for i := range 20 {
+		wg.Go(func() {
+			name := "node-" + string(rune('a'+i%26))
+			m.AddTunnel(name, "10.0.0."+string(rune('1'+i%9)))
+		})
+	}
+
+	for range 20 {
+		wg.Go(func() {
+			m.ListTunnels()
+		})
+	}
+
+	wg.Wait()
+}
+
+func TestAddTunnelWithNilDPClient(t *testing.T) {
+	m := NewManager("geneve", net.ParseIP("10.0.0.1"), 100, nil, testLogger())
+
+	err := m.AddTunnel("node-2", "10.0.0.2")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if m.Count() != 1 {
+		t.Fatalf("expected 1 tunnel, got %d", m.Count())
+	}
+}

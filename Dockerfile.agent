@@ -1,0 +1,46 @@
+# Dockerfile.agent — Production image for the NovaNet agent, CNI binary, and CLI.
+#
+# Multi-stage build:
+#   1. Builder stage compiles all Go binaries.
+#   2. Runtime stage uses Alpine for a minimal footprint.
+
+# ---------- builder ----------
+FROM golang:1.25-bookworm AS builder
+
+WORKDIR /src
+
+# Cache module downloads.
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source tree.
+COPY . .
+
+# Build all Go binaries with stripped debug info.
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/novanet-agent   ./cmd/novanet-agent/
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/novanet-cni     ./cmd/novanet-cni/
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/novanetctl      ./cmd/novanetctl/
+
+# ---------- runtime ----------
+FROM alpine:3.21
+
+RUN apk add --no-cache \
+    ca-certificates \
+    iptables \
+    ip6tables \
+    iproute2 \
+    && addgroup -S novanet && adduser -S -G novanet novanet
+
+# Copy binaries from builder.
+COPY --from=builder /out/novanet-agent  /usr/bin/novanet-agent
+COPY --from=builder /out/novanet-cni    /usr/bin/novanet-cni
+COPY --from=builder /out/novanetctl     /usr/bin/novanetctl
+
+# Create runtime directories.
+RUN mkdir -p /run/novanet && chown novanet:novanet /run/novanet
+
+# Health check via the agent's gRPC health endpoint.
+HEALTHCHECK --interval=15s --timeout=5s --retries=3 \
+    CMD novanetctl health || exit 1
+
+ENTRYPOINT ["novanet-agent"]

@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "novanet.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "novanet.labels" . | nindent 4 }}
+data:
+  novanet.json: |
+    {
+      "listen_socket": "/run/novanet/novanet.sock",
+      "cni_socket": "/run/novanet/cni.sock",
+      "dataplane_socket": "/run/novanet/dataplane.sock",
+      "cluster_cidr": {{ .Values.config.clusterCIDR | quote }},
+      "node_cidr_mask_size": {{ .Values.config.nodeCIDRMaskSize }},
+      "tunnel_protocol": {{ .Values.config.tunnelProtocol | quote }},
+      "routing_mode": {{ .Values.config.routingMode | quote }},
+      "novaroute": {
+        "socket": {{ .Values.novaroute.socket | quote }},
+        "token": {{ .Values.novaroute.token | quote }},
+        "protocol": {{ .Values.novaroute.protocol | quote }}
+      },
+      "egress": {
+        "masquerade_enabled": {{ .Values.egress.masqueradeEnabled }}
+      },
+      "policy": {
+        "default_deny": {{ .Values.policy.defaultDeny }}
+      },
+      "log_level": {{ .Values.config.logLevel | quote }},
+      "metrics_address": ":{{ .Values.metrics.port }}"
+    }

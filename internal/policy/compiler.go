@@ -1,0 +1,296 @@
+// Package policy compiles Kubernetes NetworkPolicy objects into identity-based
+// rules suitable for the eBPF dataplane.
+package policy
+
+import (
+	"maps"
+	"slices"
+
+	"go.uber.org/zap"
+	networkingv1 "k8s.io/api/networking/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/piwi3910/novanet/internal/identity"
+)
+
+// Action constants for compiled rules.
+const (
+	ActionDeny  uint8 = 0
+	ActionAllow uint8 = 1
+)
+
+// Protocol constants.
+const (
+	ProtocolTCP  uint8 = 6
+	ProtocolUDP  uint8 = 17
+	ProtocolSCTP uint8 = 132
+	ProtocolAny  uint8 = 0
+)
+
+// WildcardIdentity matches any identity in a rule (used for open selectors).
+const WildcardIdentity uint32 = 0
+
+// CompiledRule represents a single policy rule ready for the dataplane.
+type CompiledRule struct {
+	// SrcIdentity is the source identity ID (0 = wildcard/any).
+	SrcIdentity uint32
+	// DstIdentity is the destination identity ID (0 = wildcard/any).
+	DstIdentity uint32
+	// Protocol is the IP protocol number (0 = any).
+	Protocol uint8
+	// DstPort is the destination port (0 = any).
+	DstPort uint16
+	// Action is the policy action (0 = deny, 1 = allow).
+	Action uint8
+}
+
+// Compiler compiles Kubernetes NetworkPolicy resources into identity-based rules.
+type Compiler struct {
+	identityAllocator *identity.Allocator
+	logger            *zap.Logger
+}
+
+// NewCompiler creates a new policy compiler.
+func NewCompiler(identityAllocator *identity.Allocator, logger *zap.Logger) *Compiler {
+	return &Compiler{
+		identityAllocator: identityAllocator,
+		logger:            logger,
+	}
+}
+
+// CompilePolicy compiles a single NetworkPolicy into a list of compiled rules.
+func (c *Compiler) CompilePolicy(np *networkingv1.NetworkPolicy) []*CompiledRule {
+	if np == nil {
+		return nil
+	}
+
+	var rules []*CompiledRule
+
+	// Determine the identity of pods selected by this policy.
+	dstIdentity := c.selectorToIdentity(np.Spec.PodSelector, np.Namespace)
+
+	// Process ingress rules.
+	if hasPolicyType(np, networkingv1.PolicyTypeIngress) {
+		if len(np.Spec.Ingress) == 0 {
+			// Default deny ingress: deny all traffic to selected pods.
+			rules = append(rules, &CompiledRule{
+				SrcIdentity: WildcardIdentity,
+				DstIdentity: dstIdentity,
+				Protocol:    ProtocolAny,
+				DstPort:     0,
+				Action:      ActionDeny,
+			})
+		} else {
+			for _, ingressRule := range np.Spec.Ingress {
+				rules = append(rules, c.compileIngressRule(ingressRule, dstIdentity, np.Namespace)...)
+			}
+		}
+	}
+
+	// Process egress rules.
+	if hasPolicyType(np, networkingv1.PolicyTypeEgress) {
+		if len(np.Spec.Egress) == 0 {
+			// Default deny egress: deny all traffic from selected pods.
+			rules = append(rules, &CompiledRule{
+				SrcIdentity: dstIdentity,
+				DstIdentity: WildcardIdentity,
+				Protocol:    ProtocolAny,
+				DstPort:     0,
+				Action:      ActionDeny,
+			})
+		} else {
+			for _, egressRule := range np.Spec.Egress {
+				rules = append(rules, c.compileEgressRule(egressRule, dstIdentity, np.Namespace)...)
+			}
+		}
+	}
+
+	c.logger.Debug("compiled policy",
+		zap.String("namespace", np.Namespace),
+		zap.String("name", np.Name),
+		zap.Int("rule_count", len(rules)),
+	)
+
+	return rules
+}
+
+// CompileAll compiles all NetworkPolicies into a combined list of rules.
+func (c *Compiler) CompileAll(policies []*networkingv1.NetworkPolicy) []*CompiledRule {
+	var allRules []*CompiledRule
+	for _, np := range policies {
+		allRules = append(allRules, c.CompilePolicy(np)...)
+	}
+	return allRules
+}
+
+// compileIngressRule compiles a single ingress rule for the target identity.
+func (c *Compiler) compileIngressRule(rule networkingv1.NetworkPolicyIngressRule, dstIdentity uint32, namespace string) []*CompiledRule {
+	var rules []*CompiledRule
+
+	// Resolve source identities from peers.
+	srcIdentities := c.resolvePeers(rule.From, namespace)
+
+	// Resolve ports.
+	ports := c.resolvePorts(rule.Ports)
+
+	// If no peers specified, allow from any source.
+	if len(rule.From) == 0 {
+		srcIdentities = []uint32{WildcardIdentity}
+	}
+
+	// If no ports specified, allow all ports.
+	if len(ports) == 0 {
+		ports = []portProto{{protocol: ProtocolAny, port: 0}}
+	}
+
+	// Create cartesian product of sources x ports.
+	for _, srcID := range srcIdentities {
+		for _, pp := range ports {
+			rules = append(rules, &CompiledRule{
+				SrcIdentity: srcID,
+				DstIdentity: dstIdentity,
+				Protocol:    pp.protocol,
+				DstPort:     pp.port,
+				Action:      ActionAllow,
+			})
+		}
+	}
+
+	return rules
+}
+
+// compileEgressRule compiles a single egress rule for the source identity.
+func (c *Compiler) compileEgressRule(rule networkingv1.NetworkPolicyEgressRule, srcIdentity uint32, namespace string) []*CompiledRule {
+	var rules []*CompiledRule
+
+	// Resolve destination identities from peers.
+	dstIdentities := c.resolvePeers(rule.To, namespace)
+
+	// Resolve ports.
+	ports := c.resolvePorts(rule.Ports)
+
+	// If no peers specified, allow to any destination.
+	if len(rule.To) == 0 {
+		dstIdentities = []uint32{WildcardIdentity}
+	}
+
+	// If no ports specified, allow all ports.
+	if len(ports) == 0 {
+		ports = []portProto{{protocol: ProtocolAny, port: 0}}
+	}
+
+	// Create cartesian product of destinations x ports.
+	for _, dstID := range dstIdentities {
+		for _, pp := range ports {
+			rules = append(rules, &CompiledRule{
+				SrcIdentity: srcIdentity,
+				DstIdentity: dstID,
+				Protocol:    pp.protocol,
+				DstPort:     pp.port,
+				Action:      ActionAllow,
+			})
+		}
+	}
+
+	return rules
+}
+
+// portProto combines a protocol and port for rule generation.
+type portProto struct {
+	protocol uint8
+	port     uint16
+}
+
+// resolvePeers converts NetworkPolicyPeer selectors to identity IDs.
+func (c *Compiler) resolvePeers(peers []networkingv1.NetworkPolicyPeer, namespace string) []uint32 {
+	var identities []uint32
+
+	for _, peer := range peers {
+		if peer.IPBlock != nil {
+			// IPBlock rules cannot be represented purely as identity-based rules.
+			// We log and skip — these require CIDR-based rules in the dataplane.
+			c.logger.Debug("skipping IPBlock peer (not identity-based)",
+				zap.String("cidr", peer.IPBlock.CIDR),
+			)
+			continue
+		}
+
+		// Build label set from selectors.
+		labels := make(map[string]string)
+
+		if peer.PodSelector != nil {
+			maps.Copy(labels, peer.PodSelector.MatchLabels)
+		}
+
+		if peer.NamespaceSelector != nil {
+			// Encode namespace selector labels with a prefix to distinguish them.
+			for k, v := range peer.NamespaceSelector.MatchLabels {
+				labels["ns:"+k] = v
+			}
+		} else if peer.PodSelector != nil {
+			// If only podSelector is specified, scope to the policy's namespace.
+			labels["ns:kubernetes.io/metadata.name"] = namespace
+		}
+
+		if len(labels) > 0 {
+			id := c.identityAllocator.AllocateIdentity(labels)
+			identities = append(identities, id)
+		} else {
+			// Empty selector matches everything.
+			identities = append(identities, WildcardIdentity)
+		}
+	}
+
+	return identities
+}
+
+// resolvePorts converts NetworkPolicyPort to portProto pairs.
+func (c *Compiler) resolvePorts(npPorts []networkingv1.NetworkPolicyPort) []portProto {
+	var ports []portProto
+
+	for _, p := range npPorts {
+		proto := ProtocolTCP // Default protocol is TCP.
+		if p.Protocol != nil {
+			switch *p.Protocol {
+			case "TCP":
+				proto = ProtocolTCP
+			case "UDP":
+				proto = ProtocolUDP
+			case "SCTP":
+				proto = ProtocolSCTP
+			}
+		}
+
+		var port uint16
+		if p.Port != nil {
+			port = uint16(p.Port.IntValue())
+		}
+
+		ports = append(ports, portProto{
+			protocol: proto,
+			port:     port,
+		})
+	}
+
+	return ports
+}
+
+// selectorToIdentity converts a LabelSelector plus namespace into an identity ID.
+func (c *Compiler) selectorToIdentity(selector metav1.LabelSelector, namespace string) uint32 {
+	labels := make(map[string]string)
+	maps.Copy(labels, selector.MatchLabels)
+	// Always scope to the policy namespace.
+	labels["ns:kubernetes.io/metadata.name"] = namespace
+
+	return c.identityAllocator.AllocateIdentity(labels)
+}
+
+// hasPolicyType checks if a NetworkPolicy specifies a given policy type.
+// If no policy types are specified, Ingress is assumed per the Kubernetes spec.
+func hasPolicyType(np *networkingv1.NetworkPolicy, pt networkingv1.PolicyType) bool {
+	if len(np.Spec.PolicyTypes) == 0 {
+		// Default: only Ingress.
+		return pt == networkingv1.PolicyTypeIngress
+	}
+	return slices.Contains(np.Spec.PolicyTypes, pt)
+}

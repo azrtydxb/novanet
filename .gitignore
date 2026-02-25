@@ -1,0 +1,27 @@
+# Build artifacts
+bin/
+*.o
+*.d
+*.bpf.o
+
+# Rust
+dataplane/target/
+
+# Go
+*.test
+coverage.out
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+*.env
+credentials.json

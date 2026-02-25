@@ -1,0 +1,7 @@
+[package]
+name = "novanet-common"
+version = "0.1.0"
+edition = "2021"
+description = "Shared types between NovaNet eBPF programs and userspace dataplane"
+
+[dependencies]

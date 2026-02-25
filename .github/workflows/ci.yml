@@ -1,0 +1,148 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Check formatting
+        run: |
+          if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
+            echo "Code is not formatted:"
+            gofmt -s -l .
+            exit 1
+          fi
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Check go mod tidy
+        run: |
+          go mod tidy
+          if ! git diff --quiet go.mod go.sum; then
+            echo "go.mod or go.sum is not tidy. Run 'go mod tidy' and commit the changes."
+            git diff go.mod go.sum
+            exit 1
+          fi
+
+  test-go:
+    name: Test (Go)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run unit tests
+        run: go test -race -count=1 -coverprofile=coverage.out ./...
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.out
+          retention-days: 7
+
+  build-go:
+    name: Build (${{ matrix.binary }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - binary: novanet-agent
+            path: ./cmd/novanet-agent/
+          - binary: novanet-cni
+            path: ./cmd/novanet-cni/
+          - binary: novanetctl
+            path: ./cmd/novanetctl/
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build ${{ matrix.binary }}
+        run: |
+          mkdir -p bin
+          CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/${{ matrix.binary }} ${{ matrix.path }}
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.binary }}
+          path: bin/${{ matrix.binary }}
+          retention-days: 7
+
+  build-rust:
+    name: Build (Rust/eBPF)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Rust/eBPF via Docker
+        run: |
+          docker build -f Dockerfile.build -t novanet-builder .
+          docker create --name novanet-extract novanet-builder /bin/true
+          mkdir -p bin
+          docker cp novanet-extract:/build/dataplane/target/release/novanet-dataplane bin/novanet-dataplane
+          docker cp novanet-extract:/build/dataplane/target/bpfel-unknown-none/release/novanet-ebpf bin/novanet-ebpf.bpf.o || true
+          docker rm novanet-extract
+
+      - name: Upload dataplane binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: novanet-dataplane
+          path: bin/novanet-dataplane
+          retention-days: 7
+
+  security:
+    name: Security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Run govulncheck
+        run: govulncheck ./...
+
+  status-check:
+    name: Status Check
+    if: always()
+    needs: [lint, test-go, build-go, build-rust, security]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Decide status
+        run: |
+          if [[ "${{ needs.lint.result }}" == "failure" || \
+                "${{ needs.test-go.result }}" == "failure" || \
+                "${{ needs.build-go.result }}" == "failure" || \
+                "${{ needs.build-rust.result }}" == "failure" || \
+                "${{ needs.security.result }}" == "failure" ]]; then
+            echo "One or more required jobs failed."
+            exit 1
+          fi
+          echo "All required jobs passed."

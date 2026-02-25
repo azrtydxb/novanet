@@ -1,0 +1,272 @@
+syntax = "proto3";
+
+package novanet.v1;
+
+option go_package = "github.com/piwi3910/novanet/api/v1";
+
+// DataplaneControl is the internal API between the Go management plane
+// and the Rust eBPF dataplane. The Rust dataplane runs the gRPC server,
+// the Go agent is the client.
+service DataplaneControl {
+  // Endpoint management
+  rpc UpsertEndpoint(UpsertEndpointRequest) returns (UpsertEndpointResponse);
+  rpc DeleteEndpoint(DeleteEndpointRequest) returns (DeleteEndpointResponse);
+
+  // Policy management
+  rpc UpsertPolicy(UpsertPolicyRequest) returns (UpsertPolicyResponse);
+  rpc DeletePolicy(DeletePolicyRequest) returns (DeletePolicyResponse);
+  rpc SyncPolicies(SyncPoliciesRequest) returns (SyncPoliciesResponse);
+
+  // Tunnel management (overlay mode)
+  rpc UpsertTunnel(UpsertTunnelRequest) returns (UpsertTunnelResponse);
+  rpc DeleteTunnel(DeleteTunnelRequest) returns (DeleteTunnelResponse);
+
+  // Configuration
+  rpc UpdateConfig(UpdateConfigRequest) returns (UpdateConfigResponse);
+
+  // TC program lifecycle
+  rpc AttachProgram(AttachProgramRequest) returns (AttachProgramResponse);
+  rpc DetachProgram(DetachProgramRequest) returns (DetachProgramResponse);
+
+  // Observability
+  rpc StreamFlows(StreamFlowsRequest) returns (stream FlowEvent);
+  rpc GetDataplaneStatus(GetDataplaneStatusRequest) returns (GetDataplaneStatusResponse);
+}
+
+// AgentControl is the API exposed by the Go agent for CNI binary
+// and CLI tool connections.
+service AgentControl {
+  // CNI operations
+  rpc AddPod(AddPodRequest) returns (AddPodResponse);
+  rpc DelPod(DelPodRequest) returns (DelPodResponse);
+
+  // Status
+  rpc GetAgentStatus(GetAgentStatusRequest) returns (GetAgentStatusResponse);
+
+  // Flow streaming (proxied from dataplane)
+  rpc StreamAgentFlows(StreamAgentFlowsRequest) returns (stream FlowEvent);
+}
+
+// --- Endpoints ---
+
+message UpsertEndpointRequest {
+  uint32 ip = 1;
+  uint32 ifindex = 2;
+  bytes mac = 3;
+  uint32 identity_id = 4;
+  string pod_name = 5;
+  string namespace = 6;
+  uint32 node_ip = 7;
+}
+message UpsertEndpointResponse {}
+
+message DeleteEndpointRequest {
+  uint32 ip = 1;
+}
+message DeleteEndpointResponse {}
+
+// --- Policies ---
+
+message UpsertPolicyRequest {
+  uint32 src_identity = 1;
+  uint32 dst_identity = 2;
+  uint32 protocol = 3;
+  uint32 dst_port = 4;
+  PolicyAction action = 5;
+}
+message UpsertPolicyResponse {}
+
+message DeletePolicyRequest {
+  uint32 src_identity = 1;
+  uint32 dst_identity = 2;
+  uint32 protocol = 3;
+  uint32 dst_port = 4;
+}
+message DeletePolicyResponse {}
+
+message SyncPoliciesRequest {
+  repeated PolicyEntry policies = 1;
+}
+message PolicyEntry {
+  uint32 src_identity = 1;
+  uint32 dst_identity = 2;
+  uint32 protocol = 3;
+  uint32 dst_port = 4;
+  PolicyAction action = 5;
+}
+message SyncPoliciesResponse {
+  uint32 added = 1;
+  uint32 removed = 2;
+  uint32 updated = 3;
+}
+
+enum PolicyAction {
+  POLICY_ACTION_DENY = 0;
+  POLICY_ACTION_ALLOW = 1;
+}
+
+// --- Tunnels ---
+
+message UpsertTunnelRequest {
+  uint32 node_ip = 1;
+  uint32 tunnel_ifindex = 2;
+  uint32 vni = 3;
+}
+message UpsertTunnelResponse {}
+
+message DeleteTunnelRequest {
+  uint32 node_ip = 1;
+}
+message DeleteTunnelResponse {}
+
+// --- Config ---
+
+message UpdateConfigRequest {
+  map<uint32, uint64> entries = 1;
+}
+message UpdateConfigResponse {}
+
+// --- TC Programs ---
+
+message AttachProgramRequest {
+  string interface_name = 1;
+  AttachType attach_type = 2;
+}
+enum AttachType {
+  ATTACH_TC_INGRESS = 0;
+  ATTACH_TC_EGRESS = 1;
+}
+message AttachProgramResponse {}
+
+message DetachProgramRequest {
+  string interface_name = 1;
+  AttachType attach_type = 2;
+}
+message DetachProgramResponse {}
+
+// --- Observability ---
+
+message StreamFlowsRequest {
+  uint32 identity_filter = 1;
+}
+
+message FlowEvent {
+  uint32 src_ip = 1;
+  uint32 dst_ip = 2;
+  uint32 src_identity = 3;
+  uint32 dst_identity = 4;
+  uint32 protocol = 5;
+  uint32 src_port = 6;
+  uint32 dst_port = 7;
+  PolicyAction verdict = 8;
+  uint64 bytes = 9;
+  uint64 packets = 10;
+  int64 timestamp_ns = 11;
+  DropReason drop_reason = 12;
+}
+
+enum DropReason {
+  DROP_REASON_NONE = 0;
+  DROP_REASON_POLICY_DENIED = 1;
+  DROP_REASON_NO_IDENTITY = 2;
+  DROP_REASON_NO_ROUTE = 3;
+  DROP_REASON_NO_TUNNEL = 4;
+  DROP_REASON_TTL_EXCEEDED = 5;
+}
+
+message GetDataplaneStatusRequest {}
+message GetDataplaneStatusResponse {
+  uint32 endpoint_count = 1;
+  uint32 policy_count = 2;
+  uint32 tunnel_count = 3;
+  repeated AttachedProgram programs = 4;
+  string mode = 5;
+  string tunnel_protocol = 6;
+}
+
+message AttachedProgram {
+  string interface_name = 1;
+  string attach_type = 2;
+  uint32 program_id = 3;
+}
+
+// --- CNI Operations ---
+
+message AddPodRequest {
+  string pod_name = 1;
+  string pod_namespace = 2;
+  string container_id = 3;
+  string netns = 4;
+  string if_name = 5;
+  map<string, string> labels = 6;
+}
+
+message AddPodResponse {
+  string ip = 1;
+  string gateway = 2;
+  string mac = 3;
+  int32 prefix_length = 4;
+}
+
+message DelPodRequest {
+  string pod_name = 1;
+  string pod_namespace = 2;
+  string container_id = 3;
+  string netns = 4;
+  string if_name = 5;
+}
+message DelPodResponse {}
+
+// --- Agent Status ---
+
+message GetAgentStatusRequest {}
+message GetAgentStatusResponse {
+  string routing_mode = 1;
+  string tunnel_protocol = 2;
+  uint32 endpoint_count = 3;
+  uint32 policy_count = 4;
+  uint32 tunnel_count = 5;
+  uint32 identity_count = 6;
+  string node_ip = 7;
+  string pod_cidr = 8;
+  string cluster_cidr = 9;
+  bool novaroute_connected = 10;
+  DataplaneStatusInfo dataplane = 11;
+}
+
+message DataplaneStatusInfo {
+  bool connected = 1;
+  uint32 attached_programs = 2;
+}
+
+message StreamAgentFlowsRequest {
+  uint32 identity_filter = 1;
+  bool drops_only = 2;
+}
+
+// --- Egress ---
+
+message UpsertEgressPolicyRequest {
+  uint32 src_identity = 1;
+  uint32 dst_cidr_ip = 2;
+  uint32 dst_cidr_prefix_len = 3;
+  uint32 protocol = 4;
+  uint32 dst_port = 5;
+  EgressAction action = 6;
+}
+message UpsertEgressPolicyResponse {}
+
+message DeleteEgressPolicyRequest {
+  uint32 src_identity = 1;
+  uint32 dst_cidr_ip = 2;
+  uint32 dst_cidr_prefix_len = 3;
+  uint32 protocol = 4;
+  uint32 dst_port = 5;
+}
+message DeleteEgressPolicyResponse {}
+
+enum EgressAction {
+  EGRESS_ACTION_DENY = 0;
+  EGRESS_ACTION_ALLOW = 1;
+  EGRESS_ACTION_SNAT = 2;
+}

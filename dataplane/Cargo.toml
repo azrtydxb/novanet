@@ -1,0 +1,7 @@
+[workspace]
+resolver = "2"
+members = ["novanet-common", "novanet-dataplane", "novanet-ebpf"]
+
+# Only build the userspace crates by default. The eBPF crate requires
+# --target bpfel-unknown-none and can only compile on Linux.
+default-members = ["novanet-common", "novanet-dataplane"]

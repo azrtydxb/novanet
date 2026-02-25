@@ -1,0 +1,18 @@
+apiVersion: v2
+name: novanet
+description: NovaNet eBPF-based Kubernetes CNI
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.27.0"
+home: https://github.com/piwi3910/novanet
+sources:
+  - https://github.com/piwi3910/novanet
+maintainers:
+  - name: Pascal Welsch
+    url: https://github.com/piwi3910
+keywords:
+  - cni
+  - ebpf
+  - networking
+  - kubernetes
