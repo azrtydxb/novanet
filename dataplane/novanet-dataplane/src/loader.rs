@@ -18,8 +18,6 @@ use novanet_common::*;
 #[cfg(target_os = "linux")]
 use std::path::Path;
 #[cfg(target_os = "linux")]
-use std::sync::{Mutex, RwLock};
-#[cfg(target_os = "linux")]
 use tracing::info;
 
 /// Load eBPF programs from the compiled object file.
@@ -95,15 +93,7 @@ pub fn load_ebpf(
         .try_into()
         .context("Failed to convert FLOW_EVENTS ring buffer")?;
 
-    let real_maps = RealMaps {
-        endpoints: RwLock::new(endpoints),
-        policies: RwLock::new(policies),
-        tunnels: RwLock::new(tunnels),
-        config: RwLock::new(config),
-        egress: RwLock::new(egress),
-        attached: RwLock::new(Vec::new()),
-        _ebpf: Mutex::new(ebpf),
-    };
+    let real_maps = RealMaps::new(endpoints, policies, tunnels, config, egress, ebpf);
 
     let manager = MapManager::new_real(real_maps);
 

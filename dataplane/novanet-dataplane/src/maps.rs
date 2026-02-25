@@ -556,6 +556,26 @@ pub struct RealMaps {
 
 #[cfg(target_os = "linux")]
 impl RealMaps {
+    /// Create a new RealMaps from aya map handles and the loaded eBPF object.
+    pub fn new(
+        endpoints: aya::maps::HashMap<aya::maps::MapData, EndpointKey, EndpointValue>,
+        policies: aya::maps::HashMap<aya::maps::MapData, PolicyKey, PolicyValue>,
+        tunnels: aya::maps::HashMap<aya::maps::MapData, TunnelKey, TunnelValue>,
+        config: aya::maps::HashMap<aya::maps::MapData, u32, u64>,
+        egress: aya::maps::HashMap<aya::maps::MapData, EgressKey, EgressValue>,
+        ebpf: aya::Ebpf,
+    ) -> Self {
+        Self {
+            endpoints: RwLock::new(endpoints),
+            policies: RwLock::new(policies),
+            tunnels: RwLock::new(tunnels),
+            config: RwLock::new(config),
+            egress: RwLock::new(egress),
+            attached: RwLock::new(Vec::new()),
+            _ebpf: std::sync::Mutex::new(ebpf),
+        }
+    }
+
     fn upsert_endpoint(&self, key: EndpointKey, value: EndpointValue) -> anyhow::Result<()> {
         debug!(ip = key.ip, identity = value.identity, "upsert endpoint");
         let mut map = self.endpoints.write().unwrap();
