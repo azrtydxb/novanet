@@ -6,7 +6,7 @@ description = "Shared types between NovaNet eBPF programs and userspace dataplan
 
 [features]
 default = []
-userspace = []
+userspace = ["aya"]
 
 [target.'cfg(target_os = "linux")'.dependencies]
 aya = { version = "0.13", optional = true }
