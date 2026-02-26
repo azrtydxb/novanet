@@ -177,8 +177,18 @@ type agentServer struct {
 	policyMu    sync.RWMutex
 	policyRules []*policy.CompiledRule
 
+	// Previously synced egress eBPF keys, for cleanup on recompilation.
+	prevEgressKeys map[egressMapKey]bool
+
 	mu        sync.RWMutex
 	endpoints map[string]*endpoint // key: namespace/name
+}
+
+// egressMapKey identifies an entry in the eBPF EGRESS_POLICIES map.
+type egressMapKey struct {
+	srcIdentity  uint32
+	dstCidrIP    uint32
+	dstPrefixLen uint32
 }
 
 // AddPod handles CNI ADD requests.
@@ -601,14 +611,15 @@ func (s *agentServer) onPolicyChange(rules []*policy.CompiledRule) {
 
 // syncEgressRules extracts egress CIDR rules from the compiled policy set
 // and pushes them to the egress manager. This bridges NetworkPolicy egress
-// rules to the eBPF EGRESS_POLICIES map.
+// rules to the eBPF EGRESS_POLICIES map. Stale entries from the previous
+// sync are deleted.
 func (s *agentServer) syncEgressRules(rules []*policy.CompiledRule) {
 	if s.egressMgr == nil || s.dpClient == nil || !s.dpConnected {
 		return
 	}
 
-	// Clear and rebuild egress rules from the compiled policy set.
-	// Egress rules are those with a CIDR (IPBlock) destination.
+	// Build the new set of egress keys.
+	newKeys := make(map[egressMapKey]bool)
 	var egressCount int
 	for i, r := range rules {
 		if r.CIDR == "" {
@@ -630,11 +641,19 @@ func (s *agentServer) syncEgressRules(rules []*policy.CompiledRule) {
 			continue // skip IPv6
 		}
 		ones, _ := cidrNet.Mask.Size()
+		cidrIPu32 := ipToUint32(cidrIP)
 
 		action := pb.EgressAction_EGRESS_ACTION_DENY
 		if r.Action == policy.ActionAllow {
 			action = pb.EgressAction_EGRESS_ACTION_ALLOW
 		}
+
+		key := egressMapKey{
+			srcIdentity:  r.SrcIdentity,
+			dstCidrIP:    cidrIPu32,
+			dstPrefixLen: uint32(ones),
+		}
+		newKeys[key] = true
 
 		name := fmt.Sprintf("np-cidr-%d", i)
 		// Store in egress manager for ListEgressPolicies RPC.
@@ -651,7 +670,7 @@ func (s *agentServer) syncEgressRules(rules []*policy.CompiledRule) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		_, err = s.dpClient.UpsertEgressPolicy(ctx, &pb.UpsertEgressPolicyRequest{
 			SrcIdentity:      r.SrcIdentity,
-			DstCidrIp:        ipToUint32(cidrIP),
+			DstCidrIp:        cidrIPu32,
 			DstCidrPrefixLen: uint32(ones),
 			Protocol:         uint32(r.Protocol),
 			DstPort:          uint32(r.DstPort),
@@ -665,10 +684,48 @@ func (s *agentServer) syncEgressRules(rules []*policy.CompiledRule) {
 		}
 	}
 
-	if egressCount > 0 {
-		s.logger.Info("synced egress CIDR rules",
-			zap.Int("count", egressCount))
+	// Delete stale egress entries that are no longer in the compiled set.
+	if s.prevEgressKeys != nil {
+		for oldKey := range s.prevEgressKeys {
+			if !newKeys[oldKey] {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				_, err := s.dpClient.DeleteEgressPolicy(ctx, &pb.DeleteEgressPolicyRequest{
+					SrcIdentity:      oldKey.srcIdentity,
+					DstCidrIp:        oldKey.dstCidrIP,
+					DstCidrPrefixLen: oldKey.dstPrefixLen,
+				})
+				cancel()
+				if err != nil {
+					s.logger.Warn("failed to delete stale egress policy from dataplane",
+						zap.Uint32("src_identity", oldKey.srcIdentity),
+						zap.Uint32("dst_ip", oldKey.dstCidrIP),
+						zap.Error(err))
+				}
+			}
+		}
 	}
+	s.prevEgressKeys = newKeys
+
+	// Clean egress manager rules that no longer exist.
+	for _, existing := range s.egressMgr.GetRules() {
+		cidrIP := existing.DstCIDR.IP.To4()
+		if cidrIP == nil {
+			continue
+		}
+		ones, _ := existing.DstCIDR.Mask.Size()
+		key := egressMapKey{
+			srcIdentity:  existing.SrcIdentity,
+			dstCidrIP:    ipToUint32(cidrIP),
+			dstPrefixLen: uint32(ones),
+		}
+		if !newKeys[key] {
+			s.egressMgr.RemoveEgressRule(existing.Namespace, existing.Name)
+		}
+	}
+
+	s.logger.Info("synced egress CIDR rules",
+		zap.Int("count", egressCount),
+		zap.Int("previous", len(s.prevEgressKeys)))
 }
 
 // startRemoteEndpointSync watches all cluster pods via an informer and pushes
@@ -1008,6 +1065,7 @@ func main() {
 		dpConnected:    dpConnected,
 		policyCompiler: policyCompiler,
 		egressMgr:      egressMgr,
+		prevEgressKeys: make(map[egressMapKey]bool),
 		endpoints:      make(map[string]*endpoint),
 	}
 
