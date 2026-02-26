@@ -331,3 +331,338 @@ impl_pod!(
     EgressKey,
     EgressValue,
 );
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(all(test, feature = "userspace"))]
+mod tests {
+    use super::*;
+    use core::mem;
+
+    // -- Type size tests (critical for eBPF map compatibility) --
+
+    #[test]
+    fn endpoint_key_size() {
+        assert_eq!(mem::size_of::<EndpointKey>(), 4);
+    }
+
+    #[test]
+    fn endpoint_value_size() {
+        // ifindex(4) + mac(6) + pad(2) + identity(4) + node_ip(4) = 20
+        assert_eq!(mem::size_of::<EndpointValue>(), 20);
+    }
+
+    #[test]
+    fn policy_key_size() {
+        // src_identity(4) + dst_identity(4) + protocol(1) + pad(1) + dst_port(2) = 12
+        assert_eq!(mem::size_of::<PolicyKey>(), 12);
+    }
+
+    #[test]
+    fn policy_value_size() {
+        // action(1) + pad(3) = 4
+        assert_eq!(mem::size_of::<PolicyValue>(), 4);
+    }
+
+    #[test]
+    fn tunnel_key_size() {
+        assert_eq!(mem::size_of::<TunnelKey>(), 4);
+    }
+
+    #[test]
+    fn tunnel_value_size() {
+        // ifindex(4) + remote_ip(4) + vni(4) = 12
+        assert_eq!(mem::size_of::<TunnelValue>(), 12);
+    }
+
+    #[test]
+    fn egress_key_size() {
+        // src_identity(4) + dst_ip(4) + dst_prefix_len(1) + pad(3) = 12
+        assert_eq!(mem::size_of::<EgressKey>(), 12);
+    }
+
+    #[test]
+    fn egress_value_size() {
+        // action(1) + pad(3) + snat_ip(4) = 8
+        assert_eq!(mem::size_of::<EgressValue>(), 8);
+    }
+
+    #[test]
+    fn flow_event_size() {
+        // Contains u64 fields so struct is aligned to 8 bytes.
+        // 4+4+4+4 + 1+1+2+2+2 + 1+1+2 + (4 pad for u64 alignment) + 8+8+8 = 56
+        let size = mem::size_of::<FlowEvent>();
+        assert_eq!(size, 56);
+    }
+
+    // -- Alignment tests (repr(C) types must be naturally aligned) --
+
+    #[test]
+    fn endpoint_key_alignment() {
+        assert_eq!(mem::align_of::<EndpointKey>(), 4);
+    }
+
+    #[test]
+    fn endpoint_value_alignment() {
+        assert_eq!(mem::align_of::<EndpointValue>(), 4);
+    }
+
+    #[test]
+    fn policy_key_alignment() {
+        assert_eq!(mem::align_of::<PolicyKey>(), 4);
+    }
+
+    #[test]
+    fn flow_event_alignment() {
+        // Contains u64 fields, so alignment should be 8.
+        assert_eq!(mem::align_of::<FlowEvent>(), 8);
+    }
+
+    // -- Type construction and field access --
+
+    #[test]
+    fn endpoint_key_roundtrip() {
+        let key = EndpointKey { ip: 0x0A2A0501 };
+        assert_eq!(key.ip, 0x0A2A0501);
+        let copy = key;
+        assert_eq!(key, copy);
+    }
+
+    #[test]
+    fn endpoint_value_mac_and_identity() {
+        let val = EndpointValue {
+            ifindex: 42,
+            mac: [0x02, 0xfe, 0x0a, 0x2a, 0x05, 0x01],
+            _pad: [0; 2],
+            identity: 100,
+            node_ip: 0xC0A86411, // 192.168.100.17
+        };
+        assert_eq!(val.ifindex, 42);
+        assert_eq!(val.mac[0], 0x02);
+        assert_eq!(val.identity, 100);
+        assert_eq!(val.node_ip, 0xC0A86411);
+    }
+
+    #[test]
+    fn policy_key_fields() {
+        let key = PolicyKey {
+            src_identity: 1,
+            dst_identity: 2,
+            protocol: 6, // TCP
+            _pad: [0],
+            dst_port: 80,
+        };
+        assert_eq!(key.src_identity, 1);
+        assert_eq!(key.dst_identity, 2);
+        assert_eq!(key.protocol, 6);
+        assert_eq!(key.dst_port, 80);
+    }
+
+    #[test]
+    fn policy_value_allow_deny() {
+        let allow = PolicyValue { action: ACTION_ALLOW, _pad: [0; 3] };
+        let deny = PolicyValue { action: ACTION_DENY, _pad: [0; 3] };
+        assert_eq!(allow.action, 1);
+        assert_eq!(deny.action, 0);
+        assert_ne!(allow, deny);
+    }
+
+    #[test]
+    fn tunnel_value_fields() {
+        let val = TunnelValue {
+            ifindex: 10,
+            remote_ip: 0xC0A86416, // 192.168.100.22
+            vni: 1,
+        };
+        assert_eq!(val.ifindex, 10);
+        assert_eq!(val.remote_ip, 0xC0A86416);
+        assert_eq!(val.vni, 1);
+    }
+
+    #[test]
+    fn egress_key_cidr_fields() {
+        let key = EgressKey {
+            src_identity: 5,
+            dst_ip: 0x08080000, // 8.8.0.0
+            dst_prefix_len: 16,
+            _pad: [0; 3],
+        };
+        assert_eq!(key.src_identity, 5);
+        assert_eq!(key.dst_prefix_len, 16);
+    }
+
+    #[test]
+    fn egress_value_snat() {
+        let val = EgressValue {
+            action: EGRESS_SNAT,
+            _pad: [0; 3],
+            snat_ip: 0xC0A86401, // 192.168.100.1
+        };
+        assert_eq!(val.action, 2);
+        assert_eq!(val.snat_ip, 0xC0A86401);
+    }
+
+    #[test]
+    fn flow_event_construction() {
+        let event = FlowEvent {
+            src_ip: 0x0A2A0501,
+            dst_ip: 0x0A2A0502,
+            src_identity: 10,
+            dst_identity: 20,
+            protocol: 6,
+            _pad1: 0,
+            src_port: 12345,
+            dst_port: 80,
+            _pad2: [0; 2],
+            verdict: ACTION_ALLOW,
+            drop_reason: DROP_REASON_NONE,
+            _pad3: [0; 2],
+            bytes: 1500,
+            packets: 1,
+            timestamp_ns: 123456789,
+        };
+        assert_eq!(event.src_ip, 0x0A2A0501);
+        assert_eq!(event.protocol, 6);
+        assert_eq!(event.verdict, ACTION_ALLOW);
+        assert_eq!(event.drop_reason, DROP_REASON_NONE);
+    }
+
+    // -- Constant value tests --
+
+    #[test]
+    fn config_keys_are_sequential() {
+        assert_eq!(CONFIG_KEY_MODE, 0);
+        assert_eq!(CONFIG_KEY_TUNNEL_TYPE, 1);
+        assert_eq!(CONFIG_KEY_NODE_IP, 2);
+        assert_eq!(CONFIG_KEY_CLUSTER_CIDR_IP, 3);
+        assert_eq!(CONFIG_KEY_CLUSTER_CIDR_PREFIX_LEN, 4);
+        assert_eq!(CONFIG_KEY_DEFAULT_DENY, 5);
+        assert_eq!(CONFIG_KEY_MASQUERADE_ENABLED, 6);
+        assert_eq!(CONFIG_KEY_SNAT_IP, 7);
+        assert_eq!(CONFIG_KEY_POD_CIDR_IP, 8);
+        assert_eq!(CONFIG_KEY_POD_CIDR_PREFIX_LEN, 9);
+    }
+
+    #[test]
+    fn config_keys_fit_in_map() {
+        // All config keys must be < MAX_CONFIG_ENTRIES.
+        assert!(CONFIG_KEY_POD_CIDR_PREFIX_LEN < MAX_CONFIG_ENTRIES);
+    }
+
+    #[test]
+    fn action_constants() {
+        assert_eq!(ACTION_DENY, 0);
+        assert_eq!(ACTION_ALLOW, 1);
+    }
+
+    #[test]
+    fn egress_action_constants() {
+        assert_eq!(EGRESS_DENY, 0);
+        assert_eq!(EGRESS_ALLOW, 1);
+        assert_eq!(EGRESS_SNAT, 2);
+    }
+
+    #[test]
+    fn mode_constants() {
+        assert_eq!(MODE_OVERLAY, 0);
+        assert_eq!(MODE_NATIVE, 1);
+    }
+
+    #[test]
+    fn tunnel_type_constants() {
+        assert_eq!(TUNNEL_GENEVE, 0);
+        assert_eq!(TUNNEL_VXLAN, 1);
+    }
+
+    #[test]
+    fn drop_reason_constants_in_range() {
+        assert!(DROP_REASON_NONE < DROP_REASON_MAX as u8);
+        assert!(DROP_REASON_POLICY_DENIED < DROP_REASON_MAX as u8);
+        assert!(DROP_REASON_NO_IDENTITY < DROP_REASON_MAX as u8);
+        assert!(DROP_REASON_NO_ROUTE < DROP_REASON_MAX as u8);
+        assert!(DROP_REASON_NO_TUNNEL < DROP_REASON_MAX as u8);
+        assert!(DROP_REASON_TTL_EXCEEDED < DROP_REASON_MAX as u8);
+    }
+
+    #[test]
+    fn tc_action_constants() {
+        assert_eq!(TC_ACT_OK, 0);
+        assert_eq!(TC_ACT_SHOT, 2);
+        assert_eq!(TC_ACT_REDIRECT, 7);
+    }
+
+    #[test]
+    fn geneve_constants() {
+        assert_eq!(GENEVE_OPT_CLASS_NOVANET, 0xFF01);
+        assert_eq!(GENEVE_OPT_TYPE_IDENTITY, 0x01);
+        assert_eq!(GENEVE_OPT_IDENTITY_LEN, 1);
+        assert_eq!(GENEVE_PORT, 6081);
+    }
+
+    #[test]
+    fn vxlan_constants() {
+        assert_eq!(VXLAN_PORT, 4789);
+        assert_eq!(VXLAN_HLEN, 8);
+    }
+
+    #[test]
+    fn network_header_sizes() {
+        assert_eq!(ETH_HLEN, 14);
+        assert_eq!(IPV4_HLEN_MIN, 20);
+        assert_eq!(UDP_HLEN, 8);
+        assert_eq!(GENEVE_HLEN, 8);
+        assert_eq!(GENEVE_IDENTITY_OPT_SIZE, 8);
+    }
+
+    #[test]
+    fn ethertype_ipv4() {
+        assert_eq!(ETH_P_IP, 0x0800);
+    }
+
+    #[test]
+    fn map_sizes_are_powers_of_two_or_reasonable() {
+        assert!(MAX_ENDPOINTS.is_power_of_two());
+        assert!(MAX_POLICIES.is_power_of_two());
+        assert!(MAX_TUNNELS.is_power_of_two());
+        assert!(MAX_EGRESS_POLICIES.is_power_of_two());
+        assert!(MAX_CONFIG_ENTRIES.is_power_of_two());
+    }
+
+    #[test]
+    fn flow_ring_buf_size() {
+        assert_eq!(FLOW_RING_BUF_SIZE, 8 * 1024 * 1024);
+        assert!(FLOW_RING_BUF_SIZE.is_power_of_two());
+    }
+
+    // -- Clone/Copy/Debug/Eq trait tests --
+
+    #[test]
+    fn types_are_copy() {
+        let key = EndpointKey { ip: 1 };
+        let key2 = key; // Copy
+        assert_eq!(key, key2);
+    }
+
+    #[test]
+    fn types_are_debug() {
+        let key = EndpointKey { ip: 1 };
+        let dbg = format!("{:?}", key);
+        assert!(dbg.contains("EndpointKey"));
+    }
+
+    // -- Zero-initialization safety (important for eBPF) --
+
+    #[test]
+    fn zero_policy_value_is_deny() {
+        let val = PolicyValue { action: 0, _pad: [0; 3] };
+        assert_eq!(val.action, ACTION_DENY);
+    }
+
+    #[test]
+    fn zero_egress_value_is_deny() {
+        let val = EgressValue { action: 0, _pad: [0; 3], snat_ip: 0 };
+        assert_eq!(val.action, EGRESS_DENY);
+    }
+}

@@ -539,6 +539,411 @@ impl MockMaps {
 }
 
 // ---------------------------------------------------------------------------
+// Tests (use mock maps — exercises same API as real eBPF maps)
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn mock_manager() -> MapManager {
+        MapManager::new_mock()
+    }
+
+    // -- Endpoint tests --
+
+    #[test]
+    fn endpoint_upsert_and_count() {
+        let mgr = mock_manager();
+        assert_eq!(mgr.endpoint_count(), 0);
+
+        mgr.upsert_endpoint(
+            EndpointKey { ip: 0x0A2A0501 },
+            EndpointValue {
+                ifindex: 10,
+                mac: [0x02, 0xfe, 0x0a, 0x2a, 0x05, 0x01],
+                _pad: [0; 2],
+                identity: 100,
+                node_ip: 0xC0A86411,
+            },
+        )
+        .unwrap();
+        assert_eq!(mgr.endpoint_count(), 1);
+
+        // Upsert same key overwrites.
+        mgr.upsert_endpoint(
+            EndpointKey { ip: 0x0A2A0501 },
+            EndpointValue {
+                ifindex: 11,
+                mac: [0x02, 0xfe, 0x0a, 0x2a, 0x05, 0x01],
+                _pad: [0; 2],
+                identity: 200,
+                node_ip: 0xC0A86411,
+            },
+        )
+        .unwrap();
+        assert_eq!(mgr.endpoint_count(), 1);
+    }
+
+    #[test]
+    fn endpoint_delete() {
+        let mgr = mock_manager();
+        let key = EndpointKey { ip: 0x0A2A0501 };
+        mgr.upsert_endpoint(
+            key,
+            EndpointValue {
+                ifindex: 10,
+                mac: [0; 6],
+                _pad: [0; 2],
+                identity: 1,
+                node_ip: 0,
+            },
+        )
+        .unwrap();
+        assert_eq!(mgr.endpoint_count(), 1);
+
+        mgr.delete_endpoint(&key).unwrap();
+        assert_eq!(mgr.endpoint_count(), 0);
+    }
+
+    #[test]
+    fn endpoint_multiple_entries() {
+        let mgr = mock_manager();
+        for i in 1..=10u32 {
+            mgr.upsert_endpoint(
+                EndpointKey { ip: i },
+                EndpointValue {
+                    ifindex: i,
+                    mac: [0; 6],
+                    _pad: [0; 2],
+                    identity: i,
+                    node_ip: 0,
+                },
+            )
+            .unwrap();
+        }
+        assert_eq!(mgr.endpoint_count(), 10);
+    }
+
+    // -- Policy tests --
+
+    #[test]
+    fn policy_upsert_and_count() {
+        let mgr = mock_manager();
+        assert_eq!(mgr.policy_count(), 0);
+
+        mgr.upsert_policy(
+            PolicyKey {
+                src_identity: 1,
+                dst_identity: 2,
+                protocol: 6,
+                _pad: [0],
+                dst_port: 80,
+            },
+            PolicyValue {
+                action: ACTION_ALLOW,
+                _pad: [0; 3],
+            },
+        )
+        .unwrap();
+        assert_eq!(mgr.policy_count(), 1);
+    }
+
+    #[test]
+    fn policy_get_existing() {
+        let mgr = mock_manager();
+        let key = PolicyKey {
+            src_identity: 1,
+            dst_identity: 2,
+            protocol: 6,
+            _pad: [0],
+            dst_port: 443,
+        };
+        let val = PolicyValue {
+            action: ACTION_ALLOW,
+            _pad: [0; 3],
+        };
+        mgr.upsert_policy(key, val).unwrap();
+
+        let result = mgr.get_policy(&key).unwrap();
+        assert_eq!(result, Some(val));
+    }
+
+    #[test]
+    fn policy_get_missing() {
+        let mgr = mock_manager();
+        let key = PolicyKey {
+            src_identity: 99,
+            dst_identity: 99,
+            protocol: 17,
+            _pad: [0],
+            dst_port: 53,
+        };
+        let result = mgr.get_policy(&key).unwrap();
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn policy_delete() {
+        let mgr = mock_manager();
+        let key = PolicyKey {
+            src_identity: 1,
+            dst_identity: 2,
+            protocol: 6,
+            _pad: [0],
+            dst_port: 80,
+        };
+        mgr.upsert_policy(key, PolicyValue { action: ACTION_ALLOW, _pad: [0; 3] })
+            .unwrap();
+        assert_eq!(mgr.policy_count(), 1);
+
+        mgr.delete_policy(&key).unwrap();
+        assert_eq!(mgr.policy_count(), 0);
+    }
+
+    #[test]
+    fn policy_sync_add_remove_update() {
+        let mgr = mock_manager();
+
+        // Initial sync: add 3 policies.
+        let initial = vec![
+            (
+                PolicyKey { src_identity: 1, dst_identity: 2, protocol: 6, _pad: [0], dst_port: 80 },
+                PolicyValue { action: ACTION_ALLOW, _pad: [0; 3] },
+            ),
+            (
+                PolicyKey { src_identity: 1, dst_identity: 3, protocol: 6, _pad: [0], dst_port: 443 },
+                PolicyValue { action: ACTION_ALLOW, _pad: [0; 3] },
+            ),
+            (
+                PolicyKey { src_identity: 2, dst_identity: 3, protocol: 17, _pad: [0], dst_port: 53 },
+                PolicyValue { action: ACTION_DENY, _pad: [0; 3] },
+            ),
+        ];
+        let (added, removed, updated) = mgr.sync_policies(initial).unwrap();
+        assert_eq!(added, 3);
+        assert_eq!(removed, 0);
+        assert_eq!(updated, 0);
+        assert_eq!(mgr.policy_count(), 3);
+
+        // Second sync: keep first, update second, remove third, add new.
+        let second = vec![
+            (
+                PolicyKey { src_identity: 1, dst_identity: 2, protocol: 6, _pad: [0], dst_port: 80 },
+                PolicyValue { action: ACTION_ALLOW, _pad: [0; 3] },
+            ),
+            (
+                PolicyKey { src_identity: 1, dst_identity: 3, protocol: 6, _pad: [0], dst_port: 443 },
+                PolicyValue { action: ACTION_DENY, _pad: [0; 3] },
+            ),
+            (
+                PolicyKey { src_identity: 5, dst_identity: 6, protocol: 6, _pad: [0], dst_port: 8080 },
+                PolicyValue { action: ACTION_ALLOW, _pad: [0; 3] },
+            ),
+        ];
+        let (added, removed, updated) = mgr.sync_policies(second).unwrap();
+        assert_eq!(added, 1);
+        assert_eq!(removed, 1);
+        assert_eq!(updated, 1);
+        assert_eq!(mgr.policy_count(), 3);
+    }
+
+    // -- Tunnel tests --
+
+    #[test]
+    fn tunnel_upsert_and_count() {
+        let mgr = mock_manager();
+        assert_eq!(mgr.tunnel_count(), 0);
+
+        mgr.upsert_tunnel(
+            TunnelKey { node_ip: 0xC0A86416 },
+            TunnelValue { ifindex: 5, remote_ip: 0xC0A86416, vni: 1 },
+        )
+        .unwrap();
+        assert_eq!(mgr.tunnel_count(), 1);
+    }
+
+    #[test]
+    fn tunnel_delete() {
+        let mgr = mock_manager();
+        let key = TunnelKey { node_ip: 0xC0A86416 };
+        mgr.upsert_tunnel(key, TunnelValue { ifindex: 5, remote_ip: key.node_ip, vni: 1 })
+            .unwrap();
+        mgr.delete_tunnel(&key).unwrap();
+        assert_eq!(mgr.tunnel_count(), 0);
+    }
+
+    // -- Config tests --
+
+    #[test]
+    fn config_update_and_get() {
+        let mgr = mock_manager();
+
+        let mut entries = StdHashMap::new();
+        entries.insert(CONFIG_KEY_MODE, MODE_NATIVE);
+        entries.insert(CONFIG_KEY_NODE_IP, 0xC0A86411);
+        mgr.update_config(entries).unwrap();
+
+        assert_eq!(mgr.get_config(CONFIG_KEY_MODE).unwrap(), Some(MODE_NATIVE));
+        assert_eq!(mgr.get_config(CONFIG_KEY_NODE_IP).unwrap(), Some(0xC0A86411));
+        assert_eq!(mgr.get_config(CONFIG_KEY_SNAT_IP).unwrap(), None);
+    }
+
+    #[test]
+    fn config_mode_string() {
+        let mgr = mock_manager();
+        assert_eq!(mgr.mode_string(), "overlay");
+
+        let mut entries = StdHashMap::new();
+        entries.insert(CONFIG_KEY_MODE, MODE_NATIVE);
+        mgr.update_config(entries).unwrap();
+        assert_eq!(mgr.mode_string(), "native");
+    }
+
+    #[test]
+    fn config_tunnel_protocol_string() {
+        let mgr = mock_manager();
+        assert_eq!(mgr.tunnel_protocol_string(), "geneve");
+
+        let mut entries = StdHashMap::new();
+        entries.insert(CONFIG_KEY_TUNNEL_TYPE, TUNNEL_VXLAN);
+        mgr.update_config(entries).unwrap();
+        assert_eq!(mgr.tunnel_protocol_string(), "vxlan");
+    }
+
+    // -- Egress policy tests --
+
+    #[test]
+    fn egress_policy_upsert_and_delete() {
+        let mgr = mock_manager();
+        let key = EgressKey {
+            src_identity: 1,
+            dst_ip: 0x08080000,
+            dst_prefix_len: 16,
+            _pad: [0; 3],
+        };
+        mgr.upsert_egress_policy(
+            key,
+            EgressValue { action: EGRESS_SNAT, _pad: [0; 3], snat_ip: 0xC0A86401 },
+        )
+        .unwrap();
+        mgr.delete_egress_policy(&key).unwrap();
+    }
+
+    // -- Program attach/detach tests --
+
+    #[test]
+    fn attach_and_list_programs() {
+        let mgr = mock_manager();
+        assert_eq!(mgr.attached_programs().len(), 0);
+
+        mgr.attach_program("nv12345678901", AttachDirection::Ingress).unwrap();
+        mgr.attach_program("nv12345678901", AttachDirection::Egress).unwrap();
+
+        let progs = mgr.attached_programs();
+        assert_eq!(progs.len(), 2);
+        assert_eq!(progs[0].interface, "nv12345678901");
+        assert_eq!(progs[0].attach_type, "ingress");
+        assert_eq!(progs[1].attach_type, "egress");
+        assert_ne!(progs[0].program_id, progs[1].program_id);
+    }
+
+    #[test]
+    fn attach_duplicate_is_idempotent() {
+        let mgr = mock_manager();
+        mgr.attach_program("eth0", AttachDirection::Ingress).unwrap();
+        mgr.attach_program("eth0", AttachDirection::Ingress).unwrap();
+        assert_eq!(mgr.attached_programs().len(), 1);
+    }
+
+    #[test]
+    fn detach_program_removes_entry() {
+        let mgr = mock_manager();
+        mgr.attach_program("nv12345678901", AttachDirection::Ingress).unwrap();
+        mgr.attach_program("nv12345678901", AttachDirection::Egress).unwrap();
+        assert_eq!(mgr.attached_programs().len(), 2);
+
+        mgr.detach_program("nv12345678901", AttachDirection::Ingress).unwrap();
+        let progs = mgr.attached_programs();
+        assert_eq!(progs.len(), 1);
+        assert_eq!(progs[0].attach_type, "egress");
+    }
+
+    #[test]
+    fn detach_nonexistent_is_ok() {
+        let mgr = mock_manager();
+        mgr.detach_program("nonexistent", AttachDirection::Ingress).unwrap();
+    }
+
+    // -- Full lifecycle test --
+
+    #[test]
+    fn full_lifecycle() {
+        let mgr = mock_manager();
+
+        // Config.
+        let mut cfg = StdHashMap::new();
+        cfg.insert(CONFIG_KEY_MODE, MODE_NATIVE);
+        cfg.insert(CONFIG_KEY_NODE_IP, 0xC0A8640B);
+        cfg.insert(CONFIG_KEY_CLUSTER_CIDR_IP, 0x0A2A0000);
+        cfg.insert(CONFIG_KEY_CLUSTER_CIDR_PREFIX_LEN, 16);
+        mgr.update_config(cfg).unwrap();
+        assert_eq!(mgr.mode_string(), "native");
+
+        // Endpoints.
+        mgr.upsert_endpoint(
+            EndpointKey { ip: 0x0A2A0501 },
+            EndpointValue {
+                ifindex: 10,
+                mac: [0x02, 0xfe, 0x0a, 0x2a, 0x05, 0x01],
+                _pad: [0; 2],
+                identity: 100,
+                node_ip: 0xC0A8640B,
+            },
+        )
+        .unwrap();
+        mgr.upsert_endpoint(
+            EndpointKey { ip: 0x0A2A0502 },
+            EndpointValue {
+                ifindex: 11,
+                mac: [0x02, 0xfe, 0x0a, 0x2a, 0x05, 0x02],
+                _pad: [0; 2],
+                identity: 100,
+                node_ip: 0xC0A8640B,
+            },
+        )
+        .unwrap();
+        assert_eq!(mgr.endpoint_count(), 2);
+
+        // Policy.
+        mgr.upsert_policy(
+            PolicyKey {
+                src_identity: 100,
+                dst_identity: 100,
+                protocol: 0,
+                _pad: [0],
+                dst_port: 0,
+            },
+            PolicyValue { action: ACTION_ALLOW, _pad: [0; 3] },
+        )
+        .unwrap();
+        assert_eq!(mgr.policy_count(), 1);
+
+        // Attach programs.
+        mgr.attach_program("nv12345678901", AttachDirection::Ingress).unwrap();
+        mgr.attach_program("nv12345678901", AttachDirection::Egress).unwrap();
+        assert_eq!(mgr.attached_programs().len(), 2);
+
+        // Clean up.
+        mgr.delete_endpoint(&EndpointKey { ip: 0x0A2A0501 }).unwrap();
+        assert_eq!(mgr.endpoint_count(), 1);
+        mgr.detach_program("nv12345678901", AttachDirection::Ingress).unwrap();
+        mgr.detach_program("nv12345678901", AttachDirection::Egress).unwrap();
+        assert_eq!(mgr.attached_programs().len(), 0);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Real eBPF map implementation (Linux only)
 // ---------------------------------------------------------------------------
 

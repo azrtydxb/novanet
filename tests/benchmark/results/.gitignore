@@ -1,0 +1,3 @@
+# Ignore benchmark result files (machine-generated, large).
+*.json
+!.gitignore
