@@ -191,6 +191,10 @@ pub const CONFIG_KEY_DEFAULT_DENY: u32 = 5;
 pub const CONFIG_KEY_MASQUERADE_ENABLED: u32 = 6;
 /// SNAT IPv4 address in network byte order (lower 32 bits of u64).
 pub const CONFIG_KEY_SNAT_IP: u32 = 7;
+/// Pod CIDR IPv4 base address in network byte order (lower 32 bits of u64).
+pub const CONFIG_KEY_POD_CIDR_IP: u32 = 8;
+/// Pod CIDR prefix length (e.g. 24 for /24).
+pub const CONFIG_KEY_POD_CIDR_PREFIX_LEN: u32 = 9;
 
 // ---------------------------------------------------------------------------
 // Action constants

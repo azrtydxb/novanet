@@ -1,8 +1,8 @@
 //! NovaNet eBPF programs for TC-based packet processing.
 //!
 //! This binary contains four TC classifier programs:
-//!   - `tc_ingress`: pod veth ingress (traffic arriving at pod)
-//!   - `tc_egress`: pod veth egress (traffic leaving pod)
+//!   - `tc_ingress`: pod veth — traffic arriving at pod (K8s ingress)
+//!   - `tc_egress`: pod veth — traffic leaving pod (K8s egress)
 //!   - `tc_tunnel_ingress`: tunnel interface ingress (decap + policy)
 //!   - `tc_tunnel_egress`: tunnel interface egress (encap identity)
 //!
@@ -215,11 +215,10 @@ fn is_cluster_ip(ip: u32) -> bool {
     } else {
         !((1u32 << (32 - prefix_len)) - 1)
     };
-    // IPs are in network byte order, mask must match.
-    // Convert to host order for masking.
-    let ip_host = u32::from_be(ip);
-    let cidr_host = u32::from_be(cidr_ip);
-    (ip_host & mask) == (cidr_host & mask)
+    // Both ip and cidr_ip are in canonical big-endian format (matching
+    // Go's binary.BigEndian.Uint32). The prefix mask works directly
+    // since MSBs in big-endian correspond to the network prefix.
+    (ip & mask) == (cidr_ip & mask)
 }
 
 // ---------------------------------------------------------------------------
@@ -243,7 +242,6 @@ fn check_egress_policy(src_identity: u32, dst_ip: u32) -> (bool, u32) {
     // This is a simple linear scan — eBPF LPM trie would be more efficient
     // but we keep it simple for now with a small number of prefix lengths.
     let prefix_lengths: [u8; 5] = [32, 24, 16, 8, 0];
-    let dst_host = u32::from_be(dst_ip);
 
     for &plen in prefix_lengths.iter() {
         let mask = if plen == 0 {
@@ -253,7 +251,8 @@ fn check_egress_policy(src_identity: u32, dst_ip: u32) -> (bool, u32) {
         } else {
             !((1u32 << (32 - plen)) - 1)
         };
-        let masked_ip = (dst_host & mask).to_be();
+        // dst_ip is in canonical big-endian format; mask works directly.
+        let masked_ip = dst_ip & mask;
 
         let key = EgressKey {
             src_identity,
@@ -277,7 +276,10 @@ fn check_egress_policy(src_identity: u32, dst_ip: u32) -> (bool, u32) {
 
 // ===========================================================================
 // TC PROGRAM: tc_ingress
-// Attached to pod veth host side (ingress = traffic arriving from network TO pod)
+// Traffic arriving at the pod from the network (K8s ingress).
+// Attached to TC egress hook on host veth (packets leaving host → pod).
+// Enforces inbound policy in native mode. In overlay mode, policy was
+// already checked by tc_tunnel_ingress, so we pass through.
 // ===========================================================================
 
 #[classifier]
@@ -299,8 +301,12 @@ fn try_tc_ingress(ctx: &TcContext) -> Result<i32, ()> {
 
     // Parse IPv4 header.
     let ipv4: Ipv4Hdr = ctx.load(ETH_HLEN).map_err(|_| ())?;
-    let src_ip = ipv4.src_addr;
-    let dst_ip = ipv4.dst_addr;
+    // Convert IPs from raw packet bytes to canonical big-endian u32.
+    // This matches Go's binary.BigEndian.Uint32() used for map keys.
+    // u32::to_be() is a no-op on big-endian and a byte-swap on little-endian,
+    // so it works correctly on both ARM64 and AMD64.
+    let src_ip = u32::to_be(ipv4.src_addr);
+    let dst_ip = u32::to_be(ipv4.dst_addr);
     let protocol = ipv4.proto as u8;
     let ihl = (ipv4.ihl() as usize) * 4;
     let l4_offset = ETH_HLEN + ihl;
@@ -318,12 +324,13 @@ fn try_tc_ingress(ctx: &TcContext) -> Result<i32, ()> {
         return Ok(BPF_TC_ACT_OK as i32);
     }
 
-    // Native mode: resolve source identity and enforce policy.
+    // Native mode: resolve source identity and enforce inbound policy.
     let src_identity = match lookup_identity(src_ip) {
         Some((id, _)) => id,
         None => {
-            // Unknown source — could be external traffic. Check if we're in
-            // default-deny mode.
+            // Unknown source — could be external traffic or cross-node
+            // pod traffic (remote pod not in local endpoint map).
+            // Check if we're in default-deny mode.
             let default_deny = get_config(CONFIG_KEY_DEFAULT_DENY);
             if default_deny == 1 {
                 inc_drop_counter(DROP_REASON_NO_IDENTITY);
@@ -376,7 +383,10 @@ fn try_tc_ingress(ctx: &TcContext) -> Result<i32, ()> {
 
 // ===========================================================================
 // TC PROGRAM: tc_egress
-// Attached to pod veth host side (egress = traffic leaving pod toward network)
+// Traffic leaving the pod toward the network (K8s egress).
+// Attached to TC ingress hook on host veth (packets arriving from pod → host).
+// Makes routing decisions: same-node redirect, overlay tunnel, native routing,
+// and enforces egress policy for external destinations.
 // ===========================================================================
 
 #[classifier]
@@ -398,8 +408,8 @@ fn try_tc_egress(ctx: &TcContext) -> Result<i32, ()> {
 
     // Parse IPv4 header.
     let ipv4: Ipv4Hdr = ctx.load(ETH_HLEN).map_err(|_| ())?;
-    let src_ip = ipv4.src_addr;
-    let dst_ip = ipv4.dst_addr;
+    let src_ip = u32::to_be(ipv4.src_addr);
+    let dst_ip = u32::to_be(ipv4.dst_addr);
     let protocol = ipv4.proto as u8;
     let ihl = (ipv4.ihl() as usize) * 4;
     let l4_offset = ETH_HLEN + ihl;
@@ -411,11 +421,15 @@ fn try_tc_egress(ctx: &TcContext) -> Result<i32, ()> {
     // Resolve source identity (the pod sending traffic).
     let src_identity = lookup_identity(src_ip).map(|(id, _)| id).unwrap_or(0);
 
-    // Check if destination is a local endpoint (same-node shortcut).
+    // Check if destination is a local endpoint (same-node).
     if let Some((dst_identity, dst_ep)) = lookup_identity(dst_ip) {
         let node_ip = get_config(CONFIG_KEY_NODE_IP) as u32;
         if dst_ep.node_ip == node_ip || dst_ep.node_ip == 0 {
-            // Same-node pod-to-pod: check policy then redirect directly.
+            // Same-node pod-to-pod: check policy, then let kernel route it.
+            // We use TC_ACT_OK instead of bpf_redirect because redirect
+            // would skip L2 header rewriting (MAC addresses), causing the
+            // destination pod to drop the packet. Kernel routing handles
+            // neighbor resolution and proper L2 headers automatically.
             match check_policy(src_identity, dst_identity, protocol, dst_port) {
                 Some(ACTION_DENY) => {
                     inc_drop_counter(DROP_REASON_POLICY_DENIED);
@@ -430,10 +444,7 @@ fn try_tc_egress(ctx: &TcContext) -> Result<i32, ()> {
                         src_ip, dst_ip, src_identity, dst_identity, protocol,
                         src_port, dst_port, ACTION_ALLOW, DROP_REASON_NONE, total_len,
                     );
-                    // Redirect to destination pod's veth ifindex.
-                    unsafe {
-                        return Ok(bpf_redirect(dst_ep.ifindex, 0) as i32);
-                    }
+                    return Ok(BPF_TC_ACT_OK as i32);
                 }
                 _ => {
                     // No explicit policy. Check default deny.
@@ -447,10 +458,7 @@ fn try_tc_egress(ctx: &TcContext) -> Result<i32, ()> {
                         );
                         return Ok(BPF_TC_ACT_SHOT as i32);
                     }
-                    // Default allow: redirect.
-                    unsafe {
-                        return Ok(bpf_redirect(dst_ep.ifindex, 0) as i32);
-                    }
+                    return Ok(BPF_TC_ACT_OK as i32);
                 }
             }
         }
@@ -698,8 +706,8 @@ fn try_tc_tunnel_ingress(ctx: &TcContext) -> Result<i32, ()> {
 
         let inner_ip_offset = inner_eth_offset + ETH_HLEN;
         let inner_ipv4: Ipv4Hdr = ctx.load(inner_ip_offset).map_err(|_| ())?;
-        let inner_src_ip = inner_ipv4.src_addr;
-        let inner_dst_ip = inner_ipv4.dst_addr;
+        let inner_src_ip = u32::to_be(inner_ipv4.src_addr);
+        let inner_dst_ip = u32::to_be(inner_ipv4.dst_addr);
         let inner_proto = inner_ipv4.proto as u8;
         let inner_ihl = (inner_ipv4.ihl() as usize) * 4;
         let inner_l4_offset = inner_ip_offset + inner_ihl;
@@ -741,8 +749,8 @@ fn try_tc_tunnel_ingress(ctx: &TcContext) -> Result<i32, ()> {
 
         let inner_ip_offset = inner_eth_offset + ETH_HLEN;
         let inner_ipv4: Ipv4Hdr = ctx.load(inner_ip_offset).map_err(|_| ())?;
-        let inner_src_ip = inner_ipv4.src_addr;
-        let inner_dst_ip = inner_ipv4.dst_addr;
+        let inner_src_ip = u32::to_be(inner_ipv4.src_addr);
+        let inner_dst_ip = u32::to_be(inner_ipv4.dst_addr);
         let inner_proto = inner_ipv4.proto as u8;
         let inner_ihl = (inner_ipv4.ihl() as usize) * 4;
         let inner_l4_offset = inner_ip_offset + inner_ihl;

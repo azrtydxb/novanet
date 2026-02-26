@@ -50,20 +50,24 @@ const (
 	// dataplaneRetryInterval is the interval between dataplane connection attempts.
 	dataplaneRetryInterval = 5 * time.Second
 
-	// Config map key constants for dataplane UpdateConfig.
-	configKeyMode          uint32 = 1
-	configKeyTunnelType    uint32 = 2
-	configKeyNodeIP        uint32 = 3
-	configKeyClusterCIDRIP uint32 = 4
-	configKeyClusterCIDRPL uint32 = 5
-	configKeyPodCIDRIP     uint32 = 6
-	configKeyPodCIDRPL     uint32 = 7
+	// Config map key constants — MUST match novanet-common/src/lib.rs.
+	configKeyMode             uint32 = 0
+	configKeyTunnelType       uint32 = 1
+	configKeyNodeIP           uint32 = 2
+	configKeyClusterCIDRIP    uint32 = 3
+	configKeyClusterCIDRPL    uint32 = 4
+	configKeyDefaultDeny      uint32 = 5
+	configKeyMasqueradeEnable uint32 = 6
+	configKeySNATIP           uint32 = 7
+	// Pod CIDR uses keys 8 and 9 (not defined in Rust yet, added here).
+	configKeyPodCIDRIP uint32 = 8
+	configKeyPodCIDRPL uint32 = 9
 
-	// Config value constants.
-	modeOverlay uint64 = 1
-	modeNative  uint64 = 2
-	tunnelGEV   uint64 = 1
-	tunnelVXL   uint64 = 2
+	// Config value constants — MUST match novanet-common/src/lib.rs.
+	modeOverlay uint64 = 0
+	modeNative  uint64 = 1
+	tunnelGEV   uint64 = 0
+	tunnelVXL   uint64 = 1
 )
 
 // Prometheus metrics.
@@ -872,6 +876,20 @@ func pushDataplaneConfig(ctx context.Context, logger *zap.Logger, client pb.Data
 		entries[configKeyPodCIDRIP] = uint64(ipToUint32(podIP.To4()))
 		ones, _ := podNet.Mask.Size()
 		entries[configKeyPodCIDRPL] = uint64(ones)
+	}
+
+	// Default deny flag.
+	if cfg.Policy.DefaultDeny {
+		entries[configKeyDefaultDeny] = 1
+	} else {
+		entries[configKeyDefaultDeny] = 0
+	}
+
+	// Masquerade enabled.
+	if cfg.Egress.MasqueradeEnabled {
+		entries[configKeyMasqueradeEnable] = 1
+	} else {
+		entries[configKeyMasqueradeEnable] = 0
 	}
 
 	req := &pb.UpdateConfigRequest{Entries: entries}

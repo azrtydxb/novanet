@@ -783,7 +783,15 @@ impl RealMaps {
             AttachDirection::Egress => TcAttachType::Egress,
         };
 
-        // Determine which program to attach based on interface name and direction.
+        // Determine which eBPF program to attach based on interface and TC hook direction.
+        //
+        // For tunnel interfaces, TC hook direction matches program name directly.
+        //
+        // For pod veths, program names use K8s perspective (ingress = to pod,
+        // egress = from pod), but TC hooks use interface perspective (ingress =
+        // arriving at host veth from pod, egress = leaving host veth toward pod).
+        // So we swap: TC ingress hook → tc_egress program (handles pod egress),
+        //             TC egress hook → tc_ingress program (handles pod ingress).
         let prog_name = if interface.starts_with("geneve") || interface.starts_with("vxlan") {
             match attach_type {
                 AttachDirection::Ingress => "tc_tunnel_ingress",
@@ -791,8 +799,8 @@ impl RealMaps {
             }
         } else {
             match attach_type {
-                AttachDirection::Ingress => "tc_ingress",
-                AttachDirection::Egress => "tc_egress",
+                AttachDirection::Ingress => "tc_egress",  // TC ingress = from pod = K8s egress
+                AttachDirection::Egress => "tc_ingress",  // TC egress = to pod = K8s ingress
             }
         };
 
