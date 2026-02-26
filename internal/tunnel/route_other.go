@@ -17,7 +17,7 @@ func IPToTunnelMAC(ip net.IP) net.HardwareAddr {
 }
 
 // AddRoute is not supported on non-Linux platforms.
-func AddRoute(cidr string, ifName string, srcIP net.IP, remoteNodeIP net.IP) error {
+func AddRoute(cidr string, ifName string, srcIP net.IP, remoteNodeIP net.IP, protocol string) error {
 	return fmt.Errorf("tunnel routes not supported on this platform")
 }
 

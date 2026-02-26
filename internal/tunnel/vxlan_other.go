@@ -14,7 +14,9 @@ func init() {
 }
 
 // createVxlanTunnel is a no-op on non-Linux platforms.
-// Returns a fake ifindex for testing.
-func createVxlanTunnel(_, _ string, _ uint32, _ net.IP) (int, error) {
+func createVxlanTunnel(_ string, _ uint32, _ net.IP) (int, error) {
 	return int(fakeVxlanIfindex.Add(1)), nil
 }
+
+func addVxlanFDB(_ string, _ net.HardwareAddr, _ net.IP) error    { return nil }
+func removeVxlanFDB(_ string, _ net.HardwareAddr, _ net.IP) error { return nil }

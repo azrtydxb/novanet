@@ -912,7 +912,7 @@ func watchNodes(ctx context.Context, logger *zap.Logger, k8sClient *kubernetes.C
 			// (they may have been lost due to ARP resolution overwriting
 			// permanent entries on kernels without NOARP support).
 			if tunnelInfo, exists := tunnelMgr.GetTunnel(node.Name); exists {
-				if err := tunnel.AddRoute(node.Spec.PodCIDR, tunnelInfo.InterfaceName, selfNodeIP, net.ParseIP(tunnelInfo.NodeIP)); err != nil {
+				if err := tunnel.AddRoute(node.Spec.PodCIDR, tunnelInfo.InterfaceName, selfNodeIP, net.ParseIP(tunnelInfo.NodeIP), tunnelMgr.Protocol()); err != nil {
 					logger.Debug("failed to reconcile route",
 						zap.Error(err),
 						zap.String("node", node.Name),
@@ -953,7 +953,7 @@ func watchNodes(ctx context.Context, logger *zap.Logger, k8sClient *kubernetes.C
 			}
 
 			// Add kernel route for the remote node's PodCIDR via the tunnel.
-			if err := tunnel.AddRoute(node.Spec.PodCIDR, tunnelInfo.InterfaceName, selfNodeIP, net.ParseIP(nodeIP)); err != nil {
+			if err := tunnel.AddRoute(node.Spec.PodCIDR, tunnelInfo.InterfaceName, selfNodeIP, net.ParseIP(nodeIP), tunnelMgr.Protocol()); err != nil {
 				logger.Error("failed to add route for remote PodCIDR",
 					zap.Error(err),
 					zap.String("cidr", node.Spec.PodCIDR),

@@ -36,11 +36,15 @@ func IPToTunnelMAC(ip net.IP) net.HardwareAddr {
 // uses the node's real IP instead of any VIP on loopback.
 // remoteNodeIP is the remote node's IP, used to derive the neighbor entry's
 // MAC address (must match the remote tunnel interface's MAC).
-// It sets up a permanent neighbor entry for the dummy gateway and routes
-// the CIDR via that gateway with the onlink flag. This avoids ARP resolution
-// failures on the Geneve interface.
-// Uses RouteReplace to be idempotent.
-func AddRoute(cidr string, ifName string, srcIP net.IP, remoteNodeIP net.IP) error {
+// protocol determines the gateway strategy:
+//   - Geneve: uses the dummy gateway 169.254.1.1 (each interface is point-to-point)
+//   - VXLAN: uses the remote PodCIDR's .1 address as gateway (unique per remote,
+//     since a single shared interface carries traffic for all remotes)
+//
+// Also adds an FDB entry for VXLAN so the driver knows which physical IP
+// corresponds to each inner destination MAC.
+// Uses RouteReplace and NeighSet to be idempotent.
+func AddRoute(cidr string, ifName string, srcIP net.IP, remoteNodeIP net.IP, protocol string) error {
 	_, dst, err := net.ParseCIDR(cidr)
 	if err != nil {
 		return fmt.Errorf("parsing CIDR %s: %w", cidr, err)
@@ -53,13 +57,38 @@ func AddRoute(cidr string, ifName string, srcIP net.IP, remoteNodeIP net.IP) err
 
 	linkIdx := link.Attrs().Index
 
-	// Add a permanent neighbor entry for the dummy gateway using the remote
+	// Determine the gateway IP based on protocol.
+	var gatewayIP net.IP
+	if protocol == "vxlan" {
+		// For VXLAN: use the remote PodCIDR's .1 address as gateway.
+		// Each remote has a unique PodCIDR, so each gateway is unique.
+		gatewayIP = podCIDRGateway(dst)
+
+		// Ensure FDB entry exists (idempotent via NeighSet).
+		remoteMAC := IPToTunnelMAC(remoteNodeIP)
+		fdb := &netlink.Neigh{
+			LinkIndex:    linkIdx,
+			Family:       syscall.AF_BRIDGE,
+			HardwareAddr: remoteMAC,
+			IP:           remoteNodeIP,
+			State:        netlink.NUD_PERMANENT,
+			Flags:        netlink.NTF_SELF,
+		}
+		if err := netlink.NeighSet(fdb); err != nil {
+			return fmt.Errorf("adding VXLAN FDB entry on %s: %w", ifName, err)
+		}
+	} else {
+		// For Geneve: each interface is point-to-point, use shared dummy gateway.
+		gatewayIP = dummyGateway
+	}
+
+	// Add a permanent neighbor entry for the gateway using the remote
 	// node's derived MAC. This MAC must match the receiving tunnel interface's
 	// MAC so that the kernel classifies decapsulated inner packets as
 	// PACKET_HOST (not PACKET_OTHERHOST or PACKET_LOOPBACK).
 	neigh := &netlink.Neigh{
 		LinkIndex:    linkIdx,
-		IP:           dummyGateway,
+		IP:           gatewayIP,
 		HardwareAddr: IPToTunnelMAC(remoteNodeIP),
 		State:        netlink.NUD_PERMANENT,
 		Type:         syscall.RTN_UNICAST,
@@ -68,12 +97,12 @@ func AddRoute(cidr string, ifName string, srcIP net.IP, remoteNodeIP net.IP) err
 		return fmt.Errorf("adding neighbor entry on %s: %w", ifName, err)
 	}
 
-	// Route the CIDR via the dummy gateway with the onlink flag.
+	// Route the CIDR via the gateway with the onlink flag.
 	// The onlink flag tells the kernel the gateway is directly reachable on
 	// this link even though it's not in a connected subnet.
 	route := &netlink.Route{
 		Dst:       dst,
-		Gw:        dummyGateway,
+		Gw:        gatewayIP,
 		Src:       srcIP,
 		LinkIndex: linkIdx,
 		Scope:     netlink.SCOPE_UNIVERSE,
@@ -84,6 +113,14 @@ func AddRoute(cidr string, ifName string, srcIP net.IP, remoteNodeIP net.IP) err
 	}
 
 	return nil
+}
+
+// podCIDRGateway returns the .1 address of a parsed CIDR network.
+func podCIDRGateway(network *net.IPNet) net.IP {
+	gw := make(net.IP, len(network.IP))
+	copy(gw, network.IP)
+	gw[len(gw)-1] = 1
+	return gw
 }
 
 // RemoveRoute removes a kernel route for a CIDR.

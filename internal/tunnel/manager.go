@@ -77,7 +77,21 @@ func (m *Manager) AddTunnel(nodeName, nodeIP, podCIDR string) error {
 	case "geneve":
 		ifindex, err = createGeneveTunnel(ifName, nodeIP, m.vni, m.nodeIP)
 	case "vxlan":
-		ifindex, err = createVxlanTunnel(ifName, nodeIP, m.vni, m.nodeIP)
+		// VXLAN uses a single shared interface for all remotes.
+		// The interface name is always "nvx0" regardless of nodeName.
+		ifName = "nvx0"
+		ifindex, err = createVxlanTunnel(ifName, m.vni, m.nodeIP)
+		if err == nil {
+			// Add FDB entry mapping remote MAC → remote physical IP.
+			remoteMAC := IPToTunnelMAC(net.ParseIP(nodeIP))
+			if fdbErr := addVxlanFDB(ifName, remoteMAC, net.ParseIP(nodeIP)); fdbErr != nil {
+				m.logger.Error("failed to add VXLAN FDB entry",
+					zap.Error(fdbErr),
+					zap.String("node", nodeName),
+					zap.String("node_ip", nodeIP),
+				)
+			}
+		}
 	default:
 		return fmt.Errorf("unsupported tunnel protocol: %s", m.protocol)
 	}
@@ -139,8 +153,14 @@ func (m *Manager) removeTunnelLocked(nodeName string) error {
 		}
 	}
 
-	// Destroy the tunnel interface.
-	destroyTunnel(info.InterfaceName)
+	// For VXLAN, remove FDB entry but keep the shared interface.
+	// For Geneve, destroy the per-node interface.
+	if m.protocol == "vxlan" {
+		remoteMAC := IPToTunnelMAC(net.ParseIP(info.NodeIP))
+		removeVxlanFDB(info.InterfaceName, remoteMAC, net.ParseIP(info.NodeIP))
+	} else {
+		destroyTunnel(info.InterfaceName)
+	}
 
 	delete(m.tunnels, nodeName)
 
