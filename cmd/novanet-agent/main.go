@@ -19,6 +19,7 @@ import (
 	"time"
 
 	pb "github.com/piwi3910/novanet/api/v1"
+	cnisetup "github.com/piwi3910/novanet/internal/cni"
 	"github.com/piwi3910/novanet/internal/config"
 	"github.com/piwi3910/novanet/internal/identity"
 	"github.com/piwi3910/novanet/internal/ipam"
@@ -126,6 +127,7 @@ type endpoint struct {
 	IdentityID   uint32
 	Netns        string
 	IfName       string
+	HostVeth     string
 }
 
 // agentServer implements the AgentControl gRPC service.
@@ -176,6 +178,20 @@ func (s *agentServer) AddPod(ctx context.Context, req *pb.AddPodRequest) (*pb.Ad
 
 	// Generate a deterministic MAC based on the IP.
 	mac := generateMAC(podIP)
+	gateway := s.ipAlloc.Gateway()
+	prefixLen := s.ipAlloc.PrefixLength()
+
+	// Generate a host veth name from the container ID (truncated to 15 chars).
+	hostVethName := "nv" + req.ContainerId[:11]
+
+	// Create veth pair, move pod-end into netns, configure IP/routes.
+	ifindex, err := cnisetup.SetupPodNetwork(req.Netns, req.IfName, hostVethName, podIP, gateway, mac, prefixLen)
+	if err != nil {
+		s.ipAlloc.Release(podIP)
+		s.idAlloc.RemoveIdentity(identityID)
+		s.logger.Error("failed to setup pod network", zap.String("pod", key), zap.Error(err))
+		return nil, grpcstatus.Errorf(codes.Internal, "pod network setup failed: %v", err)
+	}
 
 	ep := &endpoint{
 		PodName:      req.PodName,
@@ -183,9 +199,11 @@ func (s *agentServer) AddPod(ctx context.Context, req *pb.AddPodRequest) (*pb.Ad
 		ContainerID:  req.ContainerId,
 		IP:           podIP,
 		MAC:          mac,
+		IfIndex:      uint32(ifindex),
 		IdentityID:   identityID,
 		Netns:        req.Netns,
 		IfName:       req.IfName,
+		HostVeth:     hostVethName,
 	}
 
 	s.mu.Lock()
@@ -196,10 +214,11 @@ func (s *agentServer) AddPod(ctx context.Context, req *pb.AddPodRequest) (*pb.Ad
 	metricEndpoints.Set(float64(count))
 	metricIdentities.Set(float64(s.idAlloc.Count()))
 
-	// Push endpoint to dataplane.
+	// Push endpoint to dataplane eBPF maps.
 	if s.dpClient != nil && s.dpConnected {
 		dpReq := &pb.UpsertEndpointRequest{
 			Ip:         ipToUint32(podIP),
+			Ifindex:    uint32(ifindex),
 			Mac:        mac,
 			IdentityId: identityID,
 			PodName:    req.PodName,
@@ -210,15 +229,30 @@ func (s *agentServer) AddPod(ctx context.Context, req *pb.AddPodRequest) (*pb.Ad
 			s.logger.Warn("failed to push endpoint to dataplane",
 				zap.String("pod", key), zap.Error(err))
 		}
-	}
 
-	gateway := s.ipAlloc.Gateway()
-	prefixLen := s.ipAlloc.PrefixLength()
+		// Attach TC ingress and egress programs to the host-side veth.
+		if _, err := s.dpClient.AttachProgram(ctx, &pb.AttachProgramRequest{
+			InterfaceName: hostVethName,
+			AttachType:    pb.AttachType_ATTACH_TC_INGRESS,
+		}); err != nil {
+			s.logger.Warn("failed to attach TC ingress program",
+				zap.String("pod", key), zap.String("iface", hostVethName), zap.Error(err))
+		}
+		if _, err := s.dpClient.AttachProgram(ctx, &pb.AttachProgramRequest{
+			InterfaceName: hostVethName,
+			AttachType:    pb.AttachType_ATTACH_TC_EGRESS,
+		}); err != nil {
+			s.logger.Warn("failed to attach TC egress program",
+				zap.String("pod", key), zap.String("iface", hostVethName), zap.Error(err))
+		}
+	}
 
 	s.logger.Info("AddPod completed",
 		zap.String("pod", key),
 		zap.String("ip", podIP.String()),
 		zap.String("gateway", gateway.String()),
+		zap.String("host_veth", hostVethName),
+		zap.Int("ifindex", ifindex),
 		zap.Uint32("identity_id", identityID),
 	)
 
@@ -245,6 +279,16 @@ func (s *agentServer) DelPod(ctx context.Context, req *pb.DelPodRequest) (*pb.De
 
 	s.mu.Lock()
 	ep, exists := s.endpoints[key]
+	if exists && ep.ContainerID != req.ContainerId {
+		// Stale DEL for an old container — a new container already took over.
+		s.mu.Unlock()
+		s.logger.Warn("DelPod: stale container_id, ignoring",
+			zap.String("pod", key),
+			zap.String("req_container_id", req.ContainerId),
+			zap.String("current_container_id", ep.ContainerID),
+		)
+		return &pb.DelPodResponse{}, nil
+	}
 	if exists {
 		delete(s.endpoints, key)
 	}
@@ -255,6 +299,9 @@ func (s *agentServer) DelPod(ctx context.Context, req *pb.DelPodRequest) (*pb.De
 		s.logger.Warn("DelPod: endpoint not found, treating as success", zap.String("pod", key))
 		return &pb.DelPodResponse{}, nil
 	}
+
+	// Clean up the veth pair and host route.
+	cnisetup.CleanupPodNetwork(ep.HostVeth, ep.IP)
 
 	// Release the IP.
 	if err := s.ipAlloc.Release(ep.IP); err != nil {

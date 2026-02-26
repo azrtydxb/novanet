@@ -48,6 +48,9 @@ spec:
               # Copy the CNI binary to the host.
               cp /usr/bin/novanet-cni /host/opt/cni/bin/novanet-cni
               chmod 755 /host/opt/cni/bin/novanet-cni
+              # Install the loopback plugin (required by containerd CRI).
+              cp /usr/lib/cni/loopback /host/opt/cni/bin/loopback
+              chmod 755 /host/opt/cni/bin/loopback
               # Write the CNI configuration to the host.
               cp /cni-config/10-novanet.conflist /host/etc/cni/net.d/10-novanet.conflist
               echo "CNI binary and config installed."
@@ -128,12 +131,14 @@ spec:
               mountPath: /run/novaroute
               readOnly: true
             {{- end }}
+            - name: netns
+              mountPath: /run/netns
+              mountPropagation: HostToContainer
             - name: bpf-maps
               mountPath: /sys/fs/bpf
               mountPropagation: Bidirectional
             - name: proc
               mountPath: /proc
-              readOnly: true
 
         - name: dataplane
           image: {{ .Values.image.dataplane.repository }}:{{ .Values.image.dataplane.tag }}
@@ -191,6 +196,10 @@ spec:
         - name: cni-conf
           hostPath:
             path: {{ .Values.cni.confPath | default "/etc/cni/net.d" }}
+            type: DirectoryOrCreate
+        - name: netns
+          hostPath:
+            path: /run/netns
             type: DirectoryOrCreate
         - name: bpf-maps
           hostPath:

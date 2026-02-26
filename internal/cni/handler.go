@@ -123,7 +123,7 @@ func (h *Handler) Add(req *AddPodRequest) (*AddPodResult, error) {
 
 	// Create veth pair and configure the pod network namespace.
 	hostVethName := vethNameForPod(req.PodName, req.PodNamespace)
-	ifindex, err := setupPodNetwork(req.Netns, req.IfName, hostVethName, podIP, gateway, mac, prefixLen)
+	ifindex, err := SetupPodNetwork(req.Netns, req.IfName, hostVethName, podIP, gateway, mac, prefixLen)
 	if err != nil {
 		h.ipam.Release(podIP)
 		return nil, fmt.Errorf("setting up pod network: %w", err)
@@ -135,7 +135,7 @@ func (h *Handler) Add(req *AddPodRequest) (*AddPodResult, error) {
 	ctx := context.Background()
 	err = h.dpClient.UpsertEndpoint(ctx, ipUint32, ifindex, mac, identityID, req.PodName, req.PodNamespace, h.nodeIP)
 	if err != nil {
-		cleanupPodNetwork(req.Netns, hostVethName)
+		CleanupPodNetwork(hostVethName, podIP)
 		h.ipam.Release(podIP)
 		return nil, fmt.Errorf("registering endpoint with dataplane: %w", err)
 	}
@@ -144,7 +144,7 @@ func (h *Handler) Add(req *AddPodRequest) (*AddPodResult, error) {
 	err = h.dpClient.AttachProgram(ctx, hostVethName, true)
 	if err != nil {
 		h.dpClient.DeleteEndpoint(ctx, ipUint32)
-		cleanupPodNetwork(req.Netns, hostVethName)
+		CleanupPodNetwork(hostVethName, podIP)
 		h.ipam.Release(podIP)
 		return nil, fmt.Errorf("attaching TC ingress program: %w", err)
 	}
@@ -152,7 +152,7 @@ func (h *Handler) Add(req *AddPodRequest) (*AddPodResult, error) {
 	err = h.dpClient.AttachProgram(ctx, hostVethName, false)
 	if err != nil {
 		h.dpClient.DeleteEndpoint(ctx, ipUint32)
-		cleanupPodNetwork(req.Netns, hostVethName)
+		CleanupPodNetwork(hostVethName, podIP)
 		h.ipam.Release(podIP)
 		return nil, fmt.Errorf("attaching TC egress program: %w", err)
 	}
@@ -209,8 +209,8 @@ func (h *Handler) Del(req *DelPodRequest) error {
 		)
 	}
 
-	// Clean up the veth pair.
-	cleanupPodNetwork(req.Netns, ep.hostVeth)
+	// Clean up the veth pair and host route.
+	CleanupPodNetwork(ep.hostVeth, ep.ip)
 
 	// Release the IP address.
 	if err := h.ipam.Release(ep.ip); err != nil {

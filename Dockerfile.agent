@@ -21,6 +21,12 @@ RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/novanet-agent   ./cmd/novane
 RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/novanet-cni     ./cmd/novanet-cni/
 RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/novanetctl      ./cmd/novanetctl/
 
+# Download standard CNI plugins (needed for loopback).
+ARG CNI_PLUGINS_VERSION=v1.6.2
+RUN ARCH=$(uname -m | sed 's/aarch64/arm64/' | sed 's/x86_64/amd64/') && \
+    curl -fsSL "https://github.com/containernetworking/plugins/releases/download/${CNI_PLUGINS_VERSION}/cni-plugins-linux-${ARCH}-${CNI_PLUGINS_VERSION}.tgz" \
+    | tar -xz -C /out ./loopback
+
 # ---------- runtime ----------
 FROM alpine:3.21
 
@@ -35,6 +41,7 @@ RUN apk add --no-cache \
 COPY --from=builder /out/novanet-agent  /usr/bin/novanet-agent
 COPY --from=builder /out/novanet-cni    /usr/bin/novanet-cni
 COPY --from=builder /out/novanetctl     /usr/bin/novanetctl
+COPY --from=builder /out/loopback       /usr/lib/cni/loopback
 
 # Create runtime directories.
 RUN mkdir -p /run/novanet && chown novanet:novanet /run/novanet
