@@ -19,6 +19,8 @@ type TunnelInfo struct {
 	NodeName string
 	// NodeIP is the remote node's IP address.
 	NodeIP string
+	// PodCIDR is the remote node's pod CIDR.
+	PodCIDR string
 	// InterfaceName is the local tunnel interface name.
 	InterfaceName string
 	// Ifindex is the local tunnel interface index.
@@ -52,7 +54,7 @@ func NewManager(protocol string, nodeIP net.IP, vni uint32, dpClient dataplane.C
 }
 
 // AddTunnel creates a tunnel interface to a remote node.
-func (m *Manager) AddTunnel(nodeName, nodeIP string) error {
+func (m *Manager) AddTunnel(nodeName, nodeIP, podCIDR string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -73,9 +75,9 @@ func (m *Manager) AddTunnel(nodeName, nodeIP string) error {
 	var err error
 	switch m.protocol {
 	case "geneve":
-		ifindex, err = createGeneveTunnel(ifName, nodeIP, m.vni)
+		ifindex, err = createGeneveTunnel(ifName, nodeIP, m.vni, m.nodeIP)
 	case "vxlan":
-		ifindex, err = createVxlanTunnel(ifName, nodeIP, m.vni)
+		ifindex, err = createVxlanTunnel(ifName, nodeIP, m.vni, m.nodeIP)
 	default:
 		return fmt.Errorf("unsupported tunnel protocol: %s", m.protocol)
 	}
@@ -96,6 +98,7 @@ func (m *Manager) AddTunnel(nodeName, nodeIP string) error {
 	m.tunnels[nodeName] = &TunnelInfo{
 		NodeName:      nodeName,
 		NodeIP:        nodeIP,
+		PodCIDR:       podCIDR,
 		InterfaceName: ifName,
 		Ifindex:       ifindex,
 	}

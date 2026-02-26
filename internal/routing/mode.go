@@ -117,7 +117,7 @@ func (m *ModeManager) startOverlay(ctx context.Context) error {
 				zap.String("node", nodeInfo.Name),
 				zap.String("node_ip", nodeInfo.IP),
 			)
-			if err := m.tunnelMgr.AddTunnel(nodeInfo.Name, nodeInfo.IP); err != nil {
+			if err := m.tunnelMgr.AddTunnel(nodeInfo.Name, nodeInfo.IP, nodeInfo.PodCIDR); err != nil {
 				m.logger.Error("failed to create tunnel",
 					zap.Error(err),
 					zap.String("node", nodeInfo.Name),
@@ -130,7 +130,7 @@ func (m *ModeManager) startOverlay(ctx context.Context) error {
 				zap.String("node_ip", nodeInfo.IP),
 			)
 			// AddTunnel handles re-creation.
-			if err := m.tunnelMgr.AddTunnel(nodeInfo.Name, nodeInfo.IP); err != nil {
+			if err := m.tunnelMgr.AddTunnel(nodeInfo.Name, nodeInfo.IP, nodeInfo.PodCIDR); err != nil {
 				m.logger.Error("failed to update tunnel",
 					zap.Error(err),
 					zap.String("node", nodeInfo.Name),
@@ -152,7 +152,7 @@ func (m *ModeManager) startOverlay(ctx context.Context) error {
 
 	// Create tunnels for already-known nodes.
 	for _, nodeInfo := range m.nodeRegistry.ListNodes() {
-		if err := m.tunnelMgr.AddTunnel(nodeInfo.Name, nodeInfo.IP); err != nil {
+		if err := m.tunnelMgr.AddTunnel(nodeInfo.Name, nodeInfo.IP, nodeInfo.PodCIDR); err != nil {
 			m.logger.Error("failed to create initial tunnel",
 				zap.Error(err),
 				zap.String("node", nodeInfo.Name),

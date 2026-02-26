@@ -10,7 +10,10 @@ import (
 )
 
 // createVxlanTunnel creates a VXLAN tunnel interface on Linux.
-func createVxlanTunnel(name, remoteIP string, vni uint32) (int, error) {
+// The interface is assigned a MAC derived from localIP so that decapsulated
+// inner packets (whose destination MAC is set by the sending node's neighbor
+// entry) are classified as PACKET_HOST by the kernel.
+func createVxlanTunnel(name, remoteIP string, vni uint32, localIP net.IP) (int, error) {
 	remote := net.ParseIP(remoteIP)
 	if remote == nil {
 		return 0, fmt.Errorf("invalid remote IP: %s", remoteIP)
@@ -18,11 +21,17 @@ func createVxlanTunnel(name, remoteIP string, vni uint32) (int, error) {
 
 	vxlan := &netlink.Vxlan{
 		LinkAttrs: netlink.LinkAttrs{
-			Name: name,
+			Name:         name,
+			HardwareAddr: IPToTunnelMAC(localIP),
 		},
 		VxlanId: int(vni),
 		Group:   remote,
 		Port:    4789, // Standard VXLAN port.
+	}
+
+	// Delete any stale interface from a previous run.
+	if existing, err := netlink.LinkByName(name); err == nil {
+		netlink.LinkDel(existing)
 	}
 
 	if err := netlink.LinkAdd(vxlan); err != nil {

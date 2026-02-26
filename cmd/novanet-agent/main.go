@@ -23,6 +23,7 @@ import (
 	"github.com/piwi3910/novanet/internal/config"
 	"github.com/piwi3910/novanet/internal/identity"
 	"github.com/piwi3910/novanet/internal/ipam"
+	"github.com/piwi3910/novanet/internal/tunnel"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -438,21 +439,26 @@ func main() {
 		zap.String("tunnel_protocol", cfg.TunnelProtocol),
 	)
 
-	// ---- Resolve node-ip and pod-cidr ----
-	// Auto-detect from Kubernetes node spec when not provided via flags.
+	// ---- Create Kubernetes client ----
 	nodeName := os.Getenv("NOVANET_NODE_NAME")
-	if (*podCIDR == "" || *nodeIPStr == "") && nodeName != "" {
-		logger.Info("auto-detecting node-ip/pod-cidr from Kubernetes API",
-			zap.String("node_name", nodeName),
-		)
+	var k8sClient *kubernetes.Clientset
+	if nodeName != "" {
 		k8sCfg, err := rest.InClusterConfig()
 		if err != nil {
-			logger.Fatal("failed to create in-cluster config for auto-detection", zap.Error(err))
+			logger.Fatal("failed to create in-cluster config", zap.Error(err))
 		}
-		k8sClient, err := kubernetes.NewForConfig(k8sCfg)
+		k8sClient, err = kubernetes.NewForConfig(k8sCfg)
 		if err != nil {
 			logger.Fatal("failed to create kubernetes client", zap.Error(err))
 		}
+	}
+
+	// ---- Resolve node-ip and pod-cidr ----
+	// Auto-detect from Kubernetes node spec when not provided via flags.
+	if (*podCIDR == "" || *nodeIPStr == "") && k8sClient != nil {
+		logger.Info("auto-detecting node-ip/pod-cidr from Kubernetes API",
+			zap.String("node_name", nodeName),
+		)
 		node, err := k8sClient.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
 		if err != nil {
 			logger.Fatal("failed to get node for auto-detection", zap.Error(err), zap.String("node", nodeName))
@@ -584,9 +590,20 @@ func main() {
 	case "overlay":
 		logger.Info("running in overlay mode",
 			zap.String("tunnel_protocol", cfg.TunnelProtocol))
-		// In production, tunnel manager would watch node registry and
-		// create/remove tunnels via the dataplane. For now, log readiness.
-		logger.Info("tunnel manager initialized (waiting for node events)")
+
+		if k8sClient == nil {
+			logger.Fatal("overlay mode requires NOVANET_NODE_NAME to be set for node discovery")
+		}
+
+		// Clean up stale tunnel interfaces and reload the kernel module.
+		// This works around a kernel bug where the geneve module's internal
+		// state gets corrupted after repeated interface create/delete cycles.
+		if err := tunnel.PrepareOverlay(cfg.TunnelProtocol); err != nil {
+			logger.Warn("failed to prepare overlay", zap.Error(err))
+		}
+
+		tunnelMgr := tunnel.NewManager(cfg.TunnelProtocol, nodeIP, 1, nil, logger)
+		go watchNodes(ctx, logger, k8sClient, tunnelMgr, dpClient, nodeName, nodeIP)
 
 	case "native":
 		logger.Info("running in native routing mode, connecting to NovaRoute",
@@ -833,6 +850,158 @@ func startGRPCServer(logger *zap.Logger, socketPath, name string, register func(
 
 	logger.Info("gRPC server created", zap.String("name", name), zap.String("socket", socketPath))
 	return lis, srv, nil
+}
+
+// watchNodes periodically lists Kubernetes nodes and creates/removes Geneve
+// tunnels and host routes for remote nodes' PodCIDRs.
+func watchNodes(ctx context.Context, logger *zap.Logger, k8sClient *kubernetes.Clientset,
+	tunnelMgr *tunnel.Manager, dpClient pb.DataplaneControlClient, selfNode string, selfNodeIP net.IP) {
+
+	const pollInterval = 15 * time.Second
+
+	logger.Info("node watcher started", zap.String("self_node", selfNode))
+
+	for {
+		nodes, err := k8sClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+		if err != nil {
+			logger.Error("failed to list nodes", zap.Error(err))
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(pollInterval):
+				continue
+			}
+		}
+
+		seen := make(map[string]bool)
+		for _, node := range nodes.Items {
+			if node.Name == selfNode {
+				continue
+			}
+			if node.Spec.PodCIDR == "" {
+				continue
+			}
+
+			nodeIP := ""
+			for _, addr := range node.Status.Addresses {
+				if addr.Type == "InternalIP" {
+					nodeIP = addr.Address
+					break
+				}
+			}
+			if nodeIP == "" {
+				continue
+			}
+
+			seen[node.Name] = true
+
+			// If tunnel already exists, reconcile route/neighbor entries
+			// (they may have been lost due to ARP resolution overwriting
+			// permanent entries on kernels without NOARP support).
+			if tunnelInfo, exists := tunnelMgr.GetTunnel(node.Name); exists {
+				if err := tunnel.AddRoute(node.Spec.PodCIDR, tunnelInfo.InterfaceName, selfNodeIP, net.ParseIP(tunnelInfo.NodeIP)); err != nil {
+					logger.Debug("failed to reconcile route",
+						zap.Error(err),
+						zap.String("node", node.Name),
+					)
+				}
+				continue
+			}
+
+			// Create tunnel to remote node.
+			if err := tunnelMgr.AddTunnel(node.Name, nodeIP, node.Spec.PodCIDR); err != nil {
+				logger.Error("failed to create tunnel",
+					zap.Error(err),
+					zap.String("node", node.Name),
+					zap.String("node_ip", nodeIP),
+				)
+				continue
+			}
+
+			tunnelInfo, ok := tunnelMgr.GetTunnel(node.Name)
+			if !ok {
+				continue
+			}
+
+			// Register tunnel with dataplane.
+			if dpClient != nil {
+				remoteIPUint := ipToUint32(net.ParseIP(nodeIP))
+				_, err := dpClient.UpsertTunnel(ctx, &pb.UpsertTunnelRequest{
+					NodeIp:        remoteIPUint,
+					TunnelIfindex: uint32(tunnelInfo.Ifindex),
+					Vni:           1,
+				})
+				if err != nil {
+					logger.Error("failed to register tunnel with dataplane",
+						zap.Error(err),
+						zap.String("node", node.Name),
+					)
+				}
+			}
+
+			// Add kernel route for the remote node's PodCIDR via the tunnel.
+			if err := tunnel.AddRoute(node.Spec.PodCIDR, tunnelInfo.InterfaceName, selfNodeIP, net.ParseIP(nodeIP)); err != nil {
+				logger.Error("failed to add route for remote PodCIDR",
+					zap.Error(err),
+					zap.String("cidr", node.Spec.PodCIDR),
+					zap.String("interface", tunnelInfo.InterfaceName),
+				)
+			} else {
+				logger.Info("tunnel and route created",
+					zap.String("node", node.Name),
+					zap.String("node_ip", nodeIP),
+					zap.String("pod_cidr", node.Spec.PodCIDR),
+					zap.String("interface", tunnelInfo.InterfaceName),
+					zap.Int("ifindex", tunnelInfo.Ifindex),
+				)
+			}
+
+			metricTunnels.Set(float64(tunnelMgr.Count()))
+		}
+
+		// Remove tunnels for nodes that no longer exist.
+		for _, t := range tunnelMgr.ListTunnels() {
+			if !seen[t.NodeName] {
+				// Remove route first.
+				if t.PodCIDR != "" {
+					if err := tunnel.RemoveRoute(t.PodCIDR); err != nil {
+						logger.Warn("failed to remove route for departed node",
+							zap.Error(err),
+							zap.String("node", t.NodeName),
+							zap.String("cidr", t.PodCIDR),
+						)
+					}
+				}
+
+				// Remove tunnel and dataplane entry.
+				if dpClient != nil {
+					remoteIPUint := ipToUint32(net.ParseIP(t.NodeIP))
+					_, _ = dpClient.DeleteTunnel(ctx, &pb.DeleteTunnelRequest{
+						NodeIp: remoteIPUint,
+					})
+				}
+
+				if err := tunnelMgr.RemoveTunnel(t.NodeName); err != nil {
+					logger.Error("failed to remove tunnel for departed node",
+						zap.Error(err),
+						zap.String("node", t.NodeName),
+					)
+				} else {
+					logger.Info("tunnel removed for departed node",
+						zap.String("node", t.NodeName),
+					)
+				}
+
+				metricTunnels.Set(float64(tunnelMgr.Count()))
+			}
+		}
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(pollInterval):
+		}
+	}
 }
 
 // ipToUint32 converts a 4-byte IPv4 address to a uint32 in network byte order.

@@ -10,7 +10,10 @@ import (
 )
 
 // createGeneveTunnel creates a Geneve tunnel interface on Linux.
-func createGeneveTunnel(name, remoteIP string, vni uint32) (int, error) {
+// The interface is assigned a MAC derived from localIP so that decapsulated
+// inner packets (whose destination MAC is set by the sending node's neighbor
+// entry) are classified as PACKET_HOST by the kernel.
+func createGeneveTunnel(name, remoteIP string, vni uint32, localIP net.IP) (int, error) {
 	remote := net.ParseIP(remoteIP)
 	if remote == nil {
 		return 0, fmt.Errorf("invalid remote IP: %s", remoteIP)
@@ -18,11 +21,17 @@ func createGeneveTunnel(name, remoteIP string, vni uint32) (int, error) {
 
 	geneve := &netlink.Geneve{
 		LinkAttrs: netlink.LinkAttrs{
-			Name: name,
+			Name:         name,
+			HardwareAddr: IPToTunnelMAC(localIP),
 		},
-		ID:       vni,
-		Remote:   remote,
-		Dport:   6081, // Standard Geneve port.
+		ID:     vni,
+		Remote: remote,
+		Dport:  6081, // Standard Geneve port.
+	}
+
+	// Delete any stale interface from a previous run.
+	if existing, err := netlink.LinkByName(name); err == nil {
+		netlink.LinkDel(existing)
 	}
 
 	if err := netlink.LinkAdd(geneve); err != nil {

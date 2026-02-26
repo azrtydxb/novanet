@@ -137,8 +137,6 @@ spec:
             - name: bpf-maps
               mountPath: /sys/fs/bpf
               mountPropagation: Bidirectional
-            - name: proc
-              mountPath: /proc
 
         - name: dataplane
           image: {{ .Values.image.dataplane.repository }}:{{ .Values.image.dataplane.tag }}

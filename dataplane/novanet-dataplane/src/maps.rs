@@ -550,6 +550,8 @@ pub struct RealMaps {
     config: RwLock<aya::maps::HashMap<aya::maps::MapData, u32, u64>>,
     egress: RwLock<aya::maps::HashMap<aya::maps::MapData, EgressKey, EgressValue>>,
     attached: RwLock<Vec<AttachedProgramInfo>>,
+    /// Holds TC program links so they stay attached (aya auto-detaches on drop).
+    _tc_links: std::sync::Mutex<Vec<aya::programs::tc::SchedClassifierLink>>,
     /// Holds references to the loaded eBPF object so programs stay loaded.
     _ebpf: std::sync::Mutex<aya::Ebpf>,
 }
@@ -572,6 +574,7 @@ impl RealMaps {
             config: RwLock::new(config),
             egress: RwLock::new(egress),
             attached: RwLock::new(Vec::new()),
+            _tc_links: std::sync::Mutex::new(Vec::new()),
             _ebpf: std::sync::Mutex::new(ebpf),
         }
     }
@@ -802,8 +805,14 @@ impl RealMaps {
         // Add clsact qdisc if not already present.
         let _ = tc::qdisc_add_clsact(interface);
 
-        let _link_id = prog.attach(interface, tc_attach_type)?;
+        let link_id = prog.attach(interface, tc_attach_type)?;
         let prog_id = prog.info()?.id();
+
+        // Take ownership of the link so it lives as long as RealMaps.
+        // Without this, the link is stored inside the Program object and
+        // could be dropped when the Ebpf mutex guard is released.
+        let link = prog.take_link(link_id)?;
+        self._tc_links.lock().unwrap().push(link);
 
         let mut attached = self.attached.write().unwrap();
         attached.push(AttachedProgramInfo {
