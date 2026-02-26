@@ -44,6 +44,9 @@ func TestMetricsNonNil(t *testing.T) {
 	if GRPCDuration == nil {
 		t.Error("GRPCDuration is nil")
 	}
+	if TCPLatencySeconds == nil {
+		t.Error("TCPLatencySeconds is nil")
+	}
 }
 
 // TestRegister verifies that Register() does not panic and that all metrics can
@@ -92,10 +95,16 @@ func TestRegister(t *testing.T) {
 		Buckets: prometheus.DefBuckets,
 	}, []string{"method"})
 
+	tcpLatencySeconds := prometheus.NewHistogram(prometheus.HistogramOpts{
+		Namespace: "novanet", Subsystem: "dataplane", Name: "tcp_latency_seconds",
+		Help: "Estimated TCP round-trip latency from flow events.",
+		Buckets: []float64{0.00001, 0.0001, 0.001, 0.01, 0.1},
+	})
+
 	reg.MustRegister(
 		endpointCount, policyCount, tunnelCount, identityCount,
 		flowTotal, dropsTotal, policyVerdictTotal,
-		latencySeconds, grpcDuration,
+		latencySeconds, grpcDuration, tcpLatencySeconds,
 	)
 
 	mfs, err := reg.Gather()
@@ -289,6 +298,45 @@ func TestHistogramObserve(t *testing.T) {
 // Desc.String() has the form: Desc{fqName: "novanet_foo", help: "...", ...}
 var fqNameRe = regexp.MustCompile(`fqName: "([^"]+)"`)
 
+// TestTCPLatencyHistogramObserve verifies that the TCP latency histogram
+// correctly records observations.
+func TestTCPLatencyHistogramObserve(t *testing.T) {
+	beforeCount := readHistogramSampleCount(TCPLatencySeconds)
+	beforeSum := readHistogramSampleSum(TCPLatencySeconds)
+
+	TCPLatencySeconds.Observe(0.0001)  // 100µs
+	TCPLatencySeconds.Observe(0.001)   // 1ms
+
+	afterCount := readHistogramSampleCount(TCPLatencySeconds)
+	afterSum := readHistogramSampleSum(TCPLatencySeconds)
+
+	if afterCount != beforeCount+2 {
+		t.Errorf("TCPLatencySeconds: expected sample count %d, got %d", beforeCount+2, afterCount)
+	}
+	wantSum := beforeSum + 0.0001 + 0.001
+	if afterSum != wantSum {
+		t.Errorf("TCPLatencySeconds: expected sample sum %v, got %v", wantSum, afterSum)
+	}
+}
+
+// TestTCPLatencyBuckets verifies that TCPLatencySeconds uses datacenter-range
+// latency buckets (µs to ms).
+func TestTCPLatencyBuckets(t *testing.T) {
+	var m dto.Metric
+	if err := TCPLatencySeconds.Write(&m); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	buckets := m.GetHistogram().GetBucket()
+	// We defined 13 buckets; proto adds +Inf, so expect at least 13.
+	if len(buckets) < 13 {
+		t.Errorf("expected at least 13 buckets, got %d", len(buckets))
+	}
+	// First bucket should be 10µs (0.00001).
+	if buckets[0].GetUpperBound() != 0.00001 {
+		t.Errorf("first bucket: expected 0.00001, got %v", buckets[0].GetUpperBound())
+	}
+}
+
 // TestMetricNamingConventions verifies that all registered metric descriptors
 // carry names that conform to Prometheus naming rules and use the expected
 // "novanet" namespace prefix.
@@ -304,6 +352,7 @@ func TestMetricNamingConventions(t *testing.T) {
 		PolicyVerdictTotal,
 		LatencySeconds,
 		GRPCDuration,
+		TCPLatencySeconds,
 	}
 
 	for _, c := range collectors {
@@ -383,6 +432,7 @@ func TestCollectDoesNotBlock(t *testing.T) {
 		{"PolicyVerdictTotal", PolicyVerdictTotal},
 		{"LatencySeconds", LatencySeconds},
 		{"GRPCDuration", GRPCDuration},
+		{"TCPLatencySeconds", TCPLatencySeconds},
 	}
 
 	for _, tc := range collectors {

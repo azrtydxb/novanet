@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_integration_tests:
+        description: 'Run integration tests against a live cluster'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -91,6 +97,32 @@ jobs:
           path: bin/${{ matrix.binary }}
           retention-days: 7
 
+  test-rust:
+    name: Test (Rust)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            dataplane/target
+          key: ${{ runner.os }}-cargo-test-${{ hashFiles('dataplane/Cargo.lock') }}
+
+      - name: Run novanet-common tests
+        working-directory: dataplane
+        run: cargo test -p novanet-common --features userspace
+
+      - name: Run novanet-dataplane tests
+        working-directory: dataplane
+        run: cargo test -p novanet-dataplane
+
   build-rust:
     name: Build (Rust/eBPF)
     runs-on: ubuntu-latest
@@ -129,10 +161,53 @@ jobs:
       - name: Run govulncheck
         run: govulncheck ./...
 
+  # Integration tests — manual trigger only.
+  # Requires a pre-provisioned multi-node K3s cluster with NovaNet deployed.
+  # The runner must have network access to the cluster nodes and kubectl configured.
+  integration-tests:
+    name: Integration Tests
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.run_integration_tests == 'true'
+    runs-on: self-hosted
+    timeout-minutes: 30
+    env:
+      KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+      NOVANET_NS: novanet
+      TEST_NS: novanet-test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install sshpass
+        run: |
+          if ! command -v sshpass &>/dev/null; then
+            apt-get update -qq && apt-get install -y -qq sshpass || \
+            yum install -y sshpass || \
+            apk add --no-cache sshpass || true
+          fi
+
+      - name: Verify cluster access
+        run: |
+          kubectl cluster-info
+          kubectl get nodes -o wide
+
+      - name: Verify NovaNet DaemonSet
+        run: |
+          kubectl get daemonset -n novanet -o wide
+          kubectl get pods -n novanet -o wide
+
+      - name: Make test scripts executable
+        run: chmod +x tests/integration/*.sh
+
+      - name: Run integration tests
+        run: ./tests/integration/run-all.sh
+
+      - name: Cleanup test namespace on failure
+        if: failure()
+        run: kubectl delete namespace novanet-test --timeout=60s --wait=true 2>/dev/null || true
+
   status-check:
     name: Status Check
     if: always()
-    needs: [lint, test-go, build-go, build-rust, security]
+    needs: [lint, test-go, test-rust, build-go, build-rust, security]
     runs-on: ubuntu-latest
     steps:
       - name: Decide status
@@ -140,6 +215,7 @@ jobs:
           if [[ "${{ needs.lint.result }}" == "failure" || \
                 "${{ needs.test-go.result }}" == "failure" || \
                 "${{ needs.build-go.result }}" == "failure" || \
+                "${{ needs.test-rust.result }}" == "failure" || \
                 "${{ needs.build-rust.result }}" == "failure" || \
                 "${{ needs.security.result }}" == "failure" ]]; then
             echo "One or more required jobs failed."

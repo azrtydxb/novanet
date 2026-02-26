@@ -24,6 +24,7 @@ import (
 	"github.com/piwi3910/novanet/internal/identity"
 	"github.com/piwi3910/novanet/internal/ipam"
 	"github.com/piwi3910/novanet/internal/masquerade"
+	"github.com/piwi3910/novanet/internal/metrics"
 	"github.com/piwi3910/novanet/internal/novaroute"
 	"github.com/piwi3910/novanet/internal/tunnel"
 
@@ -121,6 +122,8 @@ func init() {
 		metricCNIAddLatency,
 		metricCNIDelLatency,
 	)
+	// Register shared dataplane metrics (flow counters, TCP latency histogram, etc.).
+	metrics.Register()
 }
 
 // endpoint tracks a pod's network state.
@@ -538,6 +541,9 @@ func main() {
 		if err := pushDataplaneConfig(ctx, logger, dpClient, cfg, nodeIP, *podCIDR); err != nil {
 			logger.Error("failed to push initial config to dataplane", zap.Error(err))
 		}
+
+		// Start background flow consumer for Prometheus metrics.
+		go consumeFlows(ctx, logger, dpClient)
 	}
 
 	// ---- Create agent gRPC server ----
@@ -1160,6 +1166,107 @@ func watchNodes(ctx context.Context, logger *zap.Logger, k8sClient *kubernetes.C
 		case <-ctx.Done():
 			return
 		case <-time.After(pollInterval):
+		}
+	}
+}
+
+// consumeFlows subscribes to the dataplane flow event stream and updates
+// Prometheus metrics from flow events. For TCP flows, it estimates round-trip
+// latency by tracking request/response pairs (matching reversed 4-tuples).
+func consumeFlows(ctx context.Context, logger *zap.Logger, client pb.DataplaneControlClient) {
+	const (
+		retryInterval = 5 * time.Second
+		protoTCP      = 6
+		maxTracked    = 10000 // cap tracked tuples to prevent memory growth
+	)
+
+	// flowTuple identifies a TCP connection direction.
+	type flowTuple struct {
+		srcIP, dstIP     uint32
+		srcPort, dstPort uint32
+	}
+
+	for {
+		stream, err := client.StreamFlows(ctx, &pb.StreamFlowsRequest{})
+		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			logger.Debug("flow consumer: failed to open stream, retrying",
+				zap.Error(err), zap.Duration("retry_in", retryInterval))
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(retryInterval):
+				continue
+			}
+		}
+
+		logger.Info("flow consumer: connected, streaming metrics")
+
+		// Track first-seen wall-clock time for TCP request flows to estimate RTT.
+		pending := make(map[flowTuple]time.Time)
+
+		for {
+			flow, err := stream.Recv()
+			if err != nil {
+				if ctx.Err() != nil {
+					return
+				}
+				logger.Debug("flow consumer: stream error, reconnecting",
+					zap.Error(err))
+				break
+			}
+
+			// Update general flow metrics.
+			verdict := "allow"
+			if flow.Verdict == pb.PolicyAction_POLICY_ACTION_DENY {
+				verdict = "deny"
+			}
+			metrics.FlowTotal.WithLabelValues(
+				fmt.Sprintf("%d", flow.SrcIdentity),
+				fmt.Sprintf("%d", flow.DstIdentity),
+				verdict,
+			).Add(float64(flow.Packets))
+
+			if flow.DropReason != pb.DropReason_DROP_REASON_NONE {
+				metrics.DropsTotal.WithLabelValues(flow.DropReason.String()).Add(float64(flow.Packets))
+			}
+
+			metrics.PolicyVerdictTotal.WithLabelValues(verdict).Add(float64(flow.Packets))
+
+			// TCP latency estimation via request/response pairing.
+			if flow.Protocol != protoTCP {
+				continue
+			}
+
+			now := time.Now()
+			fwd := flowTuple{flow.SrcIp, flow.DstIp, flow.SrcPort, flow.DstPort}
+			rev := flowTuple{flow.DstIp, flow.SrcIp, flow.DstPort, flow.SrcPort}
+
+			if reqTime, ok := pending[rev]; ok {
+				// This flow is a response to a previously seen request.
+				rtt := now.Sub(reqTime)
+				if rtt > 0 && rtt < 10*time.Second {
+					metrics.TCPLatencySeconds.Observe(rtt.Seconds())
+				}
+				delete(pending, rev)
+			} else {
+				// Record as a new request.
+				if len(pending) < maxTracked {
+					pending[fwd] = now
+				}
+			}
+
+			// Evict stale entries older than 10 seconds.
+			if len(pending) > maxTracked/2 {
+				cutoff := now.Add(-10 * time.Second)
+				for k, t := range pending {
+					if t.Before(cutoff) {
+						delete(pending, k)
+					}
+				}
+			}
 		}
 	}
 }

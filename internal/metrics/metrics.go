@@ -72,6 +72,30 @@ var (
 		Help:      "gRPC call duration in seconds.",
 		Buckets:   prometheus.DefBuckets,
 	}, []string{"method"})
+
+	// TCPLatencySeconds observes estimated TCP round-trip latency derived from
+	// flow events. Buckets span datacenter-range latencies (10µs to 100ms).
+	TCPLatencySeconds = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Namespace: "novanet",
+		Subsystem: "dataplane",
+		Name:      "tcp_latency_seconds",
+		Help:      "Estimated TCP round-trip latency from flow events.",
+		Buckets: []float64{
+			0.00001, // 10µs
+			0.000025, // 25µs
+			0.00005, // 50µs
+			0.0001,  // 100µs
+			0.00025, // 250µs
+			0.0005,  // 500µs
+			0.001,   // 1ms
+			0.0025,  // 2.5ms
+			0.005,   // 5ms
+			0.01,    // 10ms
+			0.025,   // 25ms
+			0.05,    // 50ms
+			0.1,     // 100ms
+		},
+	})
 )
 
 // Register registers all NovaNet metrics with the default Prometheus registerer.
@@ -86,5 +110,6 @@ func Register() {
 		PolicyVerdictTotal,
 		LatencySeconds,
 		GRPCDuration,
+		TCPLatencySeconds,
 	)
 }
