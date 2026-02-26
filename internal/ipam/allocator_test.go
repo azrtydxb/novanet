@@ -330,6 +330,79 @@ func TestConcurrentAccess(t *testing.T) {
 	}
 }
 
+func TestStateDirPersistence(t *testing.T) {
+	stateDir := t.TempDir()
+
+	// Create allocator with state dir and allocate some IPs.
+	a, err := NewAllocatorWithStateDir("10.244.1.0/24", stateDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	ip1, err := a.Allocate()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	ip2, err := a.Allocate()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	usedAfterAlloc := a.Used()
+
+	// Create a new allocator with the same state dir — should restore allocations.
+	a2, err := NewAllocatorWithStateDir("10.244.1.0/24", stateDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if a2.Used() != usedAfterAlloc {
+		t.Fatalf("expected %d used after restore, got %d", usedAfterAlloc, a2.Used())
+	}
+
+	// The restored IPs should be marked as allocated.
+	err = a2.AllocateSpecific(ip1)
+	if err == nil {
+		t.Fatal("expected error: restored IP1 should already be allocated")
+	}
+	err = a2.AllocateSpecific(ip2)
+	if err == nil {
+		t.Fatal("expected error: restored IP2 should already be allocated")
+	}
+}
+
+func TestStateDirRelease(t *testing.T) {
+	stateDir := t.TempDir()
+
+	a, err := NewAllocatorWithStateDir("10.244.1.0/24", stateDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	ip, err := a.Allocate()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Release the IP.
+	err = a.Release(ip)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// New allocator should NOT see the released IP as allocated.
+	a2, err := NewAllocatorWithStateDir("10.244.1.0/24", stateDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should be able to allocate the same IP again.
+	err = a2.AllocateSpecific(ip)
+	if err != nil {
+		t.Fatalf("released IP should be available after restart: %v", err)
+	}
+}
+
 func TestSmallCIDR(t *testing.T) {
 	// /30 has 4 IPs: .0 (network), .1 (gateway), .2 (usable), .3 (broadcast).
 	a, err := NewAllocator("10.0.0.0/30")

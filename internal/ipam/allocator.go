@@ -6,11 +6,15 @@ import (
 	"fmt"
 	"math/big"
 	"net"
+	"os"
+	"path/filepath"
 	"sync"
 )
 
 // Allocator manages a pool of IP addresses within a single CIDR.
 // It uses a bitmap stored as []uint64 for efficient allocation tracking.
+// When stateDir is set, allocations are persisted as files so that the
+// bitmap can be rebuilt after an agent restart.
 type Allocator struct {
 	mu sync.Mutex
 
@@ -26,11 +30,21 @@ type Allocator struct {
 	used int
 	// prefixLen is the CIDR prefix length.
 	prefixLen int
+	// stateDir is the directory for persisting IP allocations.
+	// Empty string means in-memory only.
+	stateDir string
 }
 
 // NewAllocator creates a new IPAM allocator for the given PodCIDR.
 // The network address (.0) and gateway address (.1) are automatically reserved.
 func NewAllocator(podCIDR string) (*Allocator, error) {
+	return NewAllocatorWithStateDir(podCIDR, "")
+}
+
+// NewAllocatorWithStateDir creates an IPAM allocator that persists allocations
+// to the given directory. If stateDir is empty, the allocator is in-memory only.
+// On startup, existing files in stateDir are loaded to rebuild the bitmap.
+func NewAllocatorWithStateDir(podCIDR, stateDir string) (*Allocator, error) {
 	ip, network, err := net.ParseCIDR(podCIDR)
 	if err != nil {
 		return nil, fmt.Errorf("parsing podCIDR %q: %w", podCIDR, err)
@@ -61,6 +75,7 @@ func NewAllocator(podCIDR string) (*Allocator, error) {
 		size:      size,
 		bitmap:    make([]uint64, words),
 		prefixLen: ones,
+		stateDir:  stateDir,
 	}
 
 	// Reserve .0 (network address) and .1 (gateway).
@@ -72,6 +87,16 @@ func NewAllocator(podCIDR string) (*Allocator, error) {
 	if size > 2 {
 		a.setBit(size - 1)
 		a.used = 3
+	}
+
+	// Restore allocations from disk.
+	if stateDir != "" {
+		if err := os.MkdirAll(stateDir, 0o755); err != nil {
+			return nil, fmt.Errorf("creating state dir %s: %w", stateDir, err)
+		}
+		if err := a.loadState(); err != nil {
+			return nil, fmt.Errorf("loading IPAM state from %s: %w", stateDir, err)
+		}
 	}
 
 	return a, nil
@@ -90,7 +115,18 @@ func (a *Allocator) Allocate() (net.IP, error) {
 	a.setBit(idx)
 	a.used++
 
-	return a.indexToIP(idx), nil
+	ip := a.indexToIP(idx)
+
+	if a.stateDir != "" {
+		if err := a.saveIP(ip); err != nil {
+			// Roll back the allocation on write failure.
+			a.clearBit(idx)
+			a.used--
+			return nil, fmt.Errorf("persisting IP %s: %w", ip, err)
+		}
+	}
+
+	return ip, nil
 }
 
 // AllocateSpecific claims a specific IP address from the pool.
@@ -118,6 +154,14 @@ func (a *Allocator) AllocateSpecific(ip net.IP) error {
 
 	a.setBit(idx)
 	a.used++
+
+	if a.stateDir != "" {
+		if err := a.saveIP(ip4); err != nil {
+			a.clearBit(idx)
+			a.used--
+			return fmt.Errorf("persisting IP %s: %w", ip, err)
+		}
+	}
 
 	return nil
 }
@@ -159,6 +203,10 @@ func (a *Allocator) Release(ip net.IP) error {
 	a.clearBit(idx)
 	a.used--
 
+	if a.stateDir != "" {
+		a.removeIP(ip4)
+	}
+
 	return nil
 }
 
@@ -190,6 +238,50 @@ func (a *Allocator) PrefixLength() int {
 // CIDR returns the network CIDR string.
 func (a *Allocator) CIDR() string {
 	return a.network.String()
+}
+
+// loadState scans the state directory for IP files and marks them allocated.
+func (a *Allocator) loadState() error {
+	entries, err := os.ReadDir(a.stateDir)
+	if err != nil {
+		return fmt.Errorf("reading state dir: %w", err)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		ip := net.ParseIP(entry.Name())
+		if ip == nil {
+			continue // Skip non-IP filenames.
+		}
+		ip4 := ip.To4()
+		if ip4 == nil || !a.network.Contains(ip4) {
+			continue // Skip IPs outside our CIDR.
+		}
+		idx := a.ipToIndex(ip4)
+		if idx < 0 || idx >= a.size {
+			continue
+		}
+		if !a.getBit(idx) {
+			a.setBit(idx)
+			a.used++
+		}
+	}
+
+	return nil
+}
+
+// saveIP writes an empty file named after the IP to the state directory.
+func (a *Allocator) saveIP(ip net.IP) error {
+	path := filepath.Join(a.stateDir, ip.String())
+	return os.WriteFile(path, nil, 0o644)
+}
+
+// removeIP deletes the file for the given IP from the state directory.
+func (a *Allocator) removeIP(ip net.IP) {
+	path := filepath.Join(a.stateDir, ip.String())
+	os.Remove(path)
 }
 
 // findFree returns the index of the first unset bit, or -1 if all are set.

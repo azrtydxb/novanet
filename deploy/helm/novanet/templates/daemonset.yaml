@@ -137,6 +137,11 @@ spec:
             - name: bpf-maps
               mountPath: /sys/fs/bpf
               mountPropagation: Bidirectional
+            - name: lib-modules
+              mountPath: /lib/modules
+              readOnly: true
+            - name: cni-state
+              mountPath: /var/lib/cni
 
         - name: dataplane
           image: {{ .Values.image.dataplane.repository }}:{{ .Values.image.dataplane.tag }}
@@ -207,3 +212,11 @@ spec:
           hostPath:
             path: /proc
             type: Directory
+        - name: lib-modules
+          hostPath:
+            path: /lib/modules
+            type: Directory
+        - name: cni-state
+          hostPath:
+            path: /var/lib/cni
+            type: DirectoryOrCreate

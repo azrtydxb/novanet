@@ -23,6 +23,7 @@ import (
 	"github.com/piwi3910/novanet/internal/config"
 	"github.com/piwi3910/novanet/internal/identity"
 	"github.com/piwi3910/novanet/internal/ipam"
+	"github.com/piwi3910/novanet/internal/masquerade"
 	"github.com/piwi3910/novanet/internal/tunnel"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -499,7 +500,7 @@ func main() {
 	defer cancel()
 
 	// ---- Create IPAM allocator ----
-	ipAlloc, err := ipam.NewAllocator(*podCIDR)
+	ipAlloc, err := ipam.NewAllocatorWithStateDir(*podCIDR, "/var/lib/cni/networks/novanet")
 	if err != nil {
 		logger.Fatal("failed to create IPAM allocator", zap.Error(err))
 	}
@@ -507,6 +508,18 @@ func main() {
 		zap.String("pod_cidr", *podCIDR),
 		zap.Int("available", ipAlloc.Available()),
 	)
+
+	// ---- Setup NAT masquerade ----
+	if cfg.ClusterCIDR != "" {
+		if err := masquerade.EnsureMasquerade(*podCIDR, cfg.ClusterCIDR); err != nil {
+			logger.Error("failed to setup NAT masquerade", zap.Error(err))
+		} else {
+			logger.Info("NAT masquerade configured",
+				zap.String("pod_cidr", *podCIDR),
+				zap.String("cluster_cidr", cfg.ClusterCIDR),
+			)
+		}
+	}
 
 	// ---- Create identity allocator ----
 	idAlloc := identity.NewAllocator(logger)
