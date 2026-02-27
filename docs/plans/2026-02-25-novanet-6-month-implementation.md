@@ -1328,7 +1328,7 @@ Configurable values:
 - Create: `Dockerfile` (multi-stage: Go build + Rust build → minimal runtime)
 - Create: `.github/workflows/release.yml`
 
-Multi-arch (amd64, arm64). Publish to `ghcr.io/piwi3910/novanet-agent` and `ghcr.io/piwi3910/novanet-dataplane`.
+Multi-arch (amd64, arm64). Publish to `ghcr.io/piwi3910/novanet/novanet-agent` and `ghcr.io/piwi3910/novanet/novanet-dataplane`.
 
 ---
 

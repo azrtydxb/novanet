@@ -158,8 +158,8 @@ novaroute:
 Multi-arch images (`linux/amd64` + `linux/arm64`) are published to GHCR on every tagged release:
 
 ```
-ghcr.io/piwi3910/novanet-agent:<version>
-ghcr.io/piwi3910/novanet-dataplane:<version>
+ghcr.io/piwi3910/novanet/novanet-agent:<version>
+ghcr.io/piwi3910/novanet/novanet-dataplane:<version>
 ```
 
 ---
