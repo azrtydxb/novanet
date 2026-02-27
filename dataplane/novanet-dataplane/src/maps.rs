@@ -19,6 +19,7 @@ pub struct MapManager {
     inner: MapManagerInner,
 }
 
+#[allow(clippy::large_enum_variant)]
 enum MapManagerInner {
     Mock(MockMaps),
     #[cfg(target_os = "linux")]
@@ -93,7 +94,7 @@ impl MapManager {
         match &self.inner {
             MapManagerInner::Mock(m) => m.get_policy(key),
             #[cfg(target_os = "linux")]
-            MapManagerInner::Real(m) => m.get_policy(key),
+            MapManagerInner::Real(_) => unimplemented!("get_policy not used with real maps"),
         }
     }
 
@@ -1187,15 +1188,6 @@ impl RealMaps {
         let mut map = self.policies.write().expect("policies lock poisoned");
         map.remove(key)?;
         Ok(())
-    }
-
-    fn get_policy(&self, key: &PolicyKey) -> anyhow::Result<Option<PolicyValue>> {
-        let map = self.policies.read().expect("policies lock poisoned");
-        match map.get(key, 0) {
-            Ok(val) => Ok(Some(val)),
-            Err(aya::maps::MapError::KeyNotFound) => Ok(None),
-            Err(e) => Err(e.into()),
-        }
     }
 
     fn policy_count(&self) -> usize {
