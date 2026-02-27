@@ -1,12 +1,15 @@
 # Dockerfile.agent — Production image for the NovaNet agent, CNI binary, and CLI.
 #
-# Multi-stage build:
-#   1. Builder stage compiles all Go binaries.
-#   2. Runtime stage uses Alpine for a minimal footprint.
+# Multi-stage build with cross-compilation:
+#   1. Builder stage always runs on the build platform (amd64) and cross-compiles
+#      for the target architecture — no QEMU emulation needed for Go compilation.
+#   2. Runtime stage uses the target platform's Alpine.
 
-# ---------- builder ----------
-# Pin to specific Go patch version for reproducible builds.
-FROM golang:1.26.0-bookworm AS builder
+# ---------- builder (always runs on native build platform) ----------
+FROM --platform=$BUILDPLATFORM golang:1.26.0-bookworm AS builder
+
+ARG TARGETARCH
+ARG TARGETOS
 
 WORKDIR /src
 
@@ -17,18 +20,20 @@ RUN go mod download
 # Copy source tree.
 COPY . .
 
-# Build all Go binaries with stripped debug info.
-RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/novanet-agent   ./cmd/novanet-agent/
-RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/novanet-cni     ./cmd/novanet-cni/
-RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/novanetctl      ./cmd/novanetctl/
+# Build all Go binaries with stripped debug info, cross-compiled for target.
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build -ldflags="-s -w" -o /out/novanet-agent   ./cmd/novanet-agent/
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build -ldflags="-s -w" -o /out/novanet-cni     ./cmd/novanet-cni/
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build -ldflags="-s -w" -o /out/novanetctl      ./cmd/novanetctl/
 
-# Download standard CNI plugins (needed for loopback).
+# Download standard CNI plugins (needed for loopback) for the target architecture.
 ARG CNI_PLUGINS_VERSION=v1.6.2
-RUN ARCH=$(uname -m | sed 's/aarch64/arm64/' | sed 's/x86_64/amd64/') && \
-    curl -fsSL "https://github.com/containernetworking/plugins/releases/download/${CNI_PLUGINS_VERSION}/cni-plugins-linux-${ARCH}-${CNI_PLUGINS_VERSION}.tgz" \
+RUN curl -fsSL "https://github.com/containernetworking/plugins/releases/download/${CNI_PLUGINS_VERSION}/cni-plugins-linux-${TARGETARCH}-${CNI_PLUGINS_VERSION}.tgz" \
     | tar -xz -C /out ./loopback
 
-# ---------- runtime ----------
+# ---------- runtime (target platform) ----------
 FROM alpine:3.21
 
 RUN apk add --no-cache \

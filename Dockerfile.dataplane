@@ -1,28 +1,42 @@
 # Dockerfile.dataplane — Production image for the NovaNet eBPF dataplane.
 #
-# Multi-stage build:
-#   1. Builder stage compiles eBPF programs and the dataplane binary.
-#   2. Runtime stage uses Debian slim (glibc required by Rust binary).
+# Multi-stage build with cross-compilation:
+#   1. Builder stage always runs on the build platform (amd64) and cross-compiles
+#      for the target architecture — no QEMU emulation needed for Rust compilation.
+#   2. Runtime stage uses the target platform's Debian slim.
 
-# ---------- builder ----------
-# Use latest stable Rust with nightly added for eBPF builds (-Z build-std=core).
-FROM rust:bookworm AS builder
+# ---------- builder (always runs on native build platform) ----------
+FROM --platform=$BUILDPLATFORM rust:bookworm AS builder
+
+ARG TARGETARCH
 
 # Install system dependencies for eBPF compilation.
+# For arm64 targets, install the cross-compilation toolchain.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     clang \
     llvm \
     libelf-dev \
     pkg-config \
     protobuf-compiler \
+    && if [ "$TARGETARCH" = "arm64" ]; then \
+        apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu; \
+    fi \
     && rm -rf /var/lib/apt/lists/*
 
 # Install nightly toolchain (required for -Z build-std=core in eBPF builds).
 RUN rustup toolchain install nightly && \
     rustup component add rust-src --toolchain nightly
 
+# Add cross-compilation target for arm64.
+RUN if [ "$TARGETARCH" = "arm64" ]; then \
+        rustup target add aarch64-unknown-linux-gnu; \
+    fi
+
 # Install bpf-linker for eBPF linking.
 RUN cargo install bpf-linker
+
+# Configure cross-compilation linker for arm64.
+ENV CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
 
 WORKDIR /build
 
@@ -32,16 +46,27 @@ COPY api/ api/
 
 WORKDIR /build/dataplane
 
-# Build eBPF programs targeting bpfel-unknown-none.
+# Build eBPF programs (architecture-independent BPF bytecode).
 RUN cargo +nightly build --package novanet-ebpf \
     --target bpfel-unknown-none \
     -Z build-std=core \
     --release
 
-# Build the userspace dataplane binary.
-RUN cargo build --package novanet-dataplane --release
+# Build the userspace dataplane binary for the target architecture.
+RUN if [ "$TARGETARCH" = "arm64" ]; then \
+        cargo build --package novanet-dataplane --target aarch64-unknown-linux-gnu --release; \
+    else \
+        cargo build --package novanet-dataplane --release; \
+    fi
 
-# ---------- runtime ----------
+# Create a symlink so the COPY below works regardless of target.
+RUN if [ "$TARGETARCH" = "arm64" ]; then \
+        ln -s /build/dataplane/target/aarch64-unknown-linux-gnu/release/novanet-dataplane /build/novanet-dataplane; \
+    else \
+        ln -s /build/dataplane/target/release/novanet-dataplane /build/novanet-dataplane; \
+    fi
+
+# ---------- runtime (target platform) ----------
 FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -52,10 +77,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && groupadd --system novanet && useradd --system --gid novanet novanet
 
 # Copy the dataplane binary.
-COPY --from=builder /build/dataplane/target/release/novanet-dataplane /usr/bin/novanet-dataplane
+COPY --from=builder /build/novanet-dataplane /usr/bin/novanet-dataplane
 
 # Copy eBPF object files (the dataplane loads these at runtime).
-# Default path expected by the binary is /opt/novanet/novanet-ebpf.
 COPY --from=builder /build/dataplane/target/bpfel-unknown-none/release/novanet-ebpf /opt/novanet/novanet-ebpf
 
 # Create runtime directories.
