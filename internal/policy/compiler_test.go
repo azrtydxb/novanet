@@ -569,9 +569,9 @@ func TestCompileMatchExpressionIn(t *testing.T) {
 
 	// Pre-allocate an identity with matching labels.
 	idAlloc.AllocateIdentity(map[string]string{
-		"app":                              "web",
-		"tier":                             "frontend",
-		"novanet.io/namespace":   "default",
+		"app":                  "web",
+		"tier":                 "frontend",
+		"novanet.io/namespace": "default",
 	})
 
 	np := &networkingv1.NetworkPolicy{
@@ -609,15 +609,15 @@ func TestCompileMatchExpressionNotIn(t *testing.T) {
 
 	// This identity should NOT match (tier=frontend is in the NotIn list).
 	idAlloc.AllocateIdentity(map[string]string{
-		"app":                              "web",
-		"tier":                             "frontend",
-		"novanet.io/namespace":   "default",
+		"app":                  "web",
+		"tier":                 "frontend",
+		"novanet.io/namespace": "default",
 	})
 	// This identity SHOULD match (tier=data is not in the NotIn list).
 	idAlloc.AllocateIdentity(map[string]string{
-		"app":                              "db",
-		"tier":                             "data",
-		"novanet.io/namespace":   "default",
+		"app":                  "db",
+		"tier":                 "data",
+		"novanet.io/namespace": "default",
 	})
 
 	np := &networkingv1.NetworkPolicy{
@@ -652,14 +652,14 @@ func TestCompileMatchExpressionExists(t *testing.T) {
 
 	// Has "environment" label — should match.
 	idAlloc.AllocateIdentity(map[string]string{
-		"app":                              "web",
-		"environment":                      "prod",
-		"novanet.io/namespace":   "default",
+		"app":                  "web",
+		"environment":          "prod",
+		"novanet.io/namespace": "default",
 	})
 	// Missing "environment" label — should NOT match.
 	idAlloc.AllocateIdentity(map[string]string{
-		"app":                              "worker",
-		"novanet.io/namespace":   "default",
+		"app":                  "worker",
+		"novanet.io/namespace": "default",
 	})
 
 	np := &networkingv1.NetworkPolicy{
@@ -693,14 +693,14 @@ func TestCompileMatchExpressionDoesNotExist(t *testing.T) {
 
 	// Has "legacy" label — should NOT match.
 	idAlloc.AllocateIdentity(map[string]string{
-		"app":                              "old-svc",
-		"legacy":                           "true",
-		"novanet.io/namespace":   "default",
+		"app":                  "old-svc",
+		"legacy":               "true",
+		"novanet.io/namespace": "default",
 	})
 	// Missing "legacy" label — should match.
 	idAlloc.AllocateIdentity(map[string]string{
-		"app":                              "new-svc",
-		"novanet.io/namespace":   "default",
+		"app":                  "new-svc",
+		"novanet.io/namespace": "default",
 	})
 
 	np := &networkingv1.NetworkPolicy{
@@ -734,15 +734,15 @@ func TestCompileCombinedMatchLabelsAndExpressions(t *testing.T) {
 
 	// Matches: app=web AND tier In [frontend,backend]
 	idAlloc.AllocateIdentity(map[string]string{
-		"app":                              "web",
-		"tier":                             "frontend",
-		"novanet.io/namespace":   "default",
+		"app":                  "web",
+		"tier":                 "frontend",
+		"novanet.io/namespace": "default",
 	})
 	// Does NOT match: app=api (wrong matchLabels)
 	idAlloc.AllocateIdentity(map[string]string{
-		"app":                              "api",
-		"tier":                             "frontend",
-		"novanet.io/namespace":   "default",
+		"app":                  "api",
+		"tier":                 "frontend",
+		"novanet.io/namespace": "default",
 	})
 
 	np := &networkingv1.NetworkPolicy{
@@ -888,8 +888,8 @@ func TestCompileNamedPortNoResolver(t *testing.T) {
 			Ingress: []networkingv1.NetworkPolicyIngressRule{
 				{
 					Ports: []networkingv1.NetworkPolicyPort{
-						{Protocol: &tcpProto, Port: &namedPort},  // skipped
-						{Protocol: &tcpProto, Port: &port443},    // kept
+						{Protocol: &tcpProto, Port: &namedPort}, // skipped
+						{Protocol: &tcpProto, Port: &port443},   // kept
 					},
 				},
 			},
@@ -912,14 +912,14 @@ func TestCompilePeerWithMatchExpressions(t *testing.T) {
 
 	// Pre-allocate source identities.
 	idAlloc.AllocateIdentity(map[string]string{
-		"app":                              "api",
-		"version":                          "v2",
-		"novanet.io/namespace":   "default",
+		"app":                  "api",
+		"version":              "v2",
+		"novanet.io/namespace": "default",
 	})
 	idAlloc.AllocateIdentity(map[string]string{
-		"app":                              "api",
-		"version":                          "v1",
-		"novanet.io/namespace":   "default",
+		"app":                  "api",
+		"version":              "v1",
+		"novanet.io/namespace": "default",
 	})
 
 	np := &networkingv1.NetworkPolicy{

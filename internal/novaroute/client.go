@@ -85,8 +85,8 @@ func (c *Client) Register(ctx context.Context) (*nrpb.RegisterResponse, error) {
 	}
 
 	resp, err := cl.Register(ctx, &nrpb.RegisterRequest{
-		Owner:          c.owner,
-		Token:          c.token,
+		Owner:           c.owner,
+		Token:           c.token,
 		ReassertIntents: true,
 	})
 	if err != nil {

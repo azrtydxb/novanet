@@ -22,15 +22,15 @@ const (
 
 // Global flags accessible to all subcommands.
 var (
-	agentSocket    string
+	agentSocket     string
 	dataplaneSocket string
 )
 
 func main() {
 	rootCmd := &cobra.Command{
-		Use:   "novanetctl",
-		Short: "NovaNet CLI tool",
-		Long:  "novanetctl is the command-line tool for inspecting and controlling a running NovaNet agent.",
+		Use:           "novanetctl",
+		Short:         "NovaNet CLI tool",
+		Long:          "novanetctl is the command-line tool for inspecting and controlling a running NovaNet agent.",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
