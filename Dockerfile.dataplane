@@ -11,8 +11,8 @@ FROM --platform=$BUILDPLATFORM rust:bookworm AS builder
 ARG TARGETARCH
 
 # Install system dependencies for eBPF and cross-compilation.
-# gcc-aarch64-linux-gnu is always installed so both platform variants
-# share the same cached layers (avoids Docker BuildKit cache divergence).
+# gcc-aarch64-linux-gnu + libc6-dev-arm64-cross provide the cross-compiler
+# and C runtime (Scrt1.o, crti.o) needed to link aarch64 binaries.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     clang \
     llvm \
@@ -20,6 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     protobuf-compiler \
     gcc-aarch64-linux-gnu \
+    libc6-dev-arm64-cross \
     && rm -rf /var/lib/apt/lists/*
 
 # Install nightly toolchain (required for -Z build-std=core in eBPF builds).
