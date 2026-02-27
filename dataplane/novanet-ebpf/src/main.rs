@@ -70,40 +70,54 @@ fn get_config(key: u32) -> u64 {
 
 #[inline(always)]
 fn check_policy(src_id: u32, dst_id: u32, proto: u8, dst_port: u16) -> Option<u8> {
-    // Try exact match first (specific port).
-    let key = PolicyKey {
-        src_identity: src_id,
-        dst_identity: dst_id,
-        protocol: proto,
-        _pad: [0],
-        dst_port,
-    };
-    if let Some(val) = unsafe { POLICIES.get(&key) } {
-        return Some(val.action);
-    }
+    // Try identity pairs: (exact, exact), then (exact, wildcard), then (wildcard, exact).
+    // For each pair, try port specificity: (proto, port), (proto, 0), (0, 0).
+    let id_pairs: [(u32, u32); 3] = [
+        (src_id, dst_id),  // exact match
+        (src_id, 0),       // wildcard destination (egress deny-all)
+        (0, dst_id),       // wildcard source (ingress deny-all)
+    ];
 
-    // Try wildcard port (dst_port == 0 means "any port").
-    let key_any_port = PolicyKey {
-        src_identity: src_id,
-        dst_identity: dst_id,
-        protocol: proto,
-        _pad: [0],
-        dst_port: 0,
-    };
-    if let Some(val) = unsafe { POLICIES.get(&key_any_port) } {
-        return Some(val.action);
-    }
+    for &(src, dst) in id_pairs.iter() {
+        // Try exact port match.
+        let key = PolicyKey {
+            src_identity: src,
+            dst_identity: dst,
+            protocol: proto,
+            _pad: [0],
+            dst_port,
+        };
+        if let Some(val) = unsafe { POLICIES.get(&key) } {
+            return Some(val.action);
+        }
 
-    // Try wildcard protocol + port.
-    let key_any_proto = PolicyKey {
-        src_identity: src_id,
-        dst_identity: dst_id,
-        protocol: 0,
-        _pad: [0],
-        dst_port: 0,
-    };
-    if let Some(val) = unsafe { POLICIES.get(&key_any_proto) } {
-        return Some(val.action);
+        // Try wildcard port.
+        if dst_port != 0 {
+            let key_any_port = PolicyKey {
+                src_identity: src,
+                dst_identity: dst,
+                protocol: proto,
+                _pad: [0],
+                dst_port: 0,
+            };
+            if let Some(val) = unsafe { POLICIES.get(&key_any_port) } {
+                return Some(val.action);
+            }
+        }
+
+        // Try wildcard protocol + port.
+        if proto != 0 {
+            let key_any_proto = PolicyKey {
+                src_identity: src,
+                dst_identity: dst,
+                protocol: 0,
+                _pad: [0],
+                dst_port: 0,
+            };
+            if let Some(val) = unsafe { POLICIES.get(&key_any_proto) } {
+                return Some(val.action);
+            }
+        }
     }
 
     None
