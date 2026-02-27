@@ -48,18 +48,18 @@ type PolicyRule struct {
 
 // FlowEvent represents a network flow event from the dataplane.
 type FlowEvent struct {
-	SrcIP        uint32
-	DstIP        uint32
-	SrcIdentity  uint32
-	DstIdentity  uint32
-	Protocol     uint32
-	SrcPort      uint32
-	DstPort      uint32
-	Verdict      pb.PolicyAction
-	Bytes        uint64
-	Packets      uint64
-	TimestampNs  int64
-	DropReason   pb.DropReason
+	SrcIP       uint32
+	DstIP       uint32
+	SrcIdentity uint32
+	DstIdentity uint32
+	Protocol    uint32
+	SrcPort     uint32
+	DstPort     uint32
+	Verdict     pb.PolicyAction
+	Bytes       uint64
+	Packets     uint64
+	TimestampNs int64
+	DropReason  pb.DropReason
 }
 
 // DataplaneStatus contains the current status of the dataplane.

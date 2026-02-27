@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
+	dto "github.com/prometheus/client_model/go"
 )
 
 // prometheusNameRe matches valid Prometheus metric names: letters, digits, and
@@ -59,7 +59,7 @@ func TestRegister(t *testing.T) {
 
 	tcpLatencySeconds := prometheus.NewHistogram(prometheus.HistogramOpts{
 		Namespace: "novanet", Subsystem: "dataplane", Name: "tcp_latency_seconds",
-		Help: "Estimated TCP round-trip latency from flow events.",
+		Help:    "Estimated TCP round-trip latency from flow events.",
 		Buckets: []float64{0.00001, 0.0001, 0.001, 0.01, 0.1},
 	})
 
@@ -180,8 +180,8 @@ func TestTCPLatencyHistogramObserve(t *testing.T) {
 	beforeCount := readHistogramSampleCount(TCPLatencySeconds)
 	beforeSum := readHistogramSampleSum(TCPLatencySeconds)
 
-	TCPLatencySeconds.Observe(0.0001)  // 100µs
-	TCPLatencySeconds.Observe(0.001)   // 1ms
+	TCPLatencySeconds.Observe(0.0001) // 100µs
+	TCPLatencySeconds.Observe(0.001)  // 1ms
 
 	afterCount := readHistogramSampleCount(TCPLatencySeconds)
 	afterSum := readHistogramSampleSum(TCPLatencySeconds)

@@ -31,7 +31,7 @@ func SetupPodNetwork(netnsPath, podIfName, hostVethName string, podIP, gateway n
 			Name:         hostVethName,
 			HardwareAddr: hostMAC,
 		},
-		PeerName:     podIfName,
+		PeerName:         podIfName,
 		PeerHardwareAddr: mac,
 	}
 

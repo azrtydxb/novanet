@@ -3,6 +3,7 @@ package routing
 import (
 	"context"
 	"net"
+	"os"
 	"testing"
 	"time"
 
@@ -12,6 +13,14 @@ import (
 	"github.com/piwi3910/novanet/internal/node"
 	"github.com/piwi3910/novanet/internal/tunnel"
 )
+
+// requireRoot skips the test when not running as root (needed for netlink).
+func requireRoot(t *testing.T) {
+	t.Helper()
+	if os.Getuid() != 0 {
+		t.Skip("requires root (CAP_NET_ADMIN) for netlink operations")
+	}
+}
 
 func testLogger() *zap.Logger {
 	logger, _ := zap.NewDevelopment()
@@ -64,6 +73,7 @@ func TestOverlayModeStart(t *testing.T) {
 }
 
 func TestOverlayModeCreatesInitialTunnels(t *testing.T) {
+	requireRoot(t)
 	cfg := testOverlayConfig()
 	tunnelMgr := tunnel.NewManager("geneve", net.ParseIP("10.0.0.1"), 100, nil, testLogger())
 	nodeReg := node.NewRegistry(testLogger())
@@ -88,6 +98,7 @@ func TestOverlayModeCreatesInitialTunnels(t *testing.T) {
 }
 
 func TestOverlayModeReactsToNodeChanges(t *testing.T) {
+	requireRoot(t)
 	cfg := testOverlayConfig()
 	tunnelMgr := tunnel.NewManager("geneve", net.ParseIP("10.0.0.1"), 100, nil, testLogger())
 	nodeReg := node.NewRegistry(testLogger())
@@ -122,6 +133,7 @@ func TestOverlayModeReactsToNodeChanges(t *testing.T) {
 }
 
 func TestOverlayModeStop(t *testing.T) {
+	requireRoot(t)
 	cfg := testOverlayConfig()
 	tunnelMgr := tunnel.NewManager("geneve", net.ParseIP("10.0.0.1"), 100, nil, testLogger())
 	nodeReg := node.NewRegistry(testLogger())

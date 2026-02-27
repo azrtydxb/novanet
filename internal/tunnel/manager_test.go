@@ -3,6 +3,7 @@ package tunnel
 import (
 	"context"
 	"net"
+	"os"
 	"sync"
 	"testing"
 
@@ -13,6 +14,14 @@ import (
 	pb "github.com/piwi3910/novanet/api/v1"
 )
 
+// requireRoot skips the test when not running as root (needed for netlink).
+func requireRoot(t *testing.T) {
+	t.Helper()
+	if os.Getuid() != 0 {
+		t.Skip("requires root (CAP_NET_ADMIN) for netlink operations")
+	}
+}
+
 func testLogger() *zap.Logger {
 	logger, _ := zap.NewDevelopment()
 	return logger
@@ -20,16 +29,20 @@ func testLogger() *zap.Logger {
 
 // mockDPClient implements dataplane.ClientInterface for testing.
 type mockDPClient struct {
-	mu sync.Mutex
+	mu                sync.Mutex
 	upsertTunnelCalls int
 	deleteTunnelCalls int
 }
 
-func (m *mockDPClient) Connect(ctx context.Context) error                                         { return nil }
-func (m *mockDPClient) UpsertEndpoint(ctx context.Context, ep *dataplane.Endpoint) error           { return nil }
-func (m *mockDPClient) DeleteEndpoint(ctx context.Context, ip uint32) error                        { return nil }
-func (m *mockDPClient) UpsertPolicy(ctx context.Context, rule *dataplane.PolicyRule) error         { return nil }
-func (m *mockDPClient) DeletePolicy(ctx context.Context, rule *dataplane.PolicyRule) error         { return nil }
+func (m *mockDPClient) Connect(ctx context.Context) error                                { return nil }
+func (m *mockDPClient) UpsertEndpoint(ctx context.Context, ep *dataplane.Endpoint) error { return nil }
+func (m *mockDPClient) DeleteEndpoint(ctx context.Context, ip uint32) error              { return nil }
+func (m *mockDPClient) UpsertPolicy(ctx context.Context, rule *dataplane.PolicyRule) error {
+	return nil
+}
+func (m *mockDPClient) DeletePolicy(ctx context.Context, rule *dataplane.PolicyRule) error {
+	return nil
+}
 func (m *mockDPClient) SyncPolicies(ctx context.Context, rules []*dataplane.PolicyRule) (*dataplane.SyncResult, error) {
 	return &dataplane.SyncResult{}, nil
 }
@@ -82,6 +95,7 @@ func TestNewManager(t *testing.T) {
 }
 
 func TestAddGeneveTunnel(t *testing.T) {
+	requireRoot(t)
 	m, dp := testManager("geneve")
 
 	err := m.AddTunnel(context.Background(), "node-2", "10.0.0.2", "10.244.2.0/24")
@@ -115,6 +129,7 @@ func TestAddGeneveTunnel(t *testing.T) {
 }
 
 func TestAddVxlanTunnel(t *testing.T) {
+	requireRoot(t)
 	m, _ := testManager("vxlan")
 
 	err := m.AddTunnel(context.Background(), "node-2", "10.0.0.2", "10.244.2.0/24")
@@ -137,6 +152,7 @@ func TestAddTunnelUnsupportedProtocol(t *testing.T) {
 }
 
 func TestAddTunnelUpdate(t *testing.T) {
+	requireRoot(t)
 	m, dp := testManager("geneve")
 
 	m.AddTunnel(context.Background(), "node-2", "10.0.0.2", "10.244.2.0/24")
@@ -163,6 +179,7 @@ func TestAddTunnelUpdate(t *testing.T) {
 }
 
 func TestRemoveTunnel(t *testing.T) {
+	requireRoot(t)
 	m, dp := testManager("geneve")
 
 	m.AddTunnel(context.Background(), "node-2", "10.0.0.2", "10.244.2.0/24")
@@ -201,6 +218,7 @@ func TestGetTunnelNotFound(t *testing.T) {
 }
 
 func TestGetTunnelReturnsCopy(t *testing.T) {
+	requireRoot(t)
 	m, _ := testManager("geneve")
 	m.AddTunnel(context.Background(), "node-2", "10.0.0.2", "10.244.2.0/24")
 
@@ -214,6 +232,7 @@ func TestGetTunnelReturnsCopy(t *testing.T) {
 }
 
 func TestListTunnels(t *testing.T) {
+	requireRoot(t)
 	m, _ := testManager("geneve")
 
 	m.AddTunnel(context.Background(), "node-2", "10.0.0.2", "10.244.2.0/24")
@@ -276,6 +295,7 @@ func TestIPToUint32(t *testing.T) {
 }
 
 func TestConcurrentAccess(t *testing.T) {
+	requireRoot(t)
 	m, _ := testManager("geneve")
 
 	var wg sync.WaitGroup
@@ -296,6 +316,7 @@ func TestConcurrentAccess(t *testing.T) {
 }
 
 func TestAddTunnelWithNilDPClient(t *testing.T) {
+	requireRoot(t)
 	m := NewManager("geneve", net.ParseIP("10.0.0.1"), 100, nil, testLogger())
 
 	err := m.AddTunnel(context.Background(), "node-2", "10.0.0.2", "10.244.2.0/24")

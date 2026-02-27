@@ -27,7 +27,7 @@ func createVxlanTunnel(name string, vni uint32, localIP net.IP) (int, error) {
 			HardwareAddr: IPToTunnelMAC(localIP),
 		},
 		VxlanId:  int(vni),
-		Port:     4789, // Standard VXLAN port.
+		Port:     4789,  // Standard VXLAN port.
 		Learning: false, // We manage FDB entries ourselves.
 	}
 

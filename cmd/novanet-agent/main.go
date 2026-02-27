@@ -64,9 +64,9 @@ const (
 	configKeyClusterCIDRPL    uint32 = 4
 	configKeyDefaultDeny      uint32 = 5
 	configKeyMasqueradeEnable uint32 = 6
-	configKeySNATIP    uint32 = 7 // Reserved for eBPF-level SNAT (currently using iptables fallback).
-	configKeyPodCIDRIP uint32 = 8
-	configKeyPodCIDRPL uint32 = 9
+	configKeySNATIP           uint32 = 7 // Reserved for eBPF-level SNAT (currently using iptables fallback).
+	configKeyPodCIDRIP        uint32 = 8
+	configKeyPodCIDRPL        uint32 = 9
 
 	// Config value constants — MUST match novanet-common/src/lib.rs.
 	modeOverlay uint64 = 0
@@ -155,12 +155,12 @@ type endpoint struct {
 type agentServer struct {
 	pb.UnimplementedAgentControlServer
 
-	logger      *zap.Logger
-	cfg         *config.Config
-	ipAlloc     *ipam.Allocator
-	idAlloc     *identity.Allocator
-	dpClient    pb.DataplaneControlClient
-	k8sClient   kubernetes.Interface
+	logger             *zap.Logger
+	cfg                *config.Config
+	ipAlloc            *ipam.Allocator
+	idAlloc            *identity.Allocator
+	dpClient           pb.DataplaneControlClient
+	k8sClient          kubernetes.Interface
 	nodeIP             net.IP
 	podCIDR            string
 	dpConnected        atomic.Bool
@@ -843,8 +843,8 @@ func upsertRemoteEndpoint(ctx context.Context, logger *zap.Logger,
 
 	req := &pb.UpsertEndpointRequest{
 		Ip:         ipToUint32(podIP),
-		Ifindex:    0,                              // Remote pod — no local interface.
-		Mac:        []byte{0, 0, 0, 0, 0, 0},      // Remote pod — zero MAC (not used for policy).
+		Ifindex:    0,                        // Remote pod — no local interface.
+		Mac:        []byte{0, 0, 0, 0, 0, 0}, // Remote pod — zero MAC (not used for policy).
 		IdentityId: identityID,
 		PodName:    pod.Name,
 		Namespace:  pod.Namespace,
