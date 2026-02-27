@@ -7,8 +7,8 @@ CNI_BINARY    := $(BINARY_DIR)/novanet-cni
 CTL_BINARY    := $(BINARY_DIR)/novanetctl
 DP_BINARY     := $(BINARY_DIR)/novanet-dataplane
 
-DOCKER_IMAGE_AGENT := ghcr.io/piwi3910/novanet-agent
-DOCKER_IMAGE_DP    := ghcr.io/piwi3910/novanet-dataplane
+DOCKER_IMAGE_AGENT := ghcr.io/piwi3910/novanet/novanet-agent
+DOCKER_IMAGE_DP    := ghcr.io/piwi3910/novanet/novanet-dataplane
 DOCKER_TAG         := latest
 
 GO       := go
