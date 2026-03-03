@@ -18,7 +18,7 @@ permissions:
 jobs:
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: arc-runner-novanet
     steps:
       - uses: actions/checkout@v4
 
@@ -48,7 +48,7 @@ jobs:
 
   lint-helm:
     name: Lint (Helm)
-    runs-on: ubuntu-latest
+    runs-on: arc-runner-novanet
     steps:
       - uses: actions/checkout@v4
 
@@ -63,7 +63,7 @@ jobs:
 
   lint-rust:
     name: Lint (Rust)
-    runs-on: ubuntu-latest
+    runs-on: arc-runner-novanet
     steps:
       - uses: actions/checkout@v4
 
@@ -94,7 +94,7 @@ jobs:
 
   test-go:
     name: Test (Go)
-    runs-on: ubuntu-latest
+    runs-on: arc-runner-novanet
     steps:
       - uses: actions/checkout@v4
 
@@ -114,7 +114,7 @@ jobs:
 
   build-go:
     name: Build (${{ matrix.binary }})
-    runs-on: ubuntu-latest
+    runs-on: arc-runner-novanet
     strategy:
       matrix:
         include:
@@ -145,7 +145,7 @@ jobs:
 
   test-rust:
     name: Test (Rust)
-    runs-on: ubuntu-latest
+    runs-on: arc-runner-novanet
     steps:
       - uses: actions/checkout@v4
 
@@ -177,7 +177,7 @@ jobs:
 
   build-rust:
     name: Build (Rust/eBPF)
-    runs-on: ubuntu-latest
+    runs-on: arc-runner-novanet
     steps:
       - uses: actions/checkout@v4
 
@@ -199,7 +199,7 @@ jobs:
 
   security:
     name: Security
-    runs-on: ubuntu-latest
+    runs-on: arc-runner-novanet
     steps:
       - uses: actions/checkout@v4
 
@@ -219,7 +219,7 @@ jobs:
   integration-tests:
     name: Integration Tests
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.run_integration_tests == 'true'
-    runs-on: self-hosted
+    runs-on: arc-runner-novanet
     timeout-minutes: 30
     env:
       KUBECONFIG: /etc/rancher/k3s/k3s.yaml
@@ -260,7 +260,7 @@ jobs:
     name: Status Check
     if: always()
     needs: [lint, lint-helm, lint-rust, test-go, test-rust, build-go, build-rust, security]
-    runs-on: ubuntu-latest
+    runs-on: arc-runner-novanet
     steps:
       - name: Decide status
         run: |
