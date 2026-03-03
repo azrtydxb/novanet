@@ -529,8 +529,8 @@ jobs:
           file: ${{ matrix.dockerfile }}
           push: true
           tags: |
-            ghcr.io/piwi3910/${{ matrix.image }}:sha-${{ github.sha }}
-            ghcr.io/piwi3910/${{ matrix.image }}:latest
+            ghcr.io/piwi3910/novanet/${{ matrix.image }}:sha-${{ github.sha }}
+            ghcr.io/piwi3910/novanet/${{ matrix.image }}:latest
 
       - name: Trigger CT pipeline
         if: success()
