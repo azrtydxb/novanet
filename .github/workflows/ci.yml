@@ -76,18 +76,10 @@ jobs:
             exit 1
           fi
 
-      - name: Install golangci-lint
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(go env GOPATH)/bin
-          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
-
       - name: Run golangci-lint
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            golangci-lint run --new-from-rev=origin/main ./...
-          else
-            golangci-lint run ./...
-          fi
+        uses: golangci/golangci-lint-action@v7
+        with:
+          args: ${{ github.event_name == 'pull_request' && '--new-from-rev=origin/main' || '' }}
 
       - name: Check go mod tidy
         run: |
@@ -215,7 +207,7 @@ jobs:
           cache: true
 
       - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
 
       - name: Run govulncheck
         run: govulncheck ./...
@@ -226,7 +218,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Trivy FS scan
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           scan-type: 'fs'
           scan-ref: '.'
@@ -244,17 +236,21 @@ jobs:
   phase2-gate:
     name: "Phase 2: Gate"
     runs-on: arc-runner-novanet
-    needs: [phase2-docs, phase2-docs-freshness, phase2-security]
+    needs: [phase1-gate, phase2-docs, phase2-docs-freshness, phase2-security]
     if: always()
     steps:
       - name: Check phase 2 results
         run: |
-          if [[ "${{ needs.phase2-docs.result }}" == "failure" || \
-                "${{ needs.phase2-docs-freshness.result }}" == "failure" || \
-                "${{ needs.phase2-security.result }}" == "failure" ]]; then
-            echo "::error::Phase 2 (Compliance) failed."
+          if [[ "${{ needs.phase1-gate.result }}" != "success" ]]; then
+            echo "::error::Phase 1 gate did not pass (status: ${{ needs.phase1-gate.result }})"
             exit 1
           fi
+          for r in "${{ needs.phase2-docs.result }}" "${{ needs.phase2-docs-freshness.result }}" "${{ needs.phase2-security.result }}"; do
+            if [[ "$r" == "failure" || "$r" == "cancelled" ]]; then
+              echo "::error::Phase 2 (Compliance) failed (status: $r)"
+              exit 1
+            fi
+          done
           echo "Phase 2 passed."
 
   # ============================================================================
@@ -277,21 +273,21 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y gcc
 
       - name: Install gotestsum
-        run: go install gotest.tools/gotestsum@latest
+        run: go install gotest.tools/gotestsum@v1.12.1
 
       - name: Run unit tests
         run: |
           CGO_ENABLED=1 gotestsum \
             --junitfile test-results.xml \
             --format pkgname \
-            -- -race -count=1 -coverprofile=coverage.out ./...
+            -- -race -count=1 -timeout=10m -coverprofile=coverage.out ./...
 
       - name: Check coverage threshold
         run: |
           COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
           echo "Total coverage: ${COVERAGE}%"
           echo "Threshold: ${COVERAGE_THRESHOLD}%"
-          if (( $(echo "$COVERAGE < $COVERAGE_THRESHOLD" | bc -l) )); then
+          if awk "BEGIN {exit !($COVERAGE < $COVERAGE_THRESHOLD)}"; then
             echo "::error::Coverage ${COVERAGE}% is below threshold ${COVERAGE_THRESHOLD}%"
             exit 1
           fi
@@ -363,16 +359,21 @@ jobs:
   phase3-gate:
     name: "Phase 3: Gate"
     runs-on: arc-runner-novanet
-    needs: [phase3-test-go, phase3-test-rust]
+    needs: [phase2-gate, phase3-test-go, phase3-test-rust]
     if: always()
     steps:
       - name: Check phase 3 results
         run: |
-          if [[ "${{ needs.phase3-test-go.result }}" == "failure" || \
-                "${{ needs.phase3-test-rust.result }}" == "failure" ]]; then
-            echo "::error::Phase 3 (Unit Testing) failed."
+          if [[ "${{ needs.phase2-gate.result }}" != "success" ]]; then
+            echo "::error::Phase 2 gate did not pass (status: ${{ needs.phase2-gate.result }})"
             exit 1
           fi
+          for r in "${{ needs.phase3-test-go.result }}" "${{ needs.phase3-test-rust.result }}"; do
+            if [[ "$r" == "failure" || "$r" == "cancelled" ]]; then
+              echo "::error::Phase 3 (Unit Testing) failed (status: $r)"
+              exit 1
+            fi
+          done
           echo "Phase 3 passed."
 
   # ============================================================================
@@ -460,7 +461,7 @@ jobs:
           tags: novanet-dataplane:test
 
       - name: Trivy scan agent image
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: 'novanet-agent:test'
           format: 'table'
@@ -468,7 +469,7 @@ jobs:
           exit-code: '1'
 
       - name: Trivy scan dataplane image
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: 'novanet-dataplane:test'
           format: 'table'
@@ -478,17 +479,21 @@ jobs:
   phase4-gate:
     name: "Phase 4: Gate"
     runs-on: arc-runner-novanet
-    needs: [phase4-build-go, phase4-build-rust, phase4-docker-test]
+    needs: [phase3-gate, phase4-build-go, phase4-build-rust, phase4-docker-test]
     if: always()
     steps:
       - name: Check phase 4 results
         run: |
-          if [[ "${{ needs.phase4-build-go.result }}" == "failure" || \
-                "${{ needs.phase4-build-rust.result }}" == "failure" || \
-                "${{ needs.phase4-docker-test.result }}" == "failure" ]]; then
-            echo "::error::Phase 4 (Building) failed."
+          if [[ "${{ needs.phase3-gate.result }}" != "success" ]]; then
+            echo "::error::Phase 3 gate did not pass (status: ${{ needs.phase3-gate.result }})"
             exit 1
           fi
+          for r in "${{ needs.phase4-build-go.result }}" "${{ needs.phase4-build-rust.result }}" "${{ needs.phase4-docker-test.result }}"; do
+            if [[ "$r" == "failure" || "$r" == "cancelled" ]]; then
+              echo "::error::Phase 4 (Building) failed (status: $r)"
+              exit 1
+            fi
+          done
           echo "Phase 4 passed."
 
   # ============================================================================
@@ -527,6 +532,12 @@ jobs:
             ghcr.io/piwi3910/${{ matrix.image }}:sha-${{ github.sha }}
             ghcr.io/piwi3910/${{ matrix.image }}:latest
 
+      - name: Trigger CT pipeline
+        if: success()
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          event-type: deployment-complete
+
   # ============================================================================
   # STATUS CHECK
   # Final aggregator for branch protection
@@ -539,8 +550,8 @@ jobs:
     steps:
       - name: Decide status
         run: |
-          if [[ "${{ needs.phase4-gate.result }}" == "failure" ]]; then
-            echo "::error::Pipeline failed."
+          if [[ "${{ needs.phase4-gate.result }}" != "success" ]]; then
+            echo "::error::Pipeline failed (phase4-gate status: ${{ needs.phase4-gate.result }})."
             exit 1
           fi
           echo "All pipeline phases passed."
