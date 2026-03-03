@@ -12,8 +12,7 @@ image:
     tag: latest
     pullPolicy: IfNotPresent
 
-imagePullSecrets:
-  - name: ghcr-pull-secret
+imagePullSecrets: []
 
 config:
   clusterCIDR: "10.42.0.0/16"
