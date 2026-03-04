@@ -34,7 +34,7 @@ spec:
             tag: latest
   destination:
     server: https://kubernetes.default.svc
-    namespace: nova-system
+    namespace: novanet-system
   syncPolicy:
     automated:
       prune: true
