@@ -216,8 +216,8 @@ Config keys:
 
 | Value | Number | Description |
 |-------|--------|-------------|
-| `DENY` | 0 | Drop the packet |
-| `ALLOW` | 1 | Permit the packet |
+| `POLICY_ACTION_DENY` | 0 | Drop the packet |
+| `POLICY_ACTION_ALLOW` | 1 | Permit the packet |
 
 ### EgressAction
 
