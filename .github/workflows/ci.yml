@@ -172,7 +172,7 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y ruby-full build-essential
           sudo gem install jekyll-sass-converter -v '~> 2.0'
-          sudo gem install jekyll bundler jekyll-remote-theme
+          sudo gem install jekyll bundler jekyll-remote-theme jekyll-seo-tag
           cd docs && jekyll build
 
   phase2-docs-freshness:
@@ -390,6 +390,8 @@ jobs:
             path: ./cmd/novanet-cni/
           - binary: novanetctl
             path: ./cmd/novanetctl/
+          - binary: novanet-operator
+            path: ./cmd/novanet-operator/
     steps:
       - uses: actions/checkout@v4
 
