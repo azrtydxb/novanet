@@ -163,6 +163,7 @@ jobs:
   phase2-docs:
     name: "Phase 2: Docs Build"
     needs: phase1-gate
+    if: ${{ !cancelled() && needs.phase1-gate.result == 'success' }}
     runs-on: arc-runner-novanet
     steps:
       - uses: actions/checkout@v4
@@ -176,7 +177,7 @@ jobs:
   phase2-docs-freshness:
     name: "Phase 2: Docs Freshness"
     needs: phase1-gate
-    if: github.event_name == 'pull_request'
+    if: ${{ !cancelled() && needs.phase1-gate.result == 'success' && github.event_name == 'pull_request' }}
     runs-on: arc-runner-novanet
     steps:
       - uses: actions/checkout@v4
@@ -196,6 +197,7 @@ jobs:
   phase2-security:
     name: "Phase 2: Security"
     needs: phase1-gate
+    if: ${{ !cancelled() && needs.phase1-gate.result == 'success' }}
     runs-on: arc-runner-novanet
     steps:
       - uses: actions/checkout@v4
@@ -252,6 +254,7 @@ jobs:
   phase3-test-go:
     name: "Phase 3: Test (Go)"
     needs: phase2-gate
+    if: ${{ !cancelled() && needs.phase2-gate.result == 'success' }}
     runs-on: arc-runner-novanet
     steps:
       - uses: actions/checkout@v4
@@ -305,7 +308,7 @@ jobs:
   phase3-test-rust:
     name: "Phase 3: Test (Rust)"
     needs: [phase2-gate, phase1-changes]
-    if: needs.phase1-changes.outputs.rust == 'true'
+    if: ${{ !cancelled() && needs.phase2-gate.result == 'success' && needs.phase1-changes.outputs.rust == 'true' }}
     runs-on: arc-runner-novanet
     steps:
       - uses: actions/checkout@v4
@@ -375,6 +378,7 @@ jobs:
   phase4-build-go:
     name: "Phase 4: Build (${{ matrix.binary }})"
     needs: phase3-gate
+    if: ${{ !cancelled() && needs.phase3-gate.result == 'success' }}
     runs-on: arc-runner-novanet
     strategy:
       matrix:
@@ -408,7 +412,7 @@ jobs:
   phase4-build-rust:
     name: "Phase 4: Build (Rust/eBPF)"
     needs: [phase3-gate, phase1-changes]
-    if: needs.phase1-changes.outputs.rust == 'true'
+    if: ${{ !cancelled() && needs.phase3-gate.result == 'success' && needs.phase1-changes.outputs.rust == 'true' }}
     runs-on: arc-runner-novanet
     steps:
       - uses: actions/checkout@v4
@@ -432,6 +436,7 @@ jobs:
   phase4-docker-test:
     name: "Phase 4: Docker Test"
     needs: phase3-gate
+    if: ${{ !cancelled() && needs.phase3-gate.result == 'success' }}
     runs-on: arc-runner-novanet
     steps:
       - uses: actions/checkout@v4
@@ -489,7 +494,7 @@ jobs:
   phase5-push:
     name: "Phase 5: Push (${{ matrix.image }})"
     needs: phase4-gate
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: ${{ !cancelled() && needs.phase4-gate.result == 'success' && github.ref == 'refs/heads/main' && github.event_name == 'push' }}
     runs-on: arc-runner-novanet
     strategy:
       matrix:
