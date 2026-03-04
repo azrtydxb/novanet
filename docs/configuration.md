@@ -82,7 +82,7 @@ The following table lists all configurable values in the NovaNet Helm chart (`de
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `tolerations` | `[{"key": "node-role.kubernetes.io/control-plane", "operator": "Exists", "effect": "NoSchedule"}, {"key": "node.kubernetes.io/not-ready", "operator": "Exists", "effect": "NoExecute"}]` | Tolerations applied to the DaemonSet pods. Defaults tolerate control-plane NoSchedule and not-ready NoExecute taints so NovaNet runs on every node. |
+| `tolerations` | `[{"operator": "Exists", "effect": "NoSchedule"}, {"operator": "Exists", "effect": "NoExecute"}]` | Tolerations applied to the DaemonSet pods. Defaults tolerate all taints with NoSchedule and NoExecute effects so NovaNet runs on every node. |
 | `nodeSelector` | `{kubernetes.io/os: linux}` | Node selector for the DaemonSet. Defaults to Linux nodes only. |
 | `priorityClassName` | `"system-node-critical"` | Priority class for NovaNet pods. CNI pods must be high priority to ensure networking is available for other workloads. |
 | `updateStrategy.type` | `"RollingUpdate"` | DaemonSet update strategy. |
