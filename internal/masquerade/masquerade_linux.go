@@ -5,18 +5,20 @@
 package masquerade
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"strings"
 )
 
-// iptablesCmd is the iptables binary path. Using a constant satisfies gosec G204
-// since the command name is not variable.
+// iptablesCmd is the iptables binary path.
 const iptablesCmd = "iptables"
 
 // EnsureMasquerade adds an iptables MASQUERADE rule for pod traffic leaving
 // the cluster. It is idempotent: if the rule already exists, it does nothing.
 func EnsureMasquerade(podCIDR, clusterCIDR string) error {
+	ctx := context.Background()
+
 	// Check if the rule already exists.
 	checkArgs := []string{
 		"-t", "nat", "-C", "POSTROUTING",
@@ -25,7 +27,7 @@ func EnsureMasquerade(podCIDR, clusterCIDR string) error {
 		"-j", "MASQUERADE",
 		"-m", "comment", "--comment", "novanet masquerade",
 	}
-	if err := exec.Command(iptablesCmd, checkArgs...).Run(); err == nil { //#nosec G204 -- iptablesCmd is a constant
+	if err := exec.CommandContext(ctx, iptablesCmd, checkArgs...).Run(); err == nil { //#nosec G204 -- iptablesCmd is a constant
 		return nil // Rule already exists.
 	}
 
@@ -37,7 +39,7 @@ func EnsureMasquerade(podCIDR, clusterCIDR string) error {
 		"-j", "MASQUERADE",
 		"-m", "comment", "--comment", "novanet masquerade",
 	}
-	out, err := exec.Command(iptablesCmd, addArgs...).CombinedOutput() //#nosec G204 -- iptablesCmd is a constant
+	out, err := exec.CommandContext(ctx, iptablesCmd, addArgs...).CombinedOutput() //#nosec G204 -- iptablesCmd is a constant
 	if err != nil {
 		return fmt.Errorf("adding masquerade rule: %w: %s", err, strings.TrimSpace(string(out)))
 	}

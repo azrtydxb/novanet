@@ -3,6 +3,7 @@
 package tunnel
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 
@@ -40,8 +41,9 @@ func PrepareOverlay(protocol string) error {
 
 	// Reload the kernel module to clear internal state.
 	// Ignore errors — the module might not be loaded or might be builtin.
-	_ = exec.Command("modprobe", "-r", moduleName).Run() //#nosec G204 -- moduleName is "geneve" or "vxlan", not user input
-	_ = exec.Command("modprobe", moduleName).Run()       //#nosec G204 -- moduleName is "geneve" or "vxlan", not user input
+	ctx := context.Background()
+	_ = exec.CommandContext(ctx, "modprobe", "-r", moduleName).Run() //#nosec G204 -- moduleName is "geneve" or "vxlan"
+	_ = exec.CommandContext(ctx, "modprobe", moduleName).Run()       //#nosec G204 -- moduleName is "geneve" or "vxlan"
 
 	return nil
 }
