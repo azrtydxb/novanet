@@ -111,25 +111,25 @@ func (a *Allocator) RemoveIdentity(identityID uint32) {
 	}
 }
 
-// IdentityEntry holds an identity's labels and reference count for listing.
-type IdentityEntry struct {
+// Entry holds an identity's labels and reference count for listing.
+type Entry struct {
 	ID       uint32
 	Labels   map[string]string
 	RefCount int
 }
 
 // ListAll returns all identities with their labels and reference counts.
-func (a *Allocator) ListAll() []IdentityEntry {
+func (a *Allocator) ListAll() []Entry {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	result := make([]IdentityEntry, 0, len(a.idToLabels))
+	result := make([]Entry, 0, len(a.idToLabels))
 	for id, labels := range a.idToLabels {
 		labelsCopy := make(map[string]string, len(labels))
 		for k, v := range labels {
 			labelsCopy[k] = v
 		}
-		result = append(result, IdentityEntry{
+		result = append(result, Entry{
 			ID:       id,
 			Labels:   labelsCopy,
 			RefCount: a.refCount[id],
@@ -173,13 +173,13 @@ func HashLabels(labels map[string]string) uint32 {
 	sort.Strings(keys)
 
 	// Build canonical string representation.
-	var parts []string
+	parts := make([]string, 0, len(keys))
 	for _, k := range keys {
 		parts = append(parts, fmt.Sprintf("%s=%s", k, labels[k]))
 	}
 	canonical := strings.Join(parts, ",")
 
 	h := fnv.New32a()
-	h.Write([]byte(canonical))
+	_, _ = h.Write([]byte(canonical))
 	return h.Sum32()
 }

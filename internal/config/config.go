@@ -5,10 +5,28 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
+)
+
+// Sentinel validation errors.
+var (
+	ErrEmptyListenSocket     = errors.New("listen_socket must not be empty")
+	ErrEmptyCNISocket        = errors.New("cni_socket must not be empty")
+	ErrEmptyDataplaneSocket  = errors.New("dataplane_socket must not be empty")
+	ErrEmptyClusterCIDR      = errors.New("cluster_cidr must not be empty")
+	ErrInvalidNodeCIDRMask   = errors.New("node_cidr_mask_size must be between 16 and 28")
+	ErrInvalidTunnelProto    = errors.New("tunnel_protocol must be geneve or vxlan")
+	ErrInvalidRoutingMode    = errors.New("routing_mode must be overlay or native")
+	ErrEmptyNovaRouteSocket  = errors.New("novaroute.socket must not be empty when routing_mode is native")
+	ErrEmptyNovaRouteToken   = errors.New("novaroute.token must not be empty when routing_mode is native")
+	ErrEmptyNovaRouteProto   = errors.New("novaroute.protocol must not be empty when routing_mode is native")
+	ErrInvalidNovaRouteProto = errors.New("novaroute.protocol must be bgp or ospf")
+	ErrInvalidLogLevel       = errors.New("log_level must be debug, info, warn, or error")
 )
 
 // Config holds the complete NovaNet agent configuration.
@@ -106,7 +124,7 @@ func DefaultConfig() *Config {
 // corresponding defaults; fields absent from the file retain their default
 // values.
 func LoadFromFile(path string) (*Config, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return nil, fmt.Errorf("reading config file %s: %w", path, err)
 	}
@@ -124,56 +142,56 @@ func LoadFromFile(path string) (*Config, error) {
 // found, or nil if the configuration is valid.
 func Validate(cfg *Config) error {
 	if cfg.ListenSocket == "" {
-		return fmt.Errorf("listen_socket must not be empty")
+		return ErrEmptyListenSocket
 	}
 
 	if cfg.CNISocket == "" {
-		return fmt.Errorf("cni_socket must not be empty")
+		return ErrEmptyCNISocket
 	}
 
 	if cfg.DataplaneSocket == "" {
-		return fmt.Errorf("dataplane_socket must not be empty")
+		return ErrEmptyDataplaneSocket
 	}
 
 	if cfg.ClusterCIDR == "" {
-		return fmt.Errorf("cluster_cidr must not be empty")
+		return ErrEmptyClusterCIDR
 	}
 	if _, _, err := net.ParseCIDR(cfg.ClusterCIDR); err != nil {
 		return fmt.Errorf("cluster_cidr %q is not a valid CIDR: %w", cfg.ClusterCIDR, err)
 	}
 
 	if cfg.NodeCIDRMaskSize < 16 || cfg.NodeCIDRMaskSize > 28 {
-		return fmt.Errorf("node_cidr_mask_size must be between 16 and 28, got %d", cfg.NodeCIDRMaskSize)
+		return fmt.Errorf("%w: got %d", ErrInvalidNodeCIDRMask, cfg.NodeCIDRMaskSize)
 	}
 
 	switch strings.ToLower(cfg.TunnelProtocol) {
 	case "geneve", "vxlan":
 		// valid
 	default:
-		return fmt.Errorf("tunnel_protocol %q is not valid (must be geneve or vxlan)", cfg.TunnelProtocol)
+		return fmt.Errorf("%w: got %q", ErrInvalidTunnelProto, cfg.TunnelProtocol)
 	}
 
 	switch strings.ToLower(cfg.RoutingMode) {
 	case "overlay", "native":
 		// valid
 	default:
-		return fmt.Errorf("routing_mode %q is not valid (must be overlay or native)", cfg.RoutingMode)
+		return fmt.Errorf("%w: got %q", ErrInvalidRoutingMode, cfg.RoutingMode)
 	}
 
 	if strings.ToLower(cfg.RoutingMode) == "native" {
 		if cfg.NovaRoute.Socket == "" {
-			return fmt.Errorf("novaroute.socket must not be empty when routing_mode is native")
+			return ErrEmptyNovaRouteSocket
 		}
 		if cfg.NovaRoute.Token == "" {
-			return fmt.Errorf("novaroute.token must not be empty when routing_mode is native")
+			return ErrEmptyNovaRouteToken
 		}
 		switch strings.ToLower(cfg.NovaRoute.Protocol) {
 		case "bgp", "ospf":
 			// valid
 		case "":
-			return fmt.Errorf("novaroute.protocol must not be empty when routing_mode is native")
+			return ErrEmptyNovaRouteProto
 		default:
-			return fmt.Errorf("novaroute.protocol %q is not valid (must be bgp or ospf)", cfg.NovaRoute.Protocol)
+			return fmt.Errorf("%w: got %q", ErrInvalidNovaRouteProto, cfg.NovaRoute.Protocol)
 		}
 	}
 
@@ -181,7 +199,7 @@ func Validate(cfg *Config) error {
 	case "debug", "info", "warn", "error":
 		// valid
 	default:
-		return fmt.Errorf("log_level %q is not valid (must be debug, info, warn, or error)", cfg.LogLevel)
+		return fmt.Errorf("%w: got %q", ErrInvalidLogLevel, cfg.LogLevel)
 	}
 
 	return nil

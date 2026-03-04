@@ -9,6 +9,7 @@ import (
 // +kubebuilder:validation:Enum=Pending;Initializing;Running;Upgrading;Degraded;Failed
 type ClusterPhase string
 
+// ClusterPhase constants define the possible lifecycle phases of a NovaNetCluster.
 const (
 	ClusterPhasePending      ClusterPhase = "Pending"
 	ClusterPhaseInitializing ClusterPhase = "Initializing"
@@ -244,6 +245,8 @@ type NovaNetClusterList struct {
 	Items           []NovaNetCluster `json:"items"`
 }
 
-func init() {
+// Register types with the SchemeBuilder.
+var _ = func() bool {
 	SchemeBuilder.Register(&NovaNetCluster{}, &NovaNetClusterList{})
-}
+	return true
+}()

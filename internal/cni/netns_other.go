@@ -1,5 +1,6 @@
 //go:build !linux
 
+// Package cni provides CNI network setup and teardown operations.
 package cni
 
 import (

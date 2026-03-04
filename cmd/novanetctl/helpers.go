@@ -2,6 +2,8 @@ package main
 
 import "fmt"
 
+const verdictDeny = "DENY"
+
 // protocolName returns a human-readable name for common IP protocol numbers.
 // Returns "*" for protocol 0 (meaning "any"), numeric string for unknowns.
 func protocolName(proto uint32) string {

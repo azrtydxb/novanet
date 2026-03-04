@@ -129,8 +129,8 @@ func TestOnNodeChangeAdd(t *testing.T) {
 	r := NewRegistry(testLogger())
 
 	var gotEvent string
-	var gotNode *NodeInfo
-	r.OnNodeChange(func(event string, node *NodeInfo) {
+	var gotNode *Info
+	r.OnNodeChange(func(event string, node *Info) {
 		gotEvent = event
 		gotNode = node
 	})
@@ -151,7 +151,7 @@ func TestOnNodeChangeUpdate(t *testing.T) {
 	r.AddNode("node-1", "10.0.0.1", "10.244.1.0/24")
 
 	var gotEvent string
-	r.OnNodeChange(func(event string, node *NodeInfo) {
+	r.OnNodeChange(func(event string, node *Info) {
 		gotEvent = event
 	})
 
@@ -168,8 +168,8 @@ func TestOnNodeChangeDelete(t *testing.T) {
 	r.AddNode("node-1", "10.0.0.1", "10.244.1.0/24")
 
 	var gotEvent string
-	var gotNode *NodeInfo
-	r.OnNodeChange(func(event string, node *NodeInfo) {
+	var gotNode *Info
+	r.OnNodeChange(func(event string, node *Info) {
 		gotEvent = event
 		gotNode = node
 	})
@@ -266,10 +266,10 @@ func TestMultipleCallbacks(t *testing.T) {
 	r := NewRegistry(testLogger())
 
 	callCount := 0
-	r.OnNodeChange(func(event string, node *NodeInfo) {
+	r.OnNodeChange(func(event string, node *Info) {
 		callCount++
 	})
-	r.OnNodeChange(func(event string, node *NodeInfo) {
+	r.OnNodeChange(func(event string, node *Info) {
 		callCount++
 	})
 

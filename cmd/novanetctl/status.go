@@ -34,7 +34,7 @@ func runStatus(outputFormat string) error {
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	client := newAgentClient(conn)
 
@@ -63,22 +63,22 @@ func printStatusJSON(resp *pb.GetAgentStatusResponse) error {
 func printStatusTable(resp *pb.GetAgentStatusResponse) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
 
-	fmt.Fprintln(w, "NovaNet Agent Status")
-	fmt.Fprintln(w, "====================")
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w, "NovaNet Agent Status")
+	_, _ = fmt.Fprintln(w, "====================")
+	_, _ = fmt.Fprintln(w)
 
-	fmt.Fprintf(w, "Routing Mode:\t%s\n", resp.RoutingMode)
-	fmt.Fprintf(w, "Tunnel Protocol:\t%s\n", resp.TunnelProtocol)
-	fmt.Fprintf(w, "Node IP:\t%s\n", resp.NodeIp)
-	fmt.Fprintf(w, "Pod CIDR:\t%s\n", resp.PodCidr)
-	fmt.Fprintf(w, "Cluster CIDR:\t%s\n", resp.ClusterCidr)
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintf(w, "Routing Mode:\t%s\n", resp.RoutingMode)
+	_, _ = fmt.Fprintf(w, "Tunnel Protocol:\t%s\n", resp.TunnelProtocol)
+	_, _ = fmt.Fprintf(w, "Node IP:\t%s\n", resp.NodeIp)
+	_, _ = fmt.Fprintf(w, "Pod CIDR:\t%s\n", resp.PodCidr)
+	_, _ = fmt.Fprintf(w, "Cluster CIDR:\t%s\n", resp.ClusterCidr)
+	_, _ = fmt.Fprintln(w)
 
-	fmt.Fprintf(w, "Endpoints:\t%d\n", resp.EndpointCount)
-	fmt.Fprintf(w, "Policies:\t%d\n", resp.PolicyCount)
-	fmt.Fprintf(w, "Tunnels:\t%d\n", resp.TunnelCount)
-	fmt.Fprintf(w, "Identities:\t%d\n", resp.IdentityCount)
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintf(w, "Endpoints:\t%d\n", resp.EndpointCount)
+	_, _ = fmt.Fprintf(w, "Policies:\t%d\n", resp.PolicyCount)
+	_, _ = fmt.Fprintf(w, "Tunnels:\t%d\n", resp.TunnelCount)
+	_, _ = fmt.Fprintf(w, "Identities:\t%d\n", resp.IdentityCount)
+	_, _ = fmt.Fprintln(w)
 
 	dpStatus := "disconnected"
 	dpPrograms := uint32(0)
@@ -88,9 +88,9 @@ func printStatusTable(resp *pb.GetAgentStatusResponse) error {
 		}
 		dpPrograms = resp.Dataplane.AttachedPrograms
 	}
-	fmt.Fprintf(w, "Dataplane:\t%s\n", dpStatus)
-	fmt.Fprintf(w, "Attached Programs:\t%d\n", dpPrograms)
-	fmt.Fprintf(w, "NovaRoute Connected:\t%v\n", resp.NovarouteConnected)
+	_, _ = fmt.Fprintf(w, "Dataplane:\t%s\n", dpStatus)
+	_, _ = fmt.Fprintf(w, "Attached Programs:\t%d\n", dpPrograms)
+	_, _ = fmt.Fprintf(w, "NovaRoute Connected:\t%v\n", resp.NovarouteConnected)
 
 	return w.Flush()
 }

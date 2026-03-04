@@ -3,8 +3,14 @@
 package tunnel
 
 import (
-	"fmt"
+	"errors"
 	"net"
+)
+
+// Platform-specific sentinel errors for non-Linux builds.
+var (
+	errTunnelRoutesUnsupported    = errors.New("tunnel routes not supported on this platform")
+	errBlackholeRoutesUnsupported = errors.New("blackhole routes not supported on this platform")
 )
 
 // IPToTunnelMAC derives a deterministic MAC from an IPv4 address.
@@ -17,21 +23,21 @@ func IPToTunnelMAC(ip net.IP) net.HardwareAddr {
 }
 
 // AddRoute is not supported on non-Linux platforms.
-func AddRoute(cidr string, ifName string, srcIP net.IP, remoteNodeIP net.IP, protocol string) error {
-	return fmt.Errorf("tunnel routes not supported on this platform")
+func AddRoute(_, _ string, _, _ net.IP, _ string) error {
+	return errTunnelRoutesUnsupported
 }
 
 // AddBlackholeRoute is not supported on non-Linux platforms.
-func AddBlackholeRoute(cidr string) error {
-	return fmt.Errorf("blackhole routes not supported on this platform")
+func AddBlackholeRoute(_ string) error {
+	return errBlackholeRoutesUnsupported
 }
 
 // RemoveBlackholeRoute is not supported on non-Linux platforms.
-func RemoveBlackholeRoute(cidr string) error {
-	return fmt.Errorf("blackhole routes not supported on this platform")
+func RemoveBlackholeRoute(_ string) error {
+	return errBlackholeRoutesUnsupported
 }
 
 // RemoveRoute is not supported on non-Linux platforms.
-func RemoveRoute(cidr string) error {
-	return fmt.Errorf("tunnel routes not supported on this platform")
+func RemoveRoute(_ string) error {
+	return errTunnelRoutesUnsupported
 }

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -12,22 +11,15 @@ import (
 )
 
 const (
-	// dialTimeout is the maximum time to wait for a gRPC connection.
-	dialTimeout = 5 * time.Second
-
 	// callTimeout is the maximum time to wait for a gRPC call response.
 	callTimeout = 10 * time.Second
 )
 
 // connectAgent dials the agent gRPC socket and returns a client connection.
 func connectAgent() (*grpc.ClientConn, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), dialTimeout)
-	defer cancel()
-
-	conn, err := grpc.DialContext(ctx,
+	conn, err := grpc.NewClient(
 		"unix://"+agentSocket,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to novanet-agent at %s: %w", agentSocket, err)
@@ -42,13 +34,9 @@ func newAgentClient(conn *grpc.ClientConn) pb.AgentControlClient {
 
 // connectDataplane dials the dataplane gRPC socket and returns a client connection.
 func connectDataplane() (*grpc.ClientConn, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), dialTimeout)
-	defer cancel()
-
-	conn, err := grpc.DialContext(ctx,
+	conn, err := grpc.NewClient(
 		"unix://"+dataplaneSocket,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to dataplane at %s: %w", dataplaneSocket, err)

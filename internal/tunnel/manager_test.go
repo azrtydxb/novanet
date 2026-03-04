@@ -56,8 +56,8 @@ func (m *mockDPClient) DetachProgram(ctx context.Context, iface string, attachTy
 func (m *mockDPClient) StreamFlows(ctx context.Context, identityFilter uint32) (<-chan *dataplane.FlowEvent, error) {
 	return nil, nil
 }
-func (m *mockDPClient) GetStatus(ctx context.Context) (*dataplane.DataplaneStatus, error) {
-	return &dataplane.DataplaneStatus{}, nil
+func (m *mockDPClient) GetStatus(ctx context.Context) (*dataplane.Status, error) {
+	return &dataplane.Status{}, nil
 }
 func (m *mockDPClient) Close() error { return nil }
 
@@ -155,8 +155,8 @@ func TestAddTunnelUpdate(t *testing.T) {
 	requireRoot(t)
 	m, dp := testManager("geneve")
 
-	m.AddTunnel(context.Background(), "node-2", "10.0.0.2", "10.244.2.0/24")
-	m.AddTunnel(context.Background(), "node-2", "10.0.0.3", "10.244.2.0/24") // Update with new IP.
+	_ = m.AddTunnel(context.Background(), "node-2", "10.0.0.2", "10.244.2.0/24")
+	_ = m.AddTunnel(context.Background(), "node-2", "10.0.0.3", "10.244.2.0/24") // Update with new IP.
 
 	if m.Count() != 1 {
 		t.Fatalf("expected 1 tunnel after update, got %d", m.Count())
@@ -182,7 +182,7 @@ func TestRemoveTunnel(t *testing.T) {
 	requireRoot(t)
 	m, dp := testManager("geneve")
 
-	m.AddTunnel(context.Background(), "node-2", "10.0.0.2", "10.244.2.0/24")
+	_ = m.AddTunnel(context.Background(), "node-2", "10.0.0.2", "10.244.2.0/24")
 	err := m.RemoveTunnel(context.Background(), "node-2")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -220,7 +220,7 @@ func TestGetTunnelNotFound(t *testing.T) {
 func TestGetTunnelReturnsCopy(t *testing.T) {
 	requireRoot(t)
 	m, _ := testManager("geneve")
-	m.AddTunnel(context.Background(), "node-2", "10.0.0.2", "10.244.2.0/24")
+	_ = m.AddTunnel(context.Background(), "node-2", "10.0.0.2", "10.244.2.0/24")
 
 	info, _ := m.GetTunnel("node-2")
 	info.NodeIP = "modified"
@@ -235,9 +235,9 @@ func TestListTunnels(t *testing.T) {
 	requireRoot(t)
 	m, _ := testManager("geneve")
 
-	m.AddTunnel(context.Background(), "node-2", "10.0.0.2", "10.244.2.0/24")
-	m.AddTunnel(context.Background(), "node-3", "10.0.0.3", "10.244.3.0/24")
-	m.AddTunnel(context.Background(), "node-4", "10.0.0.4", "10.244.4.0/24")
+	_ = m.AddTunnel(context.Background(), "node-2", "10.0.0.2", "10.244.2.0/24")
+	_ = m.AddTunnel(context.Background(), "node-3", "10.0.0.3", "10.244.3.0/24")
+	_ = m.AddTunnel(context.Background(), "node-4", "10.0.0.4", "10.244.4.0/24")
 
 	tunnels := m.ListTunnels()
 	if len(tunnels) != 3 {
@@ -302,7 +302,7 @@ func TestConcurrentAccess(t *testing.T) {
 	for i := range 20 {
 		wg.Go(func() {
 			name := "node-" + string(rune('a'+i%26))
-			m.AddTunnel(context.Background(), name, "10.0.0."+string(rune('1'+i%9)), "10.244.0.0/24")
+			_ = m.AddTunnel(context.Background(), name, "10.0.0."+string(rune('1'+i%9)), "10.244.0.0/24")
 		})
 	}
 

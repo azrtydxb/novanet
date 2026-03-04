@@ -3,12 +3,27 @@
 package ipam
 
 import (
+	"errors"
 	"fmt"
 	"math/big"
 	"net"
 	"os"
 	"path/filepath"
 	"sync"
+)
+
+// Sentinel errors for the IPAM allocator.
+var (
+	ErrIPv4Only         = errors.New("only IPv4 is supported")
+	ErrCIDRTooSmall     = errors.New("CIDR is too small (need at least /30)")
+	ErrNoFreeAddresses  = errors.New("no free IP addresses")
+	ErrIPOutsideCIDR    = errors.New("IP is not within CIDR")
+	ErrIPOutOfRange     = errors.New("IP is out of range")
+	ErrIPAlreadyAlloc   = errors.New("IP is already allocated")
+	ErrIPNotAllocated   = errors.New("IP is not allocated")
+	ErrReleaseNetwork   = errors.New("cannot release network address")
+	ErrReleaseGateway   = errors.New("cannot release gateway address")
+	ErrReleaseBroadcast = errors.New("cannot release broadcast address")
 )
 
 // Allocator manages a pool of IP addresses within a single CIDR.
@@ -53,17 +68,17 @@ func NewAllocatorWithStateDir(podCIDR, stateDir string) (*Allocator, error) {
 	// Only support IPv4 for now.
 	ip4 := ip.To4()
 	if ip4 == nil {
-		return nil, fmt.Errorf("only IPv4 is supported, got %q", podCIDR)
+		return nil, fmt.Errorf("%w: got %q", ErrIPv4Only, podCIDR)
 	}
 
 	ones, bits := network.Mask.Size()
 	if bits != 32 {
-		return nil, fmt.Errorf("only IPv4 is supported, got %d-bit mask", bits)
+		return nil, fmt.Errorf("%w: got %d-bit mask", ErrIPv4Only, bits)
 	}
 
 	size := 1 << (bits - ones)
 	if size < 4 {
-		return nil, fmt.Errorf("CIDR %q is too small (need at least /30)", podCIDR)
+		return nil, fmt.Errorf("%w: %q", ErrCIDRTooSmall, podCIDR)
 	}
 
 	// Calculate number of uint64 words needed.
@@ -91,7 +106,7 @@ func NewAllocatorWithStateDir(podCIDR, stateDir string) (*Allocator, error) {
 
 	// Restore allocations from disk.
 	if stateDir != "" {
-		if err := os.MkdirAll(stateDir, 0o755); err != nil {
+		if err := os.MkdirAll(stateDir, 0o750); err != nil {
 			return nil, fmt.Errorf("creating state dir %s: %w", stateDir, err)
 		}
 		if err := a.loadState(); err != nil {
@@ -109,7 +124,7 @@ func (a *Allocator) Allocate() (net.IP, error) {
 
 	idx := a.findFree()
 	if idx < 0 {
-		return nil, fmt.Errorf("no free IP addresses in %s", a.network.String())
+		return nil, fmt.Errorf("%w: %s", ErrNoFreeAddresses, a.network.String())
 	}
 
 	a.setBit(idx)
@@ -136,20 +151,20 @@ func (a *Allocator) AllocateSpecific(ip net.IP) error {
 
 	ip4 := ip.To4()
 	if ip4 == nil {
-		return fmt.Errorf("only IPv4 is supported")
+		return ErrIPv4Only
 	}
 
 	if !a.network.Contains(ip4) {
-		return fmt.Errorf("IP %s is not within CIDR %s", ip.String(), a.network.String())
+		return fmt.Errorf("%w: %s in %s", ErrIPOutsideCIDR, ip.String(), a.network.String())
 	}
 
 	idx := a.ipToIndex(ip4)
 	if idx < 0 || idx >= a.size {
-		return fmt.Errorf("IP %s is out of range", ip.String())
+		return fmt.Errorf("%w: %s", ErrIPOutOfRange, ip.String())
 	}
 
 	if a.getBit(idx) {
-		return fmt.Errorf("IP %s is already allocated", ip.String())
+		return fmt.Errorf("%w: %s", ErrIPAlreadyAlloc, ip.String())
 	}
 
 	a.setBit(idx)
@@ -173,31 +188,31 @@ func (a *Allocator) Release(ip net.IP) error {
 
 	ip4 := ip.To4()
 	if ip4 == nil {
-		return fmt.Errorf("only IPv4 is supported")
+		return ErrIPv4Only
 	}
 
 	if !a.network.Contains(ip4) {
-		return fmt.Errorf("IP %s is not within CIDR %s", ip.String(), a.network.String())
+		return fmt.Errorf("%w: %s in %s", ErrIPOutsideCIDR, ip.String(), a.network.String())
 	}
 
 	idx := a.ipToIndex(ip4)
 	if idx < 0 || idx >= a.size {
-		return fmt.Errorf("IP %s is out of range", ip.String())
+		return fmt.Errorf("%w: %s", ErrIPOutOfRange, ip.String())
 	}
 
 	// Prevent releasing reserved addresses.
 	if idx == 0 {
-		return fmt.Errorf("cannot release network address %s", ip.String())
+		return fmt.Errorf("%w: %s", ErrReleaseNetwork, ip.String())
 	}
 	if idx == 1 {
-		return fmt.Errorf("cannot release gateway address %s", ip.String())
+		return fmt.Errorf("%w: %s", ErrReleaseGateway, ip.String())
 	}
 	if idx == a.size-1 {
-		return fmt.Errorf("cannot release broadcast address %s", ip.String())
+		return fmt.Errorf("%w: %s", ErrReleaseBroadcast, ip.String())
 	}
 
 	if !a.getBit(idx) {
-		return fmt.Errorf("IP %s is not allocated", ip.String())
+		return fmt.Errorf("%w: %s", ErrIPNotAllocated, ip.String())
 	}
 
 	a.clearBit(idx)
@@ -275,7 +290,7 @@ func (a *Allocator) loadState() error {
 // saveIP writes an empty file named after the IP to the state directory.
 func (a *Allocator) saveIP(ip net.IP) error {
 	path := filepath.Join(a.stateDir, ip.String())
-	return os.WriteFile(path, nil, 0o644)
+	return os.WriteFile(path, nil, 0o600)
 }
 
 // removeIP deletes the file for the given IP from the state directory.
@@ -285,7 +300,7 @@ func (a *Allocator) removeIP(ip net.IP) {
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		// Log to stderr since we don't have a structured logger here.
 		// This is best-effort cleanup; the bitmap is already updated.
-		fmt.Fprintf(os.Stderr, "ipam: failed to remove state file %s: %v\n", path, err)
+		_, _ = fmt.Fprintf(os.Stderr, "ipam: failed to remove state file %s: %v\n", path, err)
 	}
 }
 
@@ -312,22 +327,22 @@ func (a *Allocator) findFree() int {
 // setBit sets the bit at the given index.
 func (a *Allocator) setBit(idx int) {
 	word := idx / 64
-	bit := uint(idx % 64)
-	a.bitmap[word] |= 1 << bit
+	bit := idx % 64
+	a.bitmap[word] |= 1 << uint(bit) //nolint:gosec // idx is bounded by CIDR size (<= 2^16)
 }
 
 // clearBit clears the bit at the given index.
 func (a *Allocator) clearBit(idx int) {
 	word := idx / 64
-	bit := uint(idx % 64)
-	a.bitmap[word] &^= 1 << bit
+	bit := idx % 64
+	a.bitmap[word] &^= 1 << uint(bit) //nolint:gosec // idx is bounded by CIDR size (<= 2^16)
 }
 
 // getBit returns true if the bit at the given index is set.
 func (a *Allocator) getBit(idx int) bool {
 	word := idx / 64
-	bit := uint(idx % 64)
-	return a.bitmap[word]&(1<<bit) != 0
+	bit := idx % 64
+	return a.bitmap[word]&(1<<uint(bit)) != 0 //nolint:gosec // idx is bounded by CIDR size (<= 2^16)
 }
 
 // ipToIndex converts an IP address to a bitmap index.

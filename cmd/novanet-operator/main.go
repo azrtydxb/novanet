@@ -29,14 +29,14 @@ var (
 )
 
 var (
-	scheme   = runtime.NewScheme()
+	scheme = func() *runtime.Scheme {
+		s := runtime.NewScheme()
+		utilruntime.Must(clientgoscheme.AddToScheme(s))
+		utilruntime.Must(novanetv1alpha1.AddToScheme(s))
+		return s
+	}()
 	setupLog = ctrl.Log.WithName("setup")
 )
-
-func init() {
-	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(novanetv1alpha1.AddToScheme(scheme))
-}
 
 func main() {
 	// Core flags

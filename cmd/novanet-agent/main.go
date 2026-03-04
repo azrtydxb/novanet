@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"net"
@@ -19,13 +20,13 @@ import (
 	"time"
 
 	pb "github.com/piwi3910/novanet/api/v1"
+	"github.com/piwi3910/novanet/internal/agentmetrics"
 	cnisetup "github.com/piwi3910/novanet/internal/cni"
 	"github.com/piwi3910/novanet/internal/config"
 	"github.com/piwi3910/novanet/internal/egress"
 	"github.com/piwi3910/novanet/internal/identity"
 	"github.com/piwi3910/novanet/internal/ipam"
 	"github.com/piwi3910/novanet/internal/masquerade"
-	"github.com/piwi3910/novanet/internal/metrics"
 	"github.com/piwi3910/novanet/internal/novaroute"
 	"github.com/piwi3910/novanet/internal/policy"
 	"github.com/piwi3910/novanet/internal/tunnel"
@@ -75,7 +76,7 @@ const (
 	tunnelVXL   uint64 = 1
 )
 
-// Prometheus metrics.
+// Prometheus agentmetrics.
 var (
 	metricEndpoints = prometheus.NewGauge(prometheus.GaugeOpts{
 		Namespace: "novanet",
@@ -123,7 +124,8 @@ var (
 	})
 )
 
-func init() {
+// registerMetrics registers all Prometheus metrics for the agent.
+func registerMetrics() {
 	prometheus.MustRegister(
 		metricEndpoints,
 		metricPolicies,
@@ -134,7 +136,7 @@ func init() {
 		metricRemoteEndpoints,
 	)
 	// Register shared dataplane metrics (flow counters, TCP latency histogram, etc.).
-	metrics.Register()
+	agentmetrics.Register()
 }
 
 // endpoint tracks a pod's network state.
@@ -246,7 +248,7 @@ func (s *agentServer) AddPod(ctx context.Context, req *pb.AddPodRequest) (*pb.Ad
 	// Create veth pair, move pod-end into netns, configure IP/routes.
 	ifindex, err := cnisetup.SetupPodNetwork(req.Netns, req.IfName, hostVethName, podIP, gateway, mac, prefixLen)
 	if err != nil {
-		s.ipAlloc.Release(podIP)
+		_ = s.ipAlloc.Release(podIP)
 		s.idAlloc.RemoveIdentity(identityID)
 		s.logger.Error("failed to setup pod network", zap.String("pod", key), zap.Error(err))
 		return nil, grpcstatus.Errorf(codes.Internal, "pod network setup failed: %v", err)
@@ -258,7 +260,7 @@ func (s *agentServer) AddPod(ctx context.Context, req *pb.AddPodRequest) (*pb.Ad
 		ContainerID:  req.ContainerId,
 		IP:           podIP,
 		MAC:          mac,
-		IfIndex:      uint32(ifindex),
+		IfIndex:      uint32(ifindex), //nolint:gosec // ifindex from kernel, always small positive
 		IdentityID:   identityID,
 		Netns:        req.Netns,
 		IfName:       req.IfName,
@@ -277,7 +279,7 @@ func (s *agentServer) AddPod(ctx context.Context, req *pb.AddPodRequest) (*pb.Ad
 	if s.dpClient != nil && s.dpConnected.Load() {
 		dpReq := &pb.UpsertEndpointRequest{
 			Ip:         ipToUint32(podIP),
-			Ifindex:    uint32(ifindex),
+			Ifindex:    uint32(ifindex), //nolint:gosec // ifindex from kernel, always small positive
 			Mac:        mac,
 			IdentityId: identityID,
 			PodName:    req.PodName,
@@ -325,7 +327,7 @@ func (s *agentServer) AddPod(ctx context.Context, req *pb.AddPodRequest) (*pb.Ad
 		Ip:           podIP.String(),
 		Gateway:      gateway.String(),
 		Mac:          mac.String(),
-		PrefixLength: int32(prefixLen),
+		PrefixLength: int32(prefixLen), //nolint:gosec // CIDR prefix length 0-128 fits int32
 	}, nil
 }
 
@@ -397,14 +399,14 @@ func (s *agentServer) DelPod(ctx context.Context, req *pb.DelPodRequest) (*pb.De
 // GetAgentStatus returns the agent's current state.
 func (s *agentServer) GetAgentStatus(ctx context.Context, _ *pb.GetAgentStatusRequest) (*pb.GetAgentStatusResponse, error) {
 	s.mu.RLock()
-	epCount := uint32(len(s.endpoints))
+	epCount := uint32(len(s.endpoints)) //nolint:gosec // bounded by system memory
 	s.mu.RUnlock()
 
 	resp := &pb.GetAgentStatusResponse{
 		RoutingMode:        s.cfg.RoutingMode,
 		TunnelProtocol:     s.cfg.TunnelProtocol,
 		EndpointCount:      epCount,
-		IdentityCount:      uint32(s.idAlloc.Count()),
+		IdentityCount:      uint32(s.idAlloc.Count()), //nolint:gosec // bounded count
 		NodeIp:             s.nodeIP.String(),
 		PodCidr:            s.podCIDR,
 		ClusterCidr:        s.cfg.ClusterCIDR,
@@ -420,7 +422,7 @@ func (s *agentServer) GetAgentStatus(ctx context.Context, _ *pb.GetAgentStatusRe
 		if err == nil {
 			resp.PolicyCount = dpStatus.PolicyCount
 			resp.TunnelCount = dpStatus.TunnelCount
-			resp.Dataplane.AttachedPrograms = uint32(len(dpStatus.Programs))
+			resp.Dataplane.AttachedPrograms = uint32(len(dpStatus.Programs)) //nolint:gosec // bounded count
 		}
 	}
 
@@ -493,7 +495,7 @@ func (s *agentServer) ListIdentities(_ context.Context, _ *pb.ListIdentitiesRequ
 		resp.Identities = append(resp.Identities, &pb.IdentityInfo{
 			IdentityId: e.ID,
 			Labels:     e.Labels,
-			RefCount:   uint32(e.RefCount),
+			RefCount:   uint32(e.RefCount), //nolint:gosec // bounded count
 		})
 	}
 	return resp, nil
@@ -513,7 +515,7 @@ func (s *agentServer) ListTunnels(_ context.Context, _ *pb.ListTunnelsRequest) (
 			NodeIp:        t.NodeIP,
 			PodCidr:       t.PodCIDR,
 			InterfaceName: t.InterfaceName,
-			Ifindex:       uint32(t.Ifindex),
+			Ifindex:       uint32(t.Ifindex), //nolint:gosec // ifindex from kernel, always small positive
 			Protocol:      s.tunnelMgr.Protocol(),
 		})
 	}
@@ -650,18 +652,18 @@ func (s *agentServer) syncEgressRules(rules []*policy.CompiledRule) {
 		key := egressMapKey{
 			srcIdentity:  r.SrcIdentity,
 			dstCidrIP:    cidrIPu32,
-			dstPrefixLen: uint32(ones),
+			dstPrefixLen: uint32(ones), //nolint:gosec // CIDR prefix 0-128
 		}
 		newKeys[key] = true
 
 		name := fmt.Sprintf("np-cidr-%d", i)
 		// Store in egress manager for ListEgressPolicies RPC.
-		if err := s.egressMgr.AddEgressRule(r.Namespace, egress.EgressRule{
+		if err := s.egressMgr.AddEgressRule(r.Namespace, egress.Rule{
 			Name:        name,
 			SrcIdentity: r.SrcIdentity,
 			DstCIDR:     r.CIDR,
-			Protocol:    uint8(r.Protocol),
-			DstPort:     uint16(r.DstPort),
+			Protocol:    r.Protocol,
+			DstPort:     r.DstPort,
 			Action:      uint8(action),
 		}); err != nil {
 			s.logger.Warn("failed to add egress rule",
@@ -680,7 +682,7 @@ func (s *agentServer) syncEgressRules(rules []*policy.CompiledRule) {
 		_, err = s.dpClient.UpsertEgressPolicy(ctx, &pb.UpsertEgressPolicyRequest{
 			SrcIdentity:      r.SrcIdentity,
 			DstCidrIp:        cidrIPu32,
-			DstCidrPrefixLen: uint32(ones),
+			DstCidrPrefixLen: uint32(ones), //nolint:gosec // CIDR prefix 0-128
 			Protocol:         uint32(r.Protocol),
 			DstPort:          uint32(r.DstPort),
 			Action:           action,
@@ -726,7 +728,7 @@ func (s *agentServer) syncEgressRules(rules []*policy.CompiledRule) {
 		key := egressMapKey{
 			srcIdentity:  existing.SrcIdentity,
 			dstCidrIP:    ipToUint32(cidrIP),
-			dstPrefixLen: uint32(ones),
+			dstPrefixLen: uint32(ones), //nolint:gosec // CIDR prefix 0-128
 		}
 		if !newKeys[key] {
 			s.egressMgr.RemoveEgressRule(existing.Namespace, existing.Name)
@@ -755,7 +757,7 @@ func startRemoteEndpointSync(ctx context.Context, logger *zap.Logger, k8sClient 
 	var remoteCount int64
 	var mu sync.Mutex
 
-	podInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	_, _ = podInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj any) {
 			pod, ok := obj.(*corev1.Pod)
 			if !ok || pod.Spec.NodeName == selfNode || pod.Status.PodIP == "" {
@@ -904,229 +906,79 @@ func deleteRemoteEndpoint(ctx context.Context, logger *zap.Logger,
 	return true
 }
 
+// agentParams holds the resolved startup parameters after flag parsing and
+// auto-detection from the Kubernetes API.
+type agentParams struct {
+	configPath string
+	podCIDR    string
+	nodeIPStr  string
+	nodeName   string
+}
+
+// shutdownState holds references needed for graceful shutdown.
+type shutdownState struct {
+	logger        *zap.Logger
+	cancel        context.CancelFunc
+	bgWg          *sync.WaitGroup
+	cniGRPC       *grpc.Server
+	agentGRPC     *grpc.Server
+	metricsServer *http.Server
+	dpConn        *grpc.ClientConn
+	nrClient      *novaroute.Client
+	podCIDR       string
+}
+
 func main() {
-	// Parse flags.
-	configPath := flag.String("config", "/etc/novanet/config.json", "Path to configuration file")
-	podCIDR := flag.String("pod-cidr", "", "Node's PodCIDR (e.g., 10.244.1.0/24)")
-	nodeIPStr := flag.String("node-ip", "", "Node IP address")
-	printVersion := flag.Bool("version", false, "Print version and exit")
-	flag.Parse()
+	registerMetrics()
 
-	if *printVersion {
-		fmt.Fprintf(os.Stdout, "novanet-agent %s\n", Version)
-		os.Exit(0)
-	}
+	// Parse flags and handle --version.
+	params := parseFlags()
 
-	// ---- Load configuration ----
-	cfg, err := config.LoadFromFile(*configPath)
-	if err != nil {
-		// If config file doesn't exist, use defaults.
-		if os.IsNotExist(err) {
-			cfg = config.DefaultConfig()
-		} else {
-			fmt.Fprintf(os.Stderr, "error loading config: %v\n", err)
-			os.Exit(1)
-		}
-	}
-	config.ExpandEnvVars(cfg)
+	// Load and validate configuration.
+	cfg := loadConfig(params.configPath)
 
-	if err := config.Validate(cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "invalid configuration: %v\n", err)
-		os.Exit(1)
-	}
-
-	// ---- Build logger ----
+	// Build logger.
 	logger, err := buildLogger(cfg.LogLevel)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to create logger: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "failed to create logger: %v\n", err)
 		os.Exit(1)
 	}
 	defer logger.Sync() //nolint:errcheck
 
 	logger.Info("novanet-agent starting",
 		zap.String("version", Version),
-		zap.String("config", *configPath),
+		zap.String("config", params.configPath),
 		zap.String("routing_mode", cfg.RoutingMode),
 		zap.String("tunnel_protocol", cfg.TunnelProtocol),
 	)
 
-	// ---- Create Kubernetes client ----
-	nodeName := os.Getenv("NOVANET_NODE_NAME")
-	var k8sClient *kubernetes.Clientset
-	if nodeName != "" {
-		k8sCfg, err := rest.InClusterConfig()
-		if err != nil {
-			logger.Fatal("failed to create in-cluster config", zap.Error(err))
-		}
-		k8sClient, err = kubernetes.NewForConfig(k8sCfg)
-		if err != nil {
-			logger.Fatal("failed to create kubernetes client", zap.Error(err))
-		}
-	}
+	// Create Kubernetes client.
+	k8sClient := createK8sClient(logger, params.nodeName)
 
-	// ---- Resolve node-ip and pod-cidr ----
-	// Auto-detect from Kubernetes node spec when not provided via flags.
-	if (*podCIDR == "" || *nodeIPStr == "") && k8sClient != nil {
-		logger.Info("auto-detecting node-ip/pod-cidr from Kubernetes API",
-			zap.String("node_name", nodeName),
-		)
-		nodeCtx, nodeCancel := context.WithTimeout(context.Background(), 10*time.Second)
-		node, err := k8sClient.CoreV1().Nodes().Get(nodeCtx, nodeName, metav1.GetOptions{})
-		nodeCancel()
-		if err != nil {
-			logger.Fatal("failed to get node for auto-detection", zap.Error(err), zap.String("node", nodeName))
-		}
-		if *podCIDR == "" && node.Spec.PodCIDR != "" {
-			*podCIDR = node.Spec.PodCIDR
-			logger.Info("auto-detected pod-cidr", zap.String("pod_cidr", *podCIDR))
-		}
-		if *nodeIPStr == "" {
-			for _, addr := range node.Status.Addresses {
-				if addr.Type == "InternalIP" {
-					*nodeIPStr = addr.Address
-					logger.Info("auto-detected node-ip", zap.String("node_ip", *nodeIPStr))
-					break
-				}
-			}
-		}
-	}
+	// Resolve node-ip and pod-cidr (auto-detect from K8s if needed).
+	resolveNodeParams(logger, k8sClient, &params)
+	nodeIP := parseNodeIP(logger, params.nodeIPStr)
 
-	if *podCIDR == "" {
-		logger.Fatal("--pod-cidr is required (or set NOVANET_NODE_NAME for auto-detection)")
-	}
-	if *nodeIPStr == "" {
-		logger.Fatal("--node-ip is required (or set NOVANET_NODE_NAME for auto-detection)")
-	}
-
-	nodeIP := net.ParseIP(*nodeIPStr)
-	if nodeIP == nil {
-		logger.Fatal("invalid --node-ip", zap.String("value", *nodeIPStr))
-	}
-	nodeIP = nodeIP.To4()
-	if nodeIP == nil {
-		logger.Fatal("--node-ip must be an IPv4 address", zap.String("value", *nodeIPStr))
-	}
-
-	// ---- Create root context ----
+	// Create root context.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// WaitGroup for background goroutines that should finish before shutdown completes.
 	var bgWg sync.WaitGroup
 
-	// ---- Create IPAM allocator ----
-	ipAlloc, err := ipam.NewAllocatorWithStateDir(*podCIDR, "/var/lib/cni/networks/novanet")
-	if err != nil {
-		logger.Fatal("failed to create IPAM allocator", zap.Error(err))
-	}
-	logger.Info("IPAM allocator created",
-		zap.String("pod_cidr", *podCIDR),
-		zap.Int("available", ipAlloc.Available()),
-	)
-
-	// ---- Setup NAT masquerade ----
-	if cfg.ClusterCIDR != "" {
-		if err := masquerade.EnsureMasquerade(*podCIDR, cfg.ClusterCIDR); err != nil {
-			logger.Error("failed to setup NAT masquerade", zap.Error(err))
-		} else {
-			logger.Info("NAT masquerade configured",
-				zap.String("pod_cidr", *podCIDR),
-				zap.String("cluster_cidr", cfg.ClusterCIDR),
-			)
-		}
-	}
-
-	// ---- Create identity allocator ----
+	// Initialize core subsystems.
+	ipAlloc := createIPAM(logger, params.podCIDR)
+	setupMasquerade(logger, cfg, params.podCIDR)
 	idAlloc := identity.NewAllocator(logger)
 	logger.Info("identity allocator created")
 
-	// ---- Create policy compiler ----
-	policyCompiler := policy.NewCompiler(idAlloc, logger)
+	policyCompiler := createPolicyCompiler(ctx, logger, k8sClient, idAlloc)
+	egressMgr := createEgressManager(logger, cfg, nodeIP)
 
-	// Wire port resolver: resolve named ports by looking up pod container specs.
-	if k8sClient != nil {
-		policyCompiler.SetPortResolver(func(portName string, protocol corev1.Protocol, namespace string, selector metav1.LabelSelector) []uint16 {
-			sel, err := metav1.LabelSelectorAsSelector(&selector)
-			if err != nil {
-				return nil
-			}
-			pods, err := k8sClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
-				LabelSelector: sel.String(),
-			})
-			if err != nil {
-				return nil
-			}
-			seen := make(map[uint16]bool)
-			var ports []uint16
-			for _, pod := range pods.Items {
-				for _, c := range pod.Spec.Containers {
-					for _, cp := range c.Ports {
-						if cp.Name == portName && cp.Protocol == protocol {
-							if !seen[uint16(cp.ContainerPort)] {
-								seen[uint16(cp.ContainerPort)] = true
-								ports = append(ports, uint16(cp.ContainerPort))
-							}
-						}
-					}
-				}
-			}
-			return ports
-		})
-
-		// Wire namespace resolver: resolve namespace selectors to namespace names.
-		policyCompiler.SetNamespaceResolver(func(selector metav1.LabelSelector) []string {
-			sel, err := metav1.LabelSelectorAsSelector(&selector)
-			if err != nil {
-				return nil
-			}
-			nsList, err := k8sClient.CoreV1().Namespaces().List(ctx, metav1.ListOptions{
-				LabelSelector: sel.String(),
-			})
-			if err != nil {
-				return nil
-			}
-			var names []string
-			for _, ns := range nsList.Items {
-				names = append(names, ns.Name)
-			}
-			return names
-		})
-	}
-
-	logger.Info("policy compiler created")
-
-	// ---- Create egress manager ----
-	var egressMgr *egress.Manager
-	if cfg.ClusterCIDR != "" {
-		_, clusterNet, err := net.ParseCIDR(cfg.ClusterCIDR)
-		if err != nil {
-			logger.Warn("failed to parse cluster CIDR, egress manager disabled",
-				zap.String("cluster_cidr", cfg.ClusterCIDR),
-				zap.Error(err))
-		} else {
-			egressMgr = egress.NewManager(nodeIP, clusterNet, logger)
-			logger.Info("egress manager created")
-		}
-	}
-
-	// ---- Connect to dataplane ----
+	// Connect to dataplane.
 	dpConn, dpClient, dpConnected := connectToDataplane(ctx, logger, cfg.DataplaneSocket)
+	initDataplane(ctx, logger, cfg, dpClient, dpConnected, nodeIP, params.podCIDR, &bgWg)
 
-	// Send initial configuration to dataplane.
-	if dpConnected {
-		if err := pushDataplaneConfig(ctx, logger, dpClient, cfg, nodeIP, *podCIDR); err != nil {
-			logger.Error("failed to push initial config to dataplane", zap.Error(err))
-		}
-
-		// Start background flow consumer for Prometheus metrics.
-		bgWg.Add(1)
-		go func() {
-			defer bgWg.Done()
-			consumeFlows(ctx, logger, dpClient)
-		}()
-	}
-
-	// ---- Create agent gRPC server ----
+	// Create agent gRPC server.
 	agentSrv := &agentServer{
 		logger:         logger,
 		cfg:            cfg,
@@ -1135,7 +987,7 @@ func main() {
 		dpClient:       dpClient,
 		k8sClient:      k8sClient,
 		nodeIP:         nodeIP,
-		podCIDR:        *podCIDR,
+		podCIDR:        params.podCIDR,
 		policyCompiler: policyCompiler,
 		egressMgr:      egressMgr,
 		prevEgressKeys: make(map[egressMapKey]bool),
@@ -1143,33 +995,312 @@ func main() {
 	}
 	agentSrv.dpConnected.Store(dpConnected)
 
-	// ---- Start NetworkPolicy watcher ----
-	if k8sClient != nil {
-		policyWatcher := policy.NewWatcher(k8sClient, policyCompiler, logger)
-		policyWatcher.OnChange(agentSrv.onPolicyChange)
-		agentSrv.policyWatcher = policyWatcher
-		bgWg.Add(1)
-		go func() {
-			defer bgWg.Done()
-			logger.Info("starting NetworkPolicy watcher")
-			if err := policyWatcher.Start(ctx); err != nil {
-				logger.Error("NetworkPolicy watcher error", zap.Error(err))
+	// Start background watchers.
+	startPolicyWatcher(ctx, logger, k8sClient, policyCompiler, agentSrv, &bgWg)
+	startRemoteSync(ctx, logger, k8sClient, dpClient, dpConnected, params.nodeName, &bgWg)
+
+	// Start gRPC and metrics servers.
+	cniGRPC := startCNIServer(logger, cfg, agentSrv)
+	agentGRPC := startAgentServer(logger, cfg, agentSrv)
+	metricsServer := startMetricsServer(logger, cfg, agentSrv)
+
+	// Mode-specific initialization (overlay tunnels or native BGP).
+	nrClient := initRoutingMode(ctx, logger, cfg, k8sClient, agentSrv,
+		dpClient, nodeIP, params.podCIDR, params.nodeName, &bgWg)
+
+	// Wait for termination signal and shut down gracefully.
+	waitForSignal(logger)
+	gracefulShutdown(&shutdownState{
+		logger:        logger,
+		cancel:        cancel,
+		bgWg:          &bgWg,
+		cniGRPC:       cniGRPC,
+		agentGRPC:     agentGRPC,
+		metricsServer: metricsServer,
+		dpConn:        dpConn,
+		nrClient:      nrClient,
+		podCIDR:       params.podCIDR,
+	})
+}
+
+// parseFlags parses command-line flags and handles --version.
+func parseFlags() agentParams {
+	configPath := flag.String("config", "/etc/novanet/config.json", "Path to configuration file")
+	podCIDR := flag.String("pod-cidr", "", "Node's PodCIDR (e.g., 10.244.1.0/24)")
+	nodeIPStr := flag.String("node-ip", "", "Node IP address")
+	printVersion := flag.Bool("version", false, "Print version and exit")
+	flag.Parse()
+
+	if *printVersion {
+		_, _ = fmt.Fprintf(os.Stdout, "novanet-agent %s\n", Version)
+		os.Exit(0)
+	}
+
+	return agentParams{
+		configPath: *configPath,
+		podCIDR:    *podCIDR,
+		nodeIPStr:  *nodeIPStr,
+		nodeName:   os.Getenv("NOVANET_NODE_NAME"),
+	}
+}
+
+// loadConfig loads and validates the agent configuration file.
+func loadConfig(configPath string) *config.Config {
+	cfg, err := config.LoadFromFile(configPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			cfg = config.DefaultConfig()
+		} else {
+			_, _ = fmt.Fprintf(os.Stderr, "error loading config: %v\n", err)
+			os.Exit(1)
+		}
+	}
+	config.ExpandEnvVars(cfg)
+
+	if err := config.Validate(cfg); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "invalid configuration: %v\n", err)
+		os.Exit(1)
+	}
+	return cfg
+}
+
+// createK8sClient creates a Kubernetes clientset if running inside a cluster
+// (NOVANET_NODE_NAME is set).
+func createK8sClient(logger *zap.Logger, nodeName string) *kubernetes.Clientset {
+	if nodeName == "" {
+		return nil
+	}
+	k8sCfg, err := rest.InClusterConfig()
+	if err != nil {
+		logger.Fatal("failed to create in-cluster config", zap.Error(err))
+	}
+	k8sClient, err := kubernetes.NewForConfig(k8sCfg)
+	if err != nil {
+		logger.Fatal("failed to create kubernetes client", zap.Error(err))
+	}
+	return k8sClient
+}
+
+// resolveNodeParams auto-detects pod-cidr and node-ip from the Kubernetes API
+// when not provided via flags.
+func resolveNodeParams(logger *zap.Logger, k8sClient *kubernetes.Clientset, params *agentParams) {
+	if (params.podCIDR == "" || params.nodeIPStr == "") && k8sClient != nil {
+		logger.Info("auto-detecting node-ip/pod-cidr from Kubernetes API",
+			zap.String("node_name", params.nodeName),
+		)
+		nodeCtx, nodeCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		node, err := k8sClient.CoreV1().Nodes().Get(nodeCtx, params.nodeName, metav1.GetOptions{})
+		nodeCancel()
+		if err != nil {
+			logger.Fatal("failed to get node for auto-detection", zap.Error(err), zap.String("node", params.nodeName))
+		}
+		if params.podCIDR == "" && node.Spec.PodCIDR != "" {
+			params.podCIDR = node.Spec.PodCIDR
+			logger.Info("auto-detected pod-cidr", zap.String("pod_cidr", params.podCIDR))
+		}
+		if params.nodeIPStr == "" {
+			for _, addr := range node.Status.Addresses {
+				if addr.Type == "InternalIP" {
+					params.nodeIPStr = addr.Address
+					logger.Info("auto-detected node-ip", zap.String("node_ip", params.nodeIPStr))
+					break
+				}
 			}
-		}()
+		}
+	}
+
+	if params.podCIDR == "" {
+		logger.Fatal("--pod-cidr is required (or set NOVANET_NODE_NAME for auto-detection)")
+	}
+	if params.nodeIPStr == "" {
+		logger.Fatal("--node-ip is required (or set NOVANET_NODE_NAME for auto-detection)")
+	}
+}
+
+// parseNodeIP parses and validates the node IP string as an IPv4 address.
+func parseNodeIP(logger *zap.Logger, nodeIPStr string) net.IP {
+	nodeIP := net.ParseIP(nodeIPStr)
+	if nodeIP == nil {
+		logger.Fatal("invalid --node-ip", zap.String("value", nodeIPStr))
+	}
+	nodeIP = nodeIP.To4()
+	if nodeIP == nil {
+		logger.Fatal("--node-ip must be an IPv4 address", zap.String("value", nodeIPStr))
+	}
+	return nodeIP
+}
+
+// createIPAM creates the IPAM allocator for the node's PodCIDR.
+func createIPAM(logger *zap.Logger, podCIDR string) *ipam.Allocator {
+	ipAlloc, err := ipam.NewAllocatorWithStateDir(podCIDR, "/var/lib/cni/networks/novanet")
+	if err != nil {
+		logger.Fatal("failed to create IPAM allocator", zap.Error(err))
+	}
+	logger.Info("IPAM allocator created",
+		zap.String("pod_cidr", podCIDR),
+		zap.Int("available", ipAlloc.Available()),
+	)
+	return ipAlloc
+}
+
+// setupMasquerade configures NAT masquerade if a cluster CIDR is configured.
+func setupMasquerade(logger *zap.Logger, cfg *config.Config, podCIDR string) {
+	if cfg.ClusterCIDR == "" {
+		return
+	}
+	if err := masquerade.EnsureMasquerade(podCIDR, cfg.ClusterCIDR); err != nil {
+		logger.Error("failed to setup NAT masquerade", zap.Error(err))
 	} else {
+		logger.Info("NAT masquerade configured",
+			zap.String("pod_cidr", podCIDR),
+			zap.String("cluster_cidr", cfg.ClusterCIDR),
+		)
+	}
+}
+
+// createPolicyCompiler creates the policy compiler and wires up port and
+// namespace resolvers if a Kubernetes client is available.
+func createPolicyCompiler(ctx context.Context, logger *zap.Logger, k8sClient *kubernetes.Clientset,
+	idAlloc *identity.Allocator) *policy.Compiler {
+
+	policyCompiler := policy.NewCompiler(idAlloc, logger)
+
+	if k8sClient != nil {
+		policyCompiler.SetPortResolver(func(portName string, protocol corev1.Protocol, namespace string, selector metav1.LabelSelector) []uint16 {
+			return resolveNamedPorts(ctx, k8sClient, portName, protocol, namespace, selector)
+		})
+
+		policyCompiler.SetNamespaceResolver(func(selector metav1.LabelSelector) []string {
+			return resolveNamespaces(ctx, k8sClient, selector)
+		})
+	}
+
+	logger.Info("policy compiler created")
+	return policyCompiler
+}
+
+// resolveNamedPorts resolves named ports by looking up pod container specs.
+func resolveNamedPorts(ctx context.Context, k8sClient *kubernetes.Clientset,
+	portName string, protocol corev1.Protocol, namespace string, selector metav1.LabelSelector) []uint16 {
+
+	sel, err := metav1.LabelSelectorAsSelector(&selector)
+	if err != nil {
+		return nil
+	}
+	pods, err := k8sClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: sel.String(),
+	})
+	if err != nil {
+		return nil
+	}
+	seen := make(map[uint16]bool)
+	var ports []uint16
+	for _, pod := range pods.Items {
+		for _, c := range pod.Spec.Containers {
+			for _, cp := range c.Ports {
+				if cp.Name == portName && cp.Protocol == protocol {
+					if !seen[uint16(cp.ContainerPort)] { //nolint:gosec // K8s port range 1-65535 fits uint16
+						seen[uint16(cp.ContainerPort)] = true           //nolint:gosec // K8s port range 1-65535 fits uint16
+						ports = append(ports, uint16(cp.ContainerPort)) //nolint:gosec // K8s port range 1-65535 fits uint16
+					}
+				}
+			}
+		}
+	}
+	return ports
+}
+
+// resolveNamespaces resolves namespace selectors to namespace names.
+func resolveNamespaces(ctx context.Context, k8sClient *kubernetes.Clientset, selector metav1.LabelSelector) []string {
+	sel, err := metav1.LabelSelectorAsSelector(&selector)
+	if err != nil {
+		return nil
+	}
+	nsList, err := k8sClient.CoreV1().Namespaces().List(ctx, metav1.ListOptions{
+		LabelSelector: sel.String(),
+	})
+	if err != nil {
+		return nil
+	}
+	var names []string
+	for _, ns := range nsList.Items {
+		names = append(names, ns.Name)
+	}
+	return names
+}
+
+// createEgressManager creates the egress manager if a cluster CIDR is configured.
+func createEgressManager(logger *zap.Logger, cfg *config.Config, nodeIP net.IP) *egress.Manager {
+	if cfg.ClusterCIDR == "" {
+		return nil
+	}
+	_, clusterNet, err := net.ParseCIDR(cfg.ClusterCIDR)
+	if err != nil {
+		logger.Warn("failed to parse cluster CIDR, egress manager disabled",
+			zap.String("cluster_cidr", cfg.ClusterCIDR),
+			zap.Error(err))
+		return nil
+	}
+	mgr := egress.NewManager(nodeIP, clusterNet, logger)
+	logger.Info("egress manager created")
+	return mgr
+}
+
+// initDataplane sends initial configuration and starts flow consumer if connected.
+func initDataplane(ctx context.Context, logger *zap.Logger, cfg *config.Config,
+	dpClient pb.DataplaneControlClient, dpConnected bool, nodeIP net.IP, podCIDR string, bgWg *sync.WaitGroup) {
+
+	if !dpConnected {
+		return
+	}
+	if err := pushDataplaneConfig(ctx, logger, dpClient, cfg, nodeIP, podCIDR); err != nil {
+		logger.Error("failed to push initial config to dataplane", zap.Error(err))
+	}
+
+	bgWg.Add(1)
+	go func() {
+		defer bgWg.Done()
+		consumeFlows(ctx, logger, dpClient)
+	}()
+}
+
+// startPolicyWatcher starts the NetworkPolicy watcher if a Kubernetes client is available.
+func startPolicyWatcher(ctx context.Context, logger *zap.Logger, k8sClient *kubernetes.Clientset,
+	policyCompiler *policy.Compiler, agentSrv *agentServer, bgWg *sync.WaitGroup) {
+
+	if k8sClient == nil {
 		logger.Warn("no Kubernetes client — NetworkPolicy watcher disabled")
+		return
 	}
+	policyWatcher := policy.NewWatcher(k8sClient, policyCompiler, logger)
+	policyWatcher.OnChange(agentSrv.onPolicyChange)
+	agentSrv.policyWatcher = policyWatcher
+	bgWg.Add(1)
+	go func() {
+		defer bgWg.Done()
+		logger.Info("starting NetworkPolicy watcher")
+		if err := policyWatcher.Start(ctx); err != nil {
+			logger.Error("NetworkPolicy watcher error", zap.Error(err))
+		}
+	}()
+}
 
-	// ---- Start remote endpoint sync for cross-node identity resolution ----
-	if k8sClient != nil && dpClient != nil && dpConnected {
-		bgWg.Add(1)
-		go func() {
-			defer bgWg.Done()
-			startRemoteEndpointSync(ctx, logger, k8sClient, dpClient, nodeName)
-		}()
+// startRemoteSync starts the remote endpoint sync for cross-node identity resolution.
+func startRemoteSync(ctx context.Context, logger *zap.Logger, k8sClient *kubernetes.Clientset,
+	dpClient pb.DataplaneControlClient, dpConnected bool, nodeName string, bgWg *sync.WaitGroup) {
+
+	if k8sClient == nil || dpClient == nil || !dpConnected {
+		return
 	}
+	bgWg.Add(1)
+	go func() {
+		defer bgWg.Done()
+		startRemoteEndpointSync(ctx, logger, k8sClient, dpClient, nodeName)
+	}()
+}
 
-	// ---- Start CNI gRPC server ----
+// startCNIServer starts the CNI gRPC server and returns the server handle.
+func startCNIServer(logger *zap.Logger, cfg *config.Config, agentSrv *agentServer) *grpc.Server {
 	cniListener, cniGRPC, err := startGRPCServer(logger, cfg.CNISocket, "CNI", func(s *grpc.Server) {
 		pb.RegisterAgentControlServer(s, agentSrv)
 	})
@@ -1182,8 +1313,11 @@ func main() {
 			logger.Error("CNI gRPC server error", zap.Error(err))
 		}
 	}()
+	return cniGRPC
+}
 
-	// ---- Start agent gRPC server (for novanetctl) ----
+// startAgentServer starts the agent gRPC server (for novanetctl) and returns the server handle.
+func startAgentServer(logger *zap.Logger, cfg *config.Config, agentSrv *agentServer) *grpc.Server {
 	agentListener, agentGRPC, err := startGRPCServer(logger, cfg.ListenSocket, "agent", func(s *grpc.Server) {
 		pb.RegisterAgentControlServer(s, agentSrv)
 	})
@@ -1196,19 +1330,22 @@ func main() {
 			logger.Error("agent gRPC server error", zap.Error(err))
 		}
 	}()
+	return agentGRPC
+}
 
-	// ---- Start Prometheus metrics server ----
+// startMetricsServer starts the Prometheus metrics and health check HTTP server.
+func startMetricsServer(logger *zap.Logger, cfg *config.Config, agentSrv *agentServer) *http.Server {
 	metricsMux := http.NewServeMux()
 	metricsMux.Handle("/metrics", promhttp.Handler())
 	metricsMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if !agentSrv.dpConnected.Load() {
 			w.WriteHeader(http.StatusServiceUnavailable)
-			fmt.Fprintf(w, `{"status":"not ready","reason":"dataplane not connected","version":"%s"}`, Version)
+			_, _ = fmt.Fprintf(w, `{"status":"not ready","reason":"dataplane not connected","version":"%s"}`, Version)
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `{"status":"ok","version":"%s"}`, Version)
+		_, _ = fmt.Fprintf(w, `{"status":"ok","version":"%s"}`, Version)
 	})
 	metricsServer := &http.Server{
 		Addr:              cfg.MetricsAddress,
@@ -1217,157 +1354,190 @@ func main() {
 	}
 	go func() {
 		logger.Info("metrics server listening", zap.String("address", cfg.MetricsAddress))
-		if err := metricsServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := metricsServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("metrics server error", zap.Error(err))
 		}
 	}()
+	return metricsServer
+}
 
-	// ---- Mode-specific initialization ----
-	var nrClient *novaroute.Client
+// initRoutingMode performs mode-specific initialization (overlay tunnels or native BGP).
+// Returns the NovaRoute client if native mode, nil otherwise.
+func initRoutingMode(ctx context.Context, logger *zap.Logger, cfg *config.Config,
+	k8sClient *kubernetes.Clientset, agentSrv *agentServer, dpClient pb.DataplaneControlClient,
+	nodeIP net.IP, podCIDR, nodeName string, bgWg *sync.WaitGroup) *novaroute.Client {
 
 	switch strings.ToLower(cfg.RoutingMode) {
 	case "overlay":
-		logger.Info("running in overlay mode",
-			zap.String("tunnel_protocol", cfg.TunnelProtocol))
-
-		if k8sClient == nil {
-			logger.Fatal("overlay mode requires NOVANET_NODE_NAME to be set for node discovery")
-		}
-
-		// Clean up stale tunnel interfaces and reload the kernel module.
-		// This works around a kernel bug where the geneve module's internal
-		// state gets corrupted after repeated interface create/delete cycles.
-		if err := tunnel.PrepareOverlay(cfg.TunnelProtocol); err != nil {
-			logger.Warn("failed to prepare overlay", zap.Error(err))
-		}
-
-		tunnelMgr := tunnel.NewManager(cfg.TunnelProtocol, nodeIP, 1, nil, logger)
-		agentSrv.tunnelMgr = tunnelMgr
-		bgWg.Add(1)
-		go func() {
-			defer bgWg.Done()
-			watchNodes(ctx, logger, k8sClient, tunnelMgr, dpClient, nodeName, nodeIP)
-		}()
-
+		initOverlayMode(ctx, logger, cfg, k8sClient, agentSrv, dpClient, nodeIP, nodeName, bgWg)
 	case "native":
-		logger.Info("running in native routing mode (eBGP)",
-			zap.String("socket", cfg.NovaRoute.Socket))
+		return initNativeMode(ctx, logger, cfg, k8sClient, agentSrv, nodeIP, podCIDR, nodeName, bgWg)
+	}
+	return nil
+}
 
-		if k8sClient == nil {
-			logger.Fatal("native mode requires NOVANET_NODE_NAME to be set for node discovery")
-		}
+// initOverlayMode sets up overlay tunnel mode (Geneve/VXLAN).
+func initOverlayMode(ctx context.Context, logger *zap.Logger, cfg *config.Config,
+	k8sClient *kubernetes.Clientset, agentSrv *agentServer, dpClient pb.DataplaneControlClient,
+	nodeIP net.IP, nodeName string, bgWg *sync.WaitGroup) {
 
-		// Clean up stale overlay interfaces from previous mode.
-		if err := tunnel.PrepareOverlay("geneve"); err != nil {
-			logger.Debug("overlay cleanup (geneve)", zap.Error(err))
-		}
-		if err := tunnel.PrepareOverlay("vxlan"); err != nil {
-			logger.Debug("overlay cleanup (vxlan)", zap.Error(err))
-		}
+	logger.Info("running in overlay mode",
+		zap.String("tunnel_protocol", cfg.TunnelProtocol))
 
-		// Add a blackhole route for the local PodCIDR so the kernel RIB
-		// has the prefix. FRR/BGP needs it in the RIB to advertise via
-		// the "network" command. Individual /32 pod routes take precedence.
-		if err := tunnel.AddBlackholeRoute(*podCIDR); err != nil {
-			logger.Warn("failed to add blackhole route for PodCIDR", zap.Error(err))
-		} else {
-			logger.Info("added blackhole route for local PodCIDR", zap.String("pod_cidr", *podCIDR))
-		}
-
-		nrClient = novaroute.NewClient(cfg.NovaRoute.Socket, "novanet", cfg.NovaRoute.Token, logger)
-
-		if err := nrClient.Connect(ctx); err != nil {
-			logger.Fatal("failed to connect to NovaRoute", zap.Error(err))
-		}
-
-		resp, err := nrClient.Register(ctx)
-		if err != nil {
-			logger.Fatal("failed to register with NovaRoute", zap.Error(err))
-		}
-		logger.Info("registered with NovaRoute",
-			zap.Strings("current_prefixes", resp.CurrentPrefixes))
-
-		// Compute per-node eBGP AS: 65000 + last octet of node IP.
-		lastOctet := uint32(nodeIP.To4()[3])
-		localAS := uint32(65000) + lastOctet
-		routerID := nodeIP.String()
-
-		if err := nrClient.ConfigureBGP(ctx, localAS, routerID); err != nil {
-			logger.Fatal("failed to configure BGP", zap.Error(err))
-		}
-		logger.Info("BGP configured",
-			zap.Uint32("local_as", localAS),
-			zap.String("router_id", routerID))
-
-		// Advertise this node's PodCIDR.
-		if err := nrClient.AdvertisePrefix(ctx, *podCIDR); err != nil {
-			logger.Fatal("failed to advertise PodCIDR", zap.Error(err))
-		}
-		logger.Info("advertised PodCIDR via BGP", zap.String("pod_cidr", *podCIDR))
-		agentSrv.novarouteConnected = true
-
-		// Watch nodes and establish eBGP peering with each remote node.
-		bgWg.Add(1)
-		go func() {
-			defer bgWg.Done()
-			watchNodesNative(ctx, logger, k8sClient, nrClient, nodeName)
-		}()
+	if k8sClient == nil {
+		logger.Fatal("overlay mode requires NOVANET_NODE_NAME to be set for node discovery")
 	}
 
-	// ---- Wait for termination signal ----
+	// Clean up stale tunnel interfaces and reload the kernel module.
+	// This works around a kernel bug where the geneve module's internal
+	// state gets corrupted after repeated interface create/delete cycles.
+	if err := tunnel.PrepareOverlay(cfg.TunnelProtocol); err != nil {
+		logger.Warn("failed to prepare overlay", zap.Error(err))
+	}
+
+	tunnelMgr := tunnel.NewManager(cfg.TunnelProtocol, nodeIP, 1, nil, logger)
+	agentSrv.tunnelMgr = tunnelMgr
+	bgWg.Add(1)
+	go func() {
+		defer bgWg.Done()
+		watchNodes(ctx, logger, k8sClient, tunnelMgr, dpClient, nodeName, nodeIP)
+	}()
+}
+
+// initNativeMode sets up native routing mode with eBGP via NovaRoute.
+func initNativeMode(ctx context.Context, logger *zap.Logger, cfg *config.Config,
+	k8sClient *kubernetes.Clientset, agentSrv *agentServer, nodeIP net.IP,
+	podCIDR, nodeName string, bgWg *sync.WaitGroup) *novaroute.Client {
+
+	logger.Info("running in native routing mode (eBGP)",
+		zap.String("socket", cfg.NovaRoute.Socket))
+
+	if k8sClient == nil {
+		logger.Fatal("native mode requires NOVANET_NODE_NAME to be set for node discovery")
+	}
+
+	// Clean up stale overlay interfaces from previous mode.
+	if err := tunnel.PrepareOverlay("geneve"); err != nil {
+		logger.Debug("overlay cleanup (geneve)", zap.Error(err))
+	}
+	if err := tunnel.PrepareOverlay("vxlan"); err != nil {
+		logger.Debug("overlay cleanup (vxlan)", zap.Error(err))
+	}
+
+	// Add a blackhole route for the local PodCIDR so the kernel RIB
+	// has the prefix. FRR/BGP needs it in the RIB to advertise via
+	// the "network" command. Individual /32 pod routes take precedence.
+	if err := tunnel.AddBlackholeRoute(podCIDR); err != nil {
+		logger.Warn("failed to add blackhole route for PodCIDR", zap.Error(err))
+	} else {
+		logger.Info("added blackhole route for local PodCIDR", zap.String("pod_cidr", podCIDR))
+	}
+
+	nrClient := novaroute.NewClient(cfg.NovaRoute.Socket, "novanet", cfg.NovaRoute.Token, logger)
+
+	if err := nrClient.Connect(ctx); err != nil {
+		logger.Fatal("failed to connect to NovaRoute", zap.Error(err))
+	}
+
+	resp, err := nrClient.Register(ctx)
+	if err != nil {
+		logger.Fatal("failed to register with NovaRoute", zap.Error(err))
+	}
+	logger.Info("registered with NovaRoute",
+		zap.Strings("current_prefixes", resp.CurrentPrefixes))
+
+	// Compute per-node eBGP AS: 65000 + last octet of node IP.
+	lastOctet := uint32(nodeIP.To4()[3])
+	localAS := uint32(65000) + lastOctet
+	routerID := nodeIP.String()
+
+	if err := nrClient.ConfigureBGP(ctx, localAS, routerID); err != nil {
+		logger.Fatal("failed to configure BGP", zap.Error(err))
+	}
+	logger.Info("BGP configured",
+		zap.Uint32("local_as", localAS),
+		zap.String("router_id", routerID))
+
+	// Advertise this node's PodCIDR.
+	if err := nrClient.AdvertisePrefix(ctx, podCIDR); err != nil {
+		logger.Fatal("failed to advertise PodCIDR", zap.Error(err))
+	}
+	logger.Info("advertised PodCIDR via BGP", zap.String("pod_cidr", podCIDR))
+	agentSrv.novarouteConnected = true
+
+	// Watch nodes and establish eBGP peering with each remote node.
+	bgWg.Add(1)
+	go func() {
+		defer bgWg.Done()
+		watchNodesNative(ctx, logger, k8sClient, nrClient, nodeName)
+	}()
+
+	return nrClient
+}
+
+// waitForSignal blocks until a SIGTERM or SIGINT signal is received.
+func waitForSignal(logger *zap.Logger) {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
 
 	sig := <-sigCh
 	logger.Info("received signal, starting graceful shutdown", zap.String("signal", sig.String()))
+}
 
-	// ---- Graceful shutdown ----
+// gracefulShutdown performs an orderly shutdown of all agent components.
+func gracefulShutdown(s *shutdownState) {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer shutdownCancel()
 
 	// Cancel root context to stop background operations.
-	cancel()
+	s.cancel()
 
 	// Wait for background goroutines (node watchers) to finish.
-	bgWg.Wait()
-	logger.Info("background goroutines stopped")
+	s.bgWg.Wait()
+	s.logger.Info("background goroutines stopped")
 
 	// If native mode, withdraw prefix and close NovaRoute connection.
-	if nrClient != nil {
-		logger.Info("withdrawing PodCIDR from NovaRoute", zap.String("pod_cidr", *podCIDR))
-		if err := nrClient.WithdrawPrefix(shutdownCtx, *podCIDR); err != nil {
-			logger.Error("failed to withdraw prefix", zap.Error(err))
-		}
-		if err := nrClient.Close(); err != nil {
-			logger.Error("failed to close NovaRoute connection", zap.Error(err))
-		}
-		// Remove the blackhole route.
-		if err := tunnel.RemoveBlackholeRoute(*podCIDR); err != nil {
-			logger.Debug("failed to remove blackhole route", zap.Error(err))
-		}
-		logger.Info("NovaRoute connection closed")
-	}
+	shutdownNovaRoute(shutdownCtx, s.logger, s.nrClient, s.podCIDR)
 
 	// Stop gRPC servers.
-	cniGRPC.GracefulStop()
-	logger.Info("CNI gRPC server stopped")
+	s.cniGRPC.GracefulStop()
+	s.logger.Info("CNI gRPC server stopped")
 
-	agentGRPC.GracefulStop()
-	logger.Info("agent gRPC server stopped")
+	s.agentGRPC.GracefulStop()
+	s.logger.Info("agent gRPC server stopped")
 
 	// Stop metrics server.
-	if err := metricsServer.Shutdown(shutdownCtx); err != nil {
-		logger.Error("metrics server shutdown error", zap.Error(err))
+	if err := s.metricsServer.Shutdown(shutdownCtx); err != nil {
+		s.logger.Error("metrics server shutdown error", zap.Error(err))
 	}
-	logger.Info("metrics server stopped")
+	s.logger.Info("metrics server stopped")
 
 	// Close dataplane connection.
-	if dpConn != nil {
-		dpConn.Close()
-		logger.Info("dataplane connection closed")
+	if s.dpConn != nil {
+		_ = s.dpConn.Close()
+		s.logger.Info("dataplane connection closed")
 	}
 
-	logger.Info("novanet-agent shutdown complete")
+	s.logger.Info("novanet-agent shutdown complete")
+}
+
+// shutdownNovaRoute withdraws the PodCIDR prefix and closes the NovaRoute connection.
+func shutdownNovaRoute(ctx context.Context, logger *zap.Logger, nrClient *novaroute.Client, podCIDR string) {
+	if nrClient == nil {
+		return
+	}
+	logger.Info("withdrawing PodCIDR from NovaRoute", zap.String("pod_cidr", podCIDR))
+	if err := nrClient.WithdrawPrefix(ctx, podCIDR); err != nil {
+		logger.Error("failed to withdraw prefix", zap.Error(err))
+	}
+	if err := nrClient.Close(); err != nil {
+		logger.Error("failed to close NovaRoute connection", zap.Error(err))
+	}
+	// Remove the blackhole route.
+	if err := tunnel.RemoveBlackholeRoute(podCIDR); err != nil {
+		logger.Debug("failed to remove blackhole route", zap.Error(err))
+	}
+	logger.Info("NovaRoute connection closed")
 }
 
 // buildLogger creates a production zap logger with JSON encoding and ISO8601
@@ -1443,7 +1613,7 @@ func connectToDataplane(ctx context.Context, logger *zap.Logger, socketPath stri
 			logger.Warn("dataplane not ready, retrying",
 				zap.Error(err),
 				zap.Duration("retry_in", dataplaneRetryInterval))
-			conn.Close()
+			_ = conn.Close()
 			select {
 			case <-ctx.Done():
 				return nil, nil, false
@@ -1486,7 +1656,7 @@ func pushDataplaneConfig(ctx context.Context, logger *zap.Logger, client pb.Data
 	if err == nil {
 		entries[configKeyClusterCIDRIP] = uint64(ipToUint32(clusterIP.To4()))
 		ones, _ := clusterNet.Mask.Size()
-		entries[configKeyClusterCIDRPL] = uint64(ones)
+		entries[configKeyClusterCIDRPL] = uint64(ones) //nolint:gosec // CIDR prefix 0-128
 	}
 
 	// Pod CIDR.
@@ -1494,7 +1664,7 @@ func pushDataplaneConfig(ctx context.Context, logger *zap.Logger, client pb.Data
 	if err == nil {
 		entries[configKeyPodCIDRIP] = uint64(ipToUint32(podIP.To4()))
 		ones, _ := podNet.Mask.Size()
-		entries[configKeyPodCIDRPL] = uint64(ones)
+		entries[configKeyPodCIDRPL] = uint64(ones) //nolint:gosec // CIDR prefix 0-128
 	}
 
 	// Default deny flag.
@@ -1611,7 +1781,7 @@ func watchNodesNative(ctx context.Context, logger *zap.Logger, k8sClient *kubern
 func startGRPCServer(logger *zap.Logger, socketPath, name string, register func(*grpc.Server)) (net.Listener, *grpc.Server, error) {
 	// Ensure parent directory exists.
 	dir := filepath.Dir(socketPath)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return nil, nil, fmt.Errorf("creating directory %s: %w", dir, err)
 	}
 
@@ -1621,13 +1791,13 @@ func startGRPCServer(logger *zap.Logger, socketPath, name string, register func(
 			zap.String("socket", socketPath), zap.Error(err))
 	}
 
-	lis, err := net.Listen("unix", socketPath)
+	lis, err := (&net.ListenConfig{}).Listen(context.Background(), "unix", socketPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("listening on %s: %w", socketPath, err)
 	}
 
 	// Set socket permissions so the CNI binary and CLI can connect.
-	if err := os.Chmod(socketPath, 0o660); err != nil {
+	if err := os.Chmod(socketPath, 0o600); err != nil {
 		logger.Warn("failed to chmod socket", zap.String("socket", socketPath), zap.Error(err))
 	}
 
@@ -1640,10 +1810,20 @@ func startGRPCServer(logger *zap.Logger, socketPath, name string, register func(
 
 // watchNodes periodically lists Kubernetes nodes and creates/removes Geneve
 // tunnels and host routes for remote nodes' PodCIDRs.
+// nodeWatcherState holds the context needed for node watching operations.
+type nodeWatcherState struct {
+	ctx        context.Context
+	logger     *zap.Logger
+	tunnelMgr  *tunnel.Manager
+	dpClient   pb.DataplaneControlClient
+	selfNodeIP net.IP
+}
+
 func watchNodes(ctx context.Context, logger *zap.Logger, k8sClient *kubernetes.Clientset,
 	tunnelMgr *tunnel.Manager, dpClient pb.DataplaneControlClient, selfNode string, selfNodeIP net.IP) {
 
 	const pollInterval = 15 * time.Second
+	nw := &nodeWatcherState{ctx: ctx, logger: logger, tunnelMgr: tunnelMgr, dpClient: dpClient, selfNodeIP: selfNodeIP}
 
 	logger.Info("node watcher started", zap.String("self_node", selfNode))
 
@@ -1659,142 +1839,8 @@ func watchNodes(ctx context.Context, logger *zap.Logger, k8sClient *kubernetes.C
 			}
 		}
 
-		seen := make(map[string]bool)
-		for _, node := range nodes.Items {
-			if node.Name == selfNode {
-				continue
-			}
-			if node.Spec.PodCIDR == "" {
-				continue
-			}
-
-			nodeIP := ""
-			for _, addr := range node.Status.Addresses {
-				if addr.Type == "InternalIP" {
-					nodeIP = addr.Address
-					break
-				}
-			}
-			if nodeIP == "" {
-				continue
-			}
-
-			parsedNodeIP := net.ParseIP(nodeIP)
-			if parsedNodeIP == nil {
-				logger.Warn("invalid node IP, skipping",
-					zap.String("node", node.Name),
-					zap.String("node_ip", nodeIP),
-				)
-				continue
-			}
-
-			seen[node.Name] = true
-
-			// If tunnel already exists, reconcile route/neighbor entries
-			// (they may have been lost due to ARP resolution overwriting
-			// permanent entries on kernels without NOARP support).
-			if tunnelInfo, exists := tunnelMgr.GetTunnel(node.Name); exists {
-				if err := tunnel.AddRoute(node.Spec.PodCIDR, tunnelInfo.InterfaceName, selfNodeIP, parsedNodeIP, tunnelMgr.Protocol()); err != nil {
-					logger.Warn("failed to reconcile route",
-						zap.Error(err),
-						zap.String("node", node.Name),
-					)
-				}
-				continue
-			}
-
-			// Create tunnel to remote node.
-			if err := tunnelMgr.AddTunnel(ctx, node.Name, nodeIP, node.Spec.PodCIDR); err != nil {
-				logger.Error("failed to create tunnel",
-					zap.Error(err),
-					zap.String("node", node.Name),
-					zap.String("node_ip", nodeIP),
-				)
-				continue
-			}
-
-			tunnelInfo, ok := tunnelMgr.GetTunnel(node.Name)
-			if !ok {
-				continue
-			}
-
-			// Register tunnel with dataplane.
-			if dpClient != nil {
-				remoteIPUint := ipToUint32(parsedNodeIP)
-				_, err := dpClient.UpsertTunnel(ctx, &pb.UpsertTunnelRequest{
-					NodeIp:        remoteIPUint,
-					TunnelIfindex: uint32(tunnelInfo.Ifindex),
-					Vni:           1,
-				})
-				if err != nil {
-					logger.Error("failed to register tunnel with dataplane",
-						zap.Error(err),
-						zap.String("node", node.Name),
-					)
-				}
-			}
-
-			// Add kernel route for the remote node's PodCIDR via the tunnel.
-			if err := tunnel.AddRoute(node.Spec.PodCIDR, tunnelInfo.InterfaceName, selfNodeIP, parsedNodeIP, tunnelMgr.Protocol()); err != nil {
-				logger.Error("failed to add route for remote PodCIDR",
-					zap.Error(err),
-					zap.String("cidr", node.Spec.PodCIDR),
-					zap.String("interface", tunnelInfo.InterfaceName),
-				)
-			} else {
-				logger.Info("tunnel and route created",
-					zap.String("node", node.Name),
-					zap.String("node_ip", nodeIP),
-					zap.String("pod_cidr", node.Spec.PodCIDR),
-					zap.String("interface", tunnelInfo.InterfaceName),
-					zap.Int("ifindex", tunnelInfo.Ifindex),
-				)
-			}
-
-			metricTunnels.Set(float64(tunnelMgr.Count()))
-		}
-
-		// Remove tunnels for nodes that no longer exist.
-		for _, t := range tunnelMgr.ListTunnels() {
-			if !seen[t.NodeName] {
-				// Remove route first.
-				if t.PodCIDR != "" {
-					if err := tunnel.RemoveRoute(t.PodCIDR); err != nil {
-						logger.Warn("failed to remove route for departed node",
-							zap.Error(err),
-							zap.String("node", t.NodeName),
-							zap.String("cidr", t.PodCIDR),
-						)
-					}
-				}
-
-				// Remove tunnel and dataplane entry.
-				if dpClient != nil && net.ParseIP(t.NodeIP) != nil {
-					remoteIPUint := ipToUint32(net.ParseIP(t.NodeIP))
-					if _, err := dpClient.DeleteTunnel(ctx, &pb.DeleteTunnelRequest{
-						NodeIp: remoteIPUint,
-					}); err != nil {
-						logger.Warn("failed to delete tunnel from dataplane",
-							zap.Error(err),
-							zap.String("node", t.NodeName),
-						)
-					}
-				}
-
-				if err := tunnelMgr.RemoveTunnel(ctx, t.NodeName); err != nil {
-					logger.Error("failed to remove tunnel for departed node",
-						zap.Error(err),
-						zap.String("node", t.NodeName),
-					)
-				} else {
-					logger.Info("tunnel removed for departed node",
-						zap.String("node", t.NodeName),
-					)
-				}
-
-				metricTunnels.Set(float64(tunnelMgr.Count()))
-			}
-		}
+		seen := nw.reconcileNodes(nodes, selfNode)
+		nw.cleanupStaleTunnels(seen)
 
 		select {
 		case <-ctx.Done():
@@ -1804,28 +1850,149 @@ func watchNodes(ctx context.Context, logger *zap.Logger, k8sClient *kubernetes.C
 	}
 }
 
+// reconcileNodes processes the current node list, creating or updating tunnels
+// for remote nodes. Returns the set of seen node names.
+func (nw *nodeWatcherState) reconcileNodes(nodes *corev1.NodeList, selfNode string) map[string]bool {
+	seen := make(map[string]bool)
+	for _, node := range nodes.Items {
+		if node.Name == selfNode || node.Spec.PodCIDR == "" {
+			continue
+		}
+
+		nodeIP := nodeInternalIP(&node)
+		if nodeIP == "" {
+			continue
+		}
+
+		parsedNodeIP := net.ParseIP(nodeIP)
+		if parsedNodeIP == nil {
+			nw.logger.Warn("invalid node IP, skipping",
+				zap.String("node", node.Name), zap.String("node_ip", nodeIP))
+			continue
+		}
+
+		seen[node.Name] = true
+		nw.ensureTunnel(node.Name, nodeIP, node.Spec.PodCIDR, parsedNodeIP)
+	}
+	return seen
+}
+
+// ensureTunnel ensures a tunnel exists to a remote node, creating it if necessary.
+func (nw *nodeWatcherState) ensureTunnel(nodeName, nodeIP, podCIDR string, parsedNodeIP net.IP) {
+	// If tunnel already exists, just reconcile the route.
+	if tunnelInfo, exists := nw.tunnelMgr.GetTunnel(nodeName); exists {
+		if err := tunnel.AddRoute(podCIDR, tunnelInfo.InterfaceName, nw.selfNodeIP, parsedNodeIP, nw.tunnelMgr.Protocol()); err != nil {
+			nw.logger.Warn("failed to reconcile route", zap.Error(err), zap.String("node", nodeName))
+		}
+		return
+	}
+
+	// Create tunnel.
+	if err := nw.tunnelMgr.AddTunnel(nw.ctx, nodeName, nodeIP, podCIDR); err != nil {
+		nw.logger.Error("failed to create tunnel", zap.Error(err),
+			zap.String("node", nodeName), zap.String("node_ip", nodeIP))
+		return
+	}
+
+	tunnelInfo, ok := nw.tunnelMgr.GetTunnel(nodeName)
+	if !ok {
+		return
+	}
+
+	// Register with dataplane.
+	if nw.dpClient != nil {
+		_, err := nw.dpClient.UpsertTunnel(nw.ctx, &pb.UpsertTunnelRequest{
+			NodeIp:        ipToUint32(parsedNodeIP),
+			TunnelIfindex: uint32(tunnelInfo.Ifindex), //nolint:gosec // ifindex from kernel
+			Vni:           1,
+		})
+		if err != nil {
+			nw.logger.Error("failed to register tunnel with dataplane", zap.Error(err), zap.String("node", nodeName))
+		}
+	}
+
+	// Add kernel route.
+	if err := tunnel.AddRoute(podCIDR, tunnelInfo.InterfaceName, nw.selfNodeIP, parsedNodeIP, nw.tunnelMgr.Protocol()); err != nil {
+		nw.logger.Error("failed to add route for remote PodCIDR", zap.Error(err),
+			zap.String("cidr", podCIDR), zap.String("interface", tunnelInfo.InterfaceName))
+	} else {
+		nw.logger.Info("tunnel and route created",
+			zap.String("node", nodeName), zap.String("node_ip", nodeIP),
+			zap.String("pod_cidr", podCIDR), zap.String("interface", tunnelInfo.InterfaceName),
+			zap.Int("ifindex", tunnelInfo.Ifindex))
+	}
+
+	metricTunnels.Set(float64(nw.tunnelMgr.Count()))
+}
+
+// cleanupStaleTunnels removes tunnels for nodes that are no longer in the cluster.
+func (nw *nodeWatcherState) cleanupStaleTunnels(seen map[string]bool) {
+	for _, t := range nw.tunnelMgr.ListTunnels() {
+		if seen[t.NodeName] {
+			continue
+		}
+
+		// Remove route first.
+		if t.PodCIDR != "" {
+			if err := tunnel.RemoveRoute(t.PodCIDR); err != nil {
+				nw.logger.Warn("failed to remove route for departed node",
+					zap.Error(err), zap.String("node", t.NodeName), zap.String("cidr", t.PodCIDR))
+			}
+		}
+
+		// Remove dataplane entry.
+		if nw.dpClient != nil && net.ParseIP(t.NodeIP) != nil {
+			if _, err := nw.dpClient.DeleteTunnel(nw.ctx, &pb.DeleteTunnelRequest{
+				NodeIp: ipToUint32(net.ParseIP(t.NodeIP)),
+			}); err != nil {
+				nw.logger.Warn("failed to delete tunnel from dataplane",
+					zap.Error(err), zap.String("node", t.NodeName))
+			}
+		}
+
+		if err := nw.tunnelMgr.RemoveTunnel(nw.ctx, t.NodeName); err != nil {
+			nw.logger.Error("failed to remove tunnel for departed node",
+				zap.Error(err), zap.String("node", t.NodeName))
+		} else {
+			nw.logger.Info("tunnel removed for departed node", zap.String("node", t.NodeName))
+		}
+
+		metricTunnels.Set(float64(nw.tunnelMgr.Count()))
+	}
+}
+
+// nodeInternalIP returns the InternalIP address of a Kubernetes node, or empty string if not found.
+func nodeInternalIP(node *corev1.Node) string {
+	for _, addr := range node.Status.Addresses {
+		if addr.Type == "InternalIP" {
+			return addr.Address
+		}
+	}
+	return ""
+}
+
 // consumeFlows subscribes to the dataplane flow event stream and updates
 // Prometheus metrics from flow events. For TCP flows, it estimates round-trip
 // latency by tracking request/response pairs (matching reversed 4-tuples).
+const (
+	flowRetryInterval = 5 * time.Second
+	protoTCP          = 6
+	maxTrackedTuples  = 10000 // cap tracked tuples to prevent memory growth
+
+	// TCP flag bits.
+	tcpFIN uint32 = 0x01
+	tcpSYN uint32 = 0x02
+	tcpRST uint32 = 0x04
+	tcpACK uint32 = 0x10
+)
+
+// flowTuple identifies a TCP connection direction.
+type flowTuple struct {
+	srcIP, dstIP     uint32
+	srcPort, dstPort uint32
+}
+
 func consumeFlows(ctx context.Context, logger *zap.Logger, client pb.DataplaneControlClient) {
-	const (
-		retryInterval = 5 * time.Second
-		protoTCP      = 6
-		maxTracked    = 10000 // cap tracked tuples to prevent memory growth
-
-		// TCP flag bits.
-		tcpFIN uint32 = 0x01
-		tcpSYN uint32 = 0x02
-		tcpRST uint32 = 0x04
-		tcpACK uint32 = 0x10
-	)
-
-	// flowTuple identifies a TCP connection direction.
-	type flowTuple struct {
-		srcIP, dstIP     uint32
-		srcPort, dstPort uint32
-	}
-
 	for {
 		stream, err := client.StreamFlows(ctx, &pb.StreamFlowsRequest{})
 		if err != nil {
@@ -1833,93 +2000,102 @@ func consumeFlows(ctx context.Context, logger *zap.Logger, client pb.DataplaneCo
 				return
 			}
 			logger.Debug("flow consumer: failed to open stream, retrying",
-				zap.Error(err), zap.Duration("retry_in", retryInterval))
+				zap.Error(err), zap.Duration("retry_in", flowRetryInterval))
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(retryInterval):
+			case <-time.After(flowRetryInterval):
 				continue
 			}
 		}
 
 		logger.Info("flow consumer: connected, streaming metrics")
+		if processFlowStream(ctx, logger, stream) {
+			return
+		}
+	}
+}
 
-		// Track first-seen wall-clock time for TCP request flows to estimate RTT.
-		pending := make(map[flowTuple]time.Time)
+// processFlowStream processes flow events from a stream. Returns true if the
+// context was cancelled (caller should exit), false if the stream errored
+// (caller should reconnect).
+func processFlowStream(ctx context.Context, logger *zap.Logger, stream grpc.ServerStreamingClient[pb.FlowEvent]) bool {
+	pending := make(map[flowTuple]time.Time)
 
-		for {
-			flow, err := stream.Recv()
-			if err != nil {
-				if ctx.Err() != nil {
-					return
-				}
-				logger.Debug("flow consumer: stream error, reconnecting",
-					zap.Error(err))
-				break
+	for {
+		flow, err := stream.Recv()
+		if err != nil {
+			if ctx.Err() != nil {
+				return true
 			}
+			logger.Debug("flow consumer: stream error, reconnecting", zap.Error(err))
+			return false
+		}
 
-			// Update general flow metrics.
-			verdict := "allow"
-			if flow.Verdict == pb.PolicyAction_POLICY_ACTION_DENY {
-				verdict = "deny"
+		updateFlowMetrics(flow)
+
+		if flow.Protocol == protoTCP {
+			updateTCPMetrics(flow, pending)
+		}
+	}
+}
+
+// updateFlowMetrics updates general flow Prometheus counters from a flow event.
+func updateFlowMetrics(flow *pb.FlowEvent) {
+	verdict := "allow"
+	if flow.Verdict == pb.PolicyAction_POLICY_ACTION_DENY {
+		verdict = "deny"
+	}
+	agentmetrics.FlowTotal.WithLabelValues(
+		fmt.Sprintf("%d", flow.SrcIdentity),
+		fmt.Sprintf("%d", flow.DstIdentity),
+		verdict,
+	).Add(float64(flow.Packets))
+
+	if flow.DropReason != pb.DropReason_DROP_REASON_NONE {
+		agentmetrics.DropsTotal.WithLabelValues(flow.DropReason.String()).Add(float64(flow.Packets))
+	}
+
+	agentmetrics.PolicyVerdictTotal.WithLabelValues(verdict).Add(float64(flow.Packets))
+}
+
+// updateTCPMetrics updates TCP connection state counters and SYN-ACK latency.
+func updateTCPMetrics(flow *pb.FlowEvent, pending map[flowTuple]time.Time) {
+	flags := flow.TcpFlags
+	if flags&tcpSYN != 0 && flags&tcpACK == 0 {
+		agentmetrics.TCPConnectionTotal.WithLabelValues("syn").Inc()
+	}
+	if flags&tcpFIN != 0 {
+		agentmetrics.TCPConnectionTotal.WithLabelValues("fin").Inc()
+	}
+	if flags&tcpRST != 0 {
+		agentmetrics.TCPConnectionTotal.WithLabelValues("rst").Inc()
+	}
+
+	now := time.Now()
+	fwd := flowTuple{flow.SrcIp, flow.DstIp, flow.SrcPort, flow.DstPort}
+	rev := flowTuple{flow.DstIp, flow.SrcIp, flow.DstPort, flow.SrcPort}
+
+	if flags&tcpSYN != 0 && flags&tcpACK == 0 {
+		if len(pending) < maxTrackedTuples {
+			pending[fwd] = now
+		}
+	} else if flags&tcpSYN != 0 && flags&tcpACK != 0 {
+		if synTime, ok := pending[rev]; ok {
+			rtt := now.Sub(synTime)
+			if rtt > 0 && rtt < 10*time.Second {
+				agentmetrics.TCPLatencySeconds.Observe(rtt.Seconds())
 			}
-			metrics.FlowTotal.WithLabelValues(
-				fmt.Sprintf("%d", flow.SrcIdentity),
-				fmt.Sprintf("%d", flow.DstIdentity),
-				verdict,
-			).Add(float64(flow.Packets))
+			delete(pending, rev)
+		}
+	}
 
-			if flow.DropReason != pb.DropReason_DROP_REASON_NONE {
-				metrics.DropsTotal.WithLabelValues(flow.DropReason.String()).Add(float64(flow.Packets))
-			}
-
-			metrics.PolicyVerdictTotal.WithLabelValues(verdict).Add(float64(flow.Packets))
-
-			// TCP connection state metrics and latency estimation.
-			if flow.Protocol != protoTCP {
-				continue
-			}
-
-			flags := flow.TcpFlags
-			if flags&tcpSYN != 0 && flags&tcpACK == 0 {
-				metrics.TCPConnectionTotal.WithLabelValues("syn").Inc()
-			}
-			if flags&tcpFIN != 0 {
-				metrics.TCPConnectionTotal.WithLabelValues("fin").Inc()
-			}
-			if flags&tcpRST != 0 {
-				metrics.TCPConnectionTotal.WithLabelValues("rst").Inc()
-			}
-
-			// SYN-ACK based latency: track SYN, measure time to SYN-ACK.
-			now := time.Now()
-			fwd := flowTuple{flow.SrcIp, flow.DstIp, flow.SrcPort, flow.DstPort}
-			rev := flowTuple{flow.DstIp, flow.SrcIp, flow.DstPort, flow.SrcPort}
-
-			if flags&tcpSYN != 0 && flags&tcpACK == 0 {
-				// SYN packet — record as connection initiation.
-				if len(pending) < maxTracked {
-					pending[fwd] = now
-				}
-			} else if flags&tcpSYN != 0 && flags&tcpACK != 0 {
-				// SYN-ACK — measure RTT from matching SYN.
-				if synTime, ok := pending[rev]; ok {
-					rtt := now.Sub(synTime)
-					if rtt > 0 && rtt < 10*time.Second {
-						metrics.TCPLatencySeconds.Observe(rtt.Seconds())
-					}
-					delete(pending, rev)
-				}
-			}
-
-			// Evict stale entries older than 10 seconds.
-			if len(pending) > maxTracked/2 {
-				cutoff := now.Add(-10 * time.Second)
-				for k, t := range pending {
-					if t.Before(cutoff) {
-						delete(pending, k)
-					}
-				}
+	// Evict stale entries older than 10 seconds.
+	if len(pending) > maxTrackedTuples/2 {
+		cutoff := now.Add(-10 * time.Second)
+		for k, t := range pending {
+			if t.Before(cutoff) {
+				delete(pending, k)
 			}
 		}
 	}

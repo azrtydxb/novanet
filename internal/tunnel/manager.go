@@ -4,6 +4,7 @@ package tunnel
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -13,8 +14,14 @@ import (
 	"github.com/piwi3910/novanet/internal/dataplane"
 )
 
-// TunnelInfo holds information about a tunnel to a remote node.
-type TunnelInfo struct {
+// Sentinel errors for tunnel operations.
+var (
+	ErrInvalidNodeIP          = errors.New("invalid node IP")
+	ErrUnsupportedTunnelProto = errors.New("unsupported tunnel protocol")
+)
+
+// Info holds information about a tunnel to a remote node.
+type Info struct {
 	// NodeName is the Kubernetes node name.
 	NodeName string
 	// NodeIP is the remote node's IP address.
@@ -38,7 +45,7 @@ type Manager struct {
 	logger   *zap.Logger
 
 	// tunnels maps node name to tunnel info.
-	tunnels map[string]*TunnelInfo
+	tunnels map[string]*Info
 }
 
 // NewManager creates a new tunnel manager.
@@ -49,7 +56,7 @@ func NewManager(protocol string, nodeIP net.IP, vni uint32, dpClient dataplane.C
 		vni:      vni,
 		dpClient: dpClient,
 		logger:   logger,
-		tunnels:  make(map[string]*TunnelInfo),
+		tunnels:  make(map[string]*Info),
 	}
 }
 
@@ -60,7 +67,7 @@ func (m *Manager) AddTunnel(ctx context.Context, nodeName, nodeIP, podCIDR strin
 
 	parsedIP := net.ParseIP(nodeIP)
 	if parsedIP == nil {
-		return fmt.Errorf("invalid node IP: %s", nodeIP)
+		return fmt.Errorf("%w: %s", ErrInvalidNodeIP, nodeIP)
 	}
 
 	if _, exists := m.tunnels[nodeName]; exists {
@@ -69,9 +76,7 @@ func (m *Manager) AddTunnel(ctx context.Context, nodeName, nodeIP, podCIDR strin
 			zap.String("node_ip", nodeIP),
 		)
 		// Remove existing tunnel before recreating.
-		if err := m.removeTunnelLocked(ctx, nodeName); err != nil {
-			return fmt.Errorf("removing existing tunnel for %s: %w", nodeName, err)
-		}
+		m.removeTunnelLocked(ctx, nodeName)
 	}
 
 	ifName := tunnelInterfaceName(m.protocol, nodeName)
@@ -98,7 +103,7 @@ func (m *Manager) AddTunnel(ctx context.Context, nodeName, nodeIP, podCIDR strin
 			}
 		}
 	default:
-		return fmt.Errorf("unsupported tunnel protocol: %s", m.protocol)
+		return fmt.Errorf("%w: %s", ErrUnsupportedTunnelProto, m.protocol)
 	}
 
 	if err != nil {
@@ -108,13 +113,13 @@ func (m *Manager) AddTunnel(ctx context.Context, nodeName, nodeIP, podCIDR strin
 	// Register the tunnel with the dataplane.
 	remoteIP := IPToUint32(parsedIP)
 	if m.dpClient != nil {
-		if err := m.dpClient.UpsertTunnel(ctx, remoteIP, uint32(ifindex), m.vni); err != nil {
+		if err := m.dpClient.UpsertTunnel(ctx, remoteIP, uint32(ifindex), m.vni); err != nil { //nolint:gosec // ifindex is a kernel interface index, always positive and small
 			destroyTunnel(ifName)
 			return fmt.Errorf("registering tunnel with dataplane: %w", err)
 		}
 	}
 
-	m.tunnels[nodeName] = &TunnelInfo{
+	m.tunnels[nodeName] = &Info{
 		NodeName:      nodeName,
 		NodeIP:        nodeIP,
 		PodCIDR:       podCIDR,
@@ -137,14 +142,15 @@ func (m *Manager) AddTunnel(ctx context.Context, nodeName, nodeIP, podCIDR strin
 func (m *Manager) RemoveTunnel(ctx context.Context, nodeName string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.removeTunnelLocked(ctx, nodeName)
+	m.removeTunnelLocked(ctx, nodeName)
+	return nil
 }
 
 // removeTunnelLocked removes a tunnel while already holding the lock.
-func (m *Manager) removeTunnelLocked(ctx context.Context, nodeName string) error {
+func (m *Manager) removeTunnelLocked(ctx context.Context, nodeName string) {
 	info, ok := m.tunnels[nodeName]
 	if !ok {
-		return nil
+		return
 	}
 
 	// Remove from dataplane.
@@ -180,12 +186,10 @@ func (m *Manager) removeTunnelLocked(ctx context.Context, nodeName string) error
 		zap.String("node", nodeName),
 		zap.String("interface", info.InterfaceName),
 	)
-
-	return nil
 }
 
 // GetTunnel returns tunnel info for a specific node.
-func (m *Manager) GetTunnel(nodeName string) (*TunnelInfo, bool) {
+func (m *Manager) GetTunnel(nodeName string) (*Info, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -198,11 +202,11 @@ func (m *Manager) GetTunnel(nodeName string) (*TunnelInfo, bool) {
 }
 
 // ListTunnels returns a snapshot of all tunnels.
-func (m *Manager) ListTunnels() []*TunnelInfo {
+func (m *Manager) ListTunnels() []*Info {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	result := make([]*TunnelInfo, 0, len(m.tunnels))
+	result := make([]*Info, 0, len(m.tunnels))
 	for _, info := range m.tunnels {
 		t := *info
 		result = append(result, &t)

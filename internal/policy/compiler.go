@@ -155,7 +155,7 @@ func (c *Compiler) CompilePolicy(np *networkingv1.NetworkPolicy) []*CompiledRule
 
 // CompileAll compiles all NetworkPolicies into a combined list of rules.
 func (c *Compiler) CompileAll(policies []*networkingv1.NetworkPolicy) []*CompiledRule {
-	var allRules []*CompiledRule
+	allRules := make([]*CompiledRule, 0, len(policies))
 	for _, np := range policies {
 		allRules = append(allRules, c.CompilePolicy(np)...)
 	}
@@ -164,12 +164,12 @@ func (c *Compiler) CompileAll(policies []*networkingv1.NetworkPolicy) []*Compile
 
 // compileIngressRule compiles a single ingress rule for the target identity.
 func (c *Compiler) compileIngressRule(rule networkingv1.NetworkPolicyIngressRule, dstIdentity uint32, namespace string, podSelector metav1.LabelSelector) []*CompiledRule {
-	var rules []*CompiledRule
-
 	// Resolve source identities from peers.
 	srcIdentities := c.resolvePeers(rule.From, namespace)
 	// Resolve IPBlock CIDRs.
 	srcCIDRs := c.resolvePeersWithIPBlock(rule.From)
+
+	rules := make([]*CompiledRule, 0, len(srcIdentities)+len(srcCIDRs))
 
 	// Resolve ports (named ports resolve against the target pods).
 	ports := c.resolvePorts(rule.Ports, namespace, podSelector)
@@ -218,12 +218,12 @@ func (c *Compiler) compileIngressRule(rule networkingv1.NetworkPolicyIngressRule
 
 // compileEgressRule compiles a single egress rule for the source identity.
 func (c *Compiler) compileEgressRule(rule networkingv1.NetworkPolicyEgressRule, srcIdentity uint32, namespace string) []*CompiledRule {
-	var rules []*CompiledRule
-
 	// Resolve destination identities from peers.
 	dstIdentities := c.resolvePeers(rule.To, namespace)
 	// Resolve IPBlock CIDRs.
 	dstCIDRs := c.resolvePeersWithIPBlock(rule.To)
+
+	rules := make([]*CompiledRule, 0, len(dstIdentities)+len(dstCIDRs))
 
 	// Resolve ports. For egress, named ports are on the destination pods,
 	// but we don't know which pods those are, so use numeric only.
@@ -432,11 +432,11 @@ func (c *Compiler) resolvePorts(npPorts []networkingv1.NetworkPolicyPort, namesp
 		proto := ProtocolTCP // Default protocol is TCP.
 		if p.Protocol != nil {
 			switch *p.Protocol {
-			case "TCP":
+			case corev1.ProtocolTCP:
 				proto = ProtocolTCP
-			case "UDP":
+			case corev1.ProtocolUDP:
 				proto = ProtocolUDP
-			case "SCTP":
+			case corev1.ProtocolSCTP:
 				proto = ProtocolSCTP
 			}
 		}
@@ -464,7 +464,7 @@ func (c *Compiler) resolvePorts(npPorts []networkingv1.NetworkPolicyPort, namesp
 
 		var port uint16
 		if p.Port != nil {
-			port = uint16(p.Port.IntValue())
+			port = uint16(p.Port.IntValue()) //nolint:gosec // K8s port range 1-65535 fits uint16
 		}
 
 		ports = append(ports, portProto{

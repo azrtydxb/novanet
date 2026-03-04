@@ -29,7 +29,7 @@ func runEgress() error {
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	client := newAgentClient(conn)
 
@@ -42,14 +42,14 @@ func runEgress() error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintf(w, "EGRESS POLICIES\n")
-	fmt.Fprintf(w, "===============\n\n")
-	fmt.Fprintf(w, "Total Rules:\t%d\n\n", len(resp.Rules))
+	_, _ = fmt.Fprintf(w, "EGRESS POLICIES\n")
+	_, _ = fmt.Fprintf(w, "===============\n\n")
+	_, _ = fmt.Fprintf(w, "Total Rules:\t%d\n\n", len(resp.Rules))
 
 	if len(resp.Rules) == 0 {
-		fmt.Fprintln(w, "No egress policies installed.")
+		_, _ = fmt.Fprintln(w, "No egress policies installed.")
 	} else {
-		fmt.Fprintf(w, "NAMESPACE\tNAME\tSRC_IDENTITY\tDST_CIDR\tPROTOCOL\tPORT\tACTION\n")
+		_, _ = fmt.Fprintf(w, "NAMESPACE\tNAME\tSRC_IDENTITY\tDST_CIDR\tPROTOCOL\tPORT\tACTION\n")
 		for _, r := range resp.Rules {
 			proto := protocolName(r.Protocol)
 			action := egressActionName(r.Action)
@@ -61,7 +61,7 @@ func runEgress() error {
 			if r.SrcIdentity != 0 {
 				src = fmt.Sprintf("%d", r.SrcIdentity)
 			}
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 				r.Namespace, r.Name, src, r.DstCidr, proto, port, action)
 		}
 	}
@@ -71,11 +71,13 @@ func runEgress() error {
 
 func egressActionName(action pb.EgressAction) string {
 	switch action {
+	case pb.EgressAction_EGRESS_ACTION_DENY:
+		return verdictDeny
 	case pb.EgressAction_EGRESS_ACTION_ALLOW:
 		return "ALLOW"
 	case pb.EgressAction_EGRESS_ACTION_SNAT:
 		return "SNAT"
 	default:
-		return "DENY"
+		return verdictDeny
 	}
 }

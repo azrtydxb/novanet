@@ -4,6 +4,7 @@ package routing
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -13,6 +14,12 @@ import (
 	"github.com/piwi3910/novanet/internal/node"
 	"github.com/piwi3910/novanet/internal/novaroute"
 	"github.com/piwi3910/novanet/internal/tunnel"
+)
+
+// Sentinel errors for routing mode operations.
+var (
+	ErrUnsupportedMode   = errors.New("unsupported routing mode")
+	ErrNovaRouteRequired = errors.New("NovaRoute client is required for native routing mode")
 )
 
 // ModeManager orchestrates the networking mode — either overlay (tunnel-based)
@@ -75,7 +82,7 @@ func (m *ModeManager) Start(ctx context.Context) error {
 		return m.startNative(routeCtx)
 	default:
 		cancel()
-		return fmt.Errorf("unknown routing mode: %s", m.mode)
+		return fmt.Errorf("%w: %s", ErrUnsupportedMode, m.mode)
 	}
 }
 
@@ -107,7 +114,7 @@ func (m *ModeManager) startOverlay(ctx context.Context) error {
 	)
 
 	// Register a callback on the node registry to create/remove tunnels.
-	m.nodeRegistry.OnNodeChange(func(event string, nodeInfo *node.NodeInfo) {
+	m.nodeRegistry.OnNodeChange(func(event string, nodeInfo *node.Info) {
 		// Don't process events after we've been stopped.
 		select {
 		case <-ctx.Done():
@@ -193,7 +200,7 @@ func (m *ModeManager) startNative(ctx context.Context) error {
 	)
 
 	if m.novarouteClient == nil {
-		return fmt.Errorf("NovaRoute client is required for native routing mode")
+		return ErrNovaRouteRequired
 	}
 
 	// Connect to NovaRoute.

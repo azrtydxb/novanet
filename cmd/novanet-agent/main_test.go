@@ -170,7 +170,7 @@ func TestBuildLogger_ValidLevels(t *testing.T) {
 			if logger == nil {
 				t.Fatalf("buildLogger(%q) returned nil logger", level)
 			}
-			logger.Sync() //nolint:errcheck
+			_ = logger.Sync()
 		})
 	}
 }
@@ -185,7 +185,7 @@ func TestBuildLogger_UnknownLevel(t *testing.T) {
 	if logger == nil {
 		t.Fatal("expected non-nil logger for unknown level")
 	}
-	logger.Sync() //nolint:errcheck
+	_ = logger.Sync()
 }
 
 // TestBuildLogger_EmptyLevel verifies that an empty string is treated like
@@ -198,7 +198,7 @@ func TestBuildLogger_EmptyLevel(t *testing.T) {
 	if logger == nil {
 		t.Fatal("expected non-nil logger for empty level")
 	}
-	logger.Sync() //nolint:errcheck
+	_ = logger.Sync()
 }
 
 // ---------------------------------------------------------------------------

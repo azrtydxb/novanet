@@ -17,8 +17,8 @@ const (
 	ActionSNAT  uint8 = 2
 )
 
-// EgressRule defines a single egress policy rule.
-type EgressRule struct {
+// Rule defines a single egress policy rule.
+type Rule struct {
 	// Name is a unique identifier for this rule within a namespace.
 	Name string
 	// SrcIdentity is the identity ID of the source pods.
@@ -94,7 +94,7 @@ func (m *Manager) IsMasqueradeEnabled() bool {
 }
 
 // AddEgressRule adds or updates an egress rule for the given namespace.
-func (m *Manager) AddEgressRule(namespace string, rule EgressRule) error {
+func (m *Manager) AddEgressRule(namespace string, rule Rule) error {
 	_, cidr, err := net.ParseCIDR(rule.DstCIDR)
 	if err != nil {
 		return fmt.Errorf("parsing destination CIDR %q: %w", rule.DstCIDR, err)

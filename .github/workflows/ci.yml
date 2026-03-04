@@ -171,6 +171,7 @@ jobs:
       - name: Build documentation
         run: |
           sudo apt-get update && sudo apt-get install -y ruby-full build-essential
+          sudo gem install jekyll-sass-converter -v '~> 2.0'
           sudo gem install jekyll bundler jekyll-remote-theme
           cd docs && jekyll build
 
@@ -497,6 +498,7 @@ jobs:
     if: ${{ !cancelled() && needs.phase4-gate.result == 'success' && github.ref == 'refs/heads/main' && github.event_name == 'push' }}
     runs-on: arc-runner-novanet
     permissions:
+      actions: write
       contents: write
       packages: write
     strategy:
@@ -528,9 +530,9 @@ jobs:
 
       - name: Trigger CT pipeline
         if: success()
-        uses: peter-evans/repository-dispatch@v3
-        with:
-          event-type: deployment-complete
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run ct.yml --repo ${{ github.repository }}
 
   # ============================================================================
   # STATUS CHECK

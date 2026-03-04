@@ -5,6 +5,7 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"time"
 
@@ -29,11 +30,16 @@ import (
 const (
 	novanetClusterFinalizer = "novanet.io/finalizer"
 
-	// Condition types.
-	ConditionTypeReady    = "Ready"
-	ConditionTypeAgentOK  = "AgentReady"
+	// ConditionTypeReady indicates the cluster is fully ready.
+	ConditionTypeReady = "Ready"
+	// ConditionTypeAgentOK indicates the agent DaemonSet is ready.
+	ConditionTypeAgentOK = "AgentReady"
+	// ConditionTypeDegraded indicates the cluster is in a degraded state.
 	ConditionTypeDegraded = "Degraded"
 )
+
+// errNotClientObject indicates that an object does not implement client.Object.
+var errNotClientObject = stderrors.New("object does not implement client.Object")
 
 // NovaNetClusterReconciler reconciles a NovaNetCluster object.
 type NovaNetClusterReconciler struct {
@@ -196,7 +202,7 @@ func (r *NovaNetClusterReconciler) reconcileServiceAccount(ctx context.Context, 
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      r.serviceAccountName(cluster),
 			Namespace: cluster.Namespace,
-			Labels:    r.getLabels(cluster, "agent"),
+			Labels:    r.getLabels(cluster),
 		},
 	}
 	if err := controllerutil.SetControllerReference(cluster, sa, r.Scheme); err != nil {
@@ -209,7 +215,7 @@ func (r *NovaNetClusterReconciler) reconcileClusterRole(ctx context.Context, clu
 	cr := &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   r.clusterRoleName(cluster),
-			Labels: r.getLabels(cluster, "agent"),
+			Labels: r.getLabels(cluster),
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
@@ -247,7 +253,7 @@ func (r *NovaNetClusterReconciler) reconcileClusterRoleBinding(ctx context.Conte
 	crb := &rbacv1.ClusterRoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   r.clusterRoleBindingName(cluster),
-			Labels: r.getLabels(cluster, "agent"),
+			Labels: r.getLabels(cluster),
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
@@ -340,7 +346,7 @@ func (r *NovaNetClusterReconciler) reconcileConfigMap(ctx context.Context, clust
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      r.componentName(cluster),
 			Namespace: cluster.Namespace,
-			Labels:    r.getLabels(cluster, "agent"),
+			Labels:    r.getLabels(cluster),
 		},
 		Data: map[string]string{
 			"novanet.json": string(cfgJSON),
@@ -623,15 +629,15 @@ echo "CNI binary installed."`,
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      r.componentName(cluster),
 			Namespace: cluster.Namespace,
-			Labels:    r.getLabels(cluster, "agent"),
+			Labels:    r.getLabels(cluster),
 		},
 		Spec: appsv1.DaemonSetSpec{
 			Selector: &metav1.LabelSelector{
-				MatchLabels: r.getSelectorLabels(cluster, "agent"),
+				MatchLabels: r.getSelectorLabels(cluster),
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: r.getLabels(cluster, "agent"),
+					Labels: r.getLabels(cluster),
 				},
 				Spec: corev1.PodSpec{
 					HostNetwork:                   true,
@@ -690,10 +696,10 @@ func (r *NovaNetClusterReconciler) reconcileMetricsService(ctx context.Context, 
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-metrics", r.componentName(cluster)),
 			Namespace: cluster.Namespace,
-			Labels:    r.getLabels(cluster, "agent"),
+			Labels:    r.getLabels(cluster),
 		},
 		Spec: corev1.ServiceSpec{
-			Selector: r.getSelectorLabels(cluster, "agent"),
+			Selector: r.getSelectorLabels(cluster),
 			Ports: []corev1.ServicePort{
 				{
 					Name:       "metrics",
@@ -722,12 +728,12 @@ func (r *NovaNetClusterReconciler) reconcilePDB(ctx context.Context, cluster *no
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      r.componentName(cluster),
 			Namespace: cluster.Namespace,
-			Labels:    r.getLabels(cluster, "agent"),
+			Labels:    r.getLabels(cluster),
 		},
 		Spec: policyv1.PodDisruptionBudgetSpec{
 			MaxUnavailable: &maxUnavailable,
 			Selector: &metav1.LabelSelector{
-				MatchLabels: r.getSelectorLabels(cluster, "agent"),
+				MatchLabels: r.getSelectorLabels(cluster),
 			},
 		},
 	}
@@ -818,21 +824,21 @@ func (r *NovaNetClusterReconciler) clusterRoleBindingName(cluster *novanetv1alph
 	return fmt.Sprintf("%s-%s-agent", cluster.Namespace, cluster.Name)
 }
 
-func (r *NovaNetClusterReconciler) getLabels(cluster *novanetv1alpha1.NovaNetCluster, component string) map[string]string {
+func (r *NovaNetClusterReconciler) getLabels(cluster *novanetv1alpha1.NovaNetCluster) map[string]string {
 	return map[string]string{
 		"app.kubernetes.io/name":       "novanet",
 		"app.kubernetes.io/instance":   cluster.Name,
-		"app.kubernetes.io/component":  component,
+		"app.kubernetes.io/component":  "agent",
 		"app.kubernetes.io/version":    cluster.Spec.Version,
 		"app.kubernetes.io/managed-by": "novanet-operator",
 	}
 }
 
-func (r *NovaNetClusterReconciler) getSelectorLabels(cluster *novanetv1alpha1.NovaNetCluster, component string) map[string]string {
+func (r *NovaNetClusterReconciler) getSelectorLabels(cluster *novanetv1alpha1.NovaNetCluster) map[string]string {
 	return map[string]string{
 		"app.kubernetes.io/name":      "novanet",
 		"app.kubernetes.io/instance":  cluster.Name,
-		"app.kubernetes.io/component": component,
+		"app.kubernetes.io/component": "agent",
 	}
 }
 
@@ -851,7 +857,7 @@ func (r *NovaNetClusterReconciler) createOrUpdate(ctx context.Context, obj clien
 	existingObj := obj.DeepCopyObject()
 	existing, ok := existingObj.(client.Object)
 	if !ok {
-		return fmt.Errorf("object does not implement client.Object")
+		return errNotClientObject
 	}
 
 	if err := r.Get(ctx, key, existing); err != nil {

@@ -73,7 +73,7 @@ func (w *Watcher) Start(ctx context.Context) error {
 		},
 	}
 
-	informer.AddEventHandler(handler)
+	_, _ = informer.AddEventHandler(handler)
 
 	w.logger.Info("starting NetworkPolicy watcher")
 

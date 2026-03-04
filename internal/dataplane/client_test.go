@@ -149,7 +149,7 @@ func (m *mockDataplaneServer) DeletePolicy(_ context.Context, _ *pb.DeletePolicy
 func (m *mockDataplaneServer) SyncPolicies(_ context.Context, req *pb.SyncPoliciesRequest) (*pb.SyncPoliciesResponse, error) {
 	m.syncPoliciesCalled++
 	return &pb.SyncPoliciesResponse{
-		Added:   uint32(len(req.Policies)),
+		Added:   uint32(len(req.Policies)), //nolint:gosec // test code, len is always small
 		Removed: 0,
 		Updated: 0,
 	}, nil
@@ -199,15 +199,14 @@ func startMockServer(t *testing.T) (*mockDataplaneServer, string) {
 	pb.RegisterDataplaneControlServer(server, mock)
 
 	// Create a TCP listener on a random port.
-	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	var lc net.ListenConfig
+	lis, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to create listener: %v", err)
 	}
 
 	go func() {
-		if err := server.Serve(lis); err != nil {
-			// Server stopped.
-		}
+		_ = server.Serve(lis)
 	}()
 
 	t.Cleanup(func() {
@@ -240,7 +239,7 @@ func connectTestClient(t *testing.T, addr string) *Client {
 func TestUpsertEndpoint(t *testing.T) {
 	mock, addr := startMockServer(t)
 	c := connectTestClient(t, addr)
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	err := c.UpsertEndpoint(context.Background(), &Endpoint{
 		IP:         0x0AF40102,
@@ -263,7 +262,7 @@ func TestUpsertEndpoint(t *testing.T) {
 func TestDeleteEndpoint(t *testing.T) {
 	mock, addr := startMockServer(t)
 	c := connectTestClient(t, addr)
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	err := c.DeleteEndpoint(context.Background(), 0x0AF40102)
 	if err != nil {
@@ -278,7 +277,7 @@ func TestDeleteEndpoint(t *testing.T) {
 func TestUpsertPolicy(t *testing.T) {
 	mock, addr := startMockServer(t)
 	c := connectTestClient(t, addr)
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	err := c.UpsertPolicy(context.Background(), &PolicyRule{
 		SrcIdentity: 100,
@@ -299,7 +298,7 @@ func TestUpsertPolicy(t *testing.T) {
 func TestDeletePolicy(t *testing.T) {
 	mock, addr := startMockServer(t)
 	c := connectTestClient(t, addr)
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	err := c.DeletePolicy(context.Background(), &PolicyRule{
 		SrcIdentity: 100,
@@ -319,7 +318,7 @@ func TestDeletePolicy(t *testing.T) {
 func TestSyncPolicies(t *testing.T) {
 	mock, addr := startMockServer(t)
 	c := connectTestClient(t, addr)
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	rules := []*PolicyRule{
 		{SrcIdentity: 100, DstIdentity: 200, Protocol: 6, DstPort: 80, Action: pb.PolicyAction_POLICY_ACTION_ALLOW},
@@ -343,7 +342,7 @@ func TestSyncPolicies(t *testing.T) {
 func TestUpsertTunnel(t *testing.T) {
 	mock, addr := startMockServer(t)
 	c := connectTestClient(t, addr)
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	err := c.UpsertTunnel(context.Background(), 0x0A000002, 10, 100)
 	if err != nil {
@@ -358,7 +357,7 @@ func TestUpsertTunnel(t *testing.T) {
 func TestDeleteTunnel(t *testing.T) {
 	mock, addr := startMockServer(t)
 	c := connectTestClient(t, addr)
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	err := c.DeleteTunnel(context.Background(), 0x0A000002)
 	if err != nil {
@@ -373,7 +372,7 @@ func TestDeleteTunnel(t *testing.T) {
 func TestUpdateConfig(t *testing.T) {
 	mock, addr := startMockServer(t)
 	c := connectTestClient(t, addr)
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	err := c.UpdateConfig(context.Background(), map[uint32]uint64{
 		1: 100,
@@ -391,7 +390,7 @@ func TestUpdateConfig(t *testing.T) {
 func TestAttachDetachProgram(t *testing.T) {
 	mock, addr := startMockServer(t)
 	c := connectTestClient(t, addr)
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	err := c.AttachProgram(context.Background(), "eth0", AttachTCIngress)
 	if err != nil {
@@ -420,7 +419,7 @@ func TestAttachDetachProgram(t *testing.T) {
 func TestGetStatus(t *testing.T) {
 	mock, addr := startMockServer(t)
 	c := connectTestClient(t, addr)
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	status, err := c.GetStatus(context.Background())
 	if err != nil {

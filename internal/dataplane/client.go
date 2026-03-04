@@ -4,6 +4,7 @@ package dataplane
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -14,6 +15,12 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	pb "github.com/piwi3910/novanet/api/v1"
+)
+
+// Sentinel errors for the dataplane client.
+var (
+	ErrNotConnected    = errors.New("not connected to dataplane")
+	ErrEmptySocketPath = errors.New("socket path must not be empty")
 )
 
 // AttachType specifies the direction of a TC program attachment.
@@ -62,8 +69,8 @@ type FlowEvent struct {
 	DropReason  pb.DropReason
 }
 
-// DataplaneStatus contains the current status of the dataplane.
-type DataplaneStatus struct {
+// Status contains the current status of the dataplane.
+type Status struct {
 	EndpointCount  uint32
 	PolicyCount    uint32
 	TunnelCount    uint32
@@ -94,7 +101,7 @@ type ClientInterface interface {
 	AttachProgram(ctx context.Context, iface string, attachType AttachType) error
 	DetachProgram(ctx context.Context, iface string, attachType AttachType) error
 	StreamFlows(ctx context.Context, identityFilter uint32) (<-chan *FlowEvent, error)
-	GetStatus(ctx context.Context) (*DataplaneStatus, error)
+	GetStatus(ctx context.Context) (*Status, error)
 	Close() error
 }
 
@@ -115,7 +122,7 @@ var _ ClientInterface = (*Client)(nil)
 // NewClient creates a new dataplane client.
 func NewClient(socketPath string, logger *zap.Logger) (*Client, error) {
 	if socketPath == "" {
-		return nil, fmt.Errorf("socket path must not be empty")
+		return nil, ErrEmptySocketPath
 	}
 	return &Client{
 		socketPath: socketPath,
@@ -152,7 +159,7 @@ func (c *Client) UpsertEndpoint(ctx context.Context, ep *Endpoint) error {
 	c.mu.RUnlock()
 
 	if client == nil {
-		return fmt.Errorf("not connected to dataplane")
+		return ErrNotConnected
 	}
 
 	start := time.Now()
@@ -186,7 +193,7 @@ func (c *Client) DeleteEndpoint(ctx context.Context, ip uint32) error {
 	c.mu.RUnlock()
 
 	if client == nil {
-		return fmt.Errorf("not connected to dataplane")
+		return ErrNotConnected
 	}
 
 	_, err := client.DeleteEndpoint(ctx, &pb.DeleteEndpointRequest{
@@ -205,7 +212,7 @@ func (c *Client) UpsertPolicy(ctx context.Context, rule *PolicyRule) error {
 	c.mu.RUnlock()
 
 	if client == nil {
-		return fmt.Errorf("not connected to dataplane")
+		return ErrNotConnected
 	}
 
 	_, err := client.UpsertPolicy(ctx, &pb.UpsertPolicyRequest{
@@ -228,7 +235,7 @@ func (c *Client) DeletePolicy(ctx context.Context, rule *PolicyRule) error {
 	c.mu.RUnlock()
 
 	if client == nil {
-		return fmt.Errorf("not connected to dataplane")
+		return ErrNotConnected
 	}
 
 	_, err := client.DeletePolicy(ctx, &pb.DeletePolicyRequest{
@@ -250,7 +257,7 @@ func (c *Client) SyncPolicies(ctx context.Context, rules []*PolicyRule) (*SyncRe
 	c.mu.RUnlock()
 
 	if client == nil {
-		return nil, fmt.Errorf("not connected to dataplane")
+		return nil, ErrNotConnected
 	}
 
 	entries := make([]*pb.PolicyEntry, len(rules))
@@ -293,7 +300,7 @@ func (c *Client) UpsertTunnel(ctx context.Context, nodeIP, ifindex, vni uint32) 
 	c.mu.RUnlock()
 
 	if client == nil {
-		return fmt.Errorf("not connected to dataplane")
+		return ErrNotConnected
 	}
 
 	_, err := client.UpsertTunnel(ctx, &pb.UpsertTunnelRequest{
@@ -314,7 +321,7 @@ func (c *Client) DeleteTunnel(ctx context.Context, nodeIP uint32) error {
 	c.mu.RUnlock()
 
 	if client == nil {
-		return fmt.Errorf("not connected to dataplane")
+		return ErrNotConnected
 	}
 
 	_, err := client.DeleteTunnel(ctx, &pb.DeleteTunnelRequest{
@@ -333,7 +340,7 @@ func (c *Client) UpdateConfig(ctx context.Context, entries map[uint32]uint64) er
 	c.mu.RUnlock()
 
 	if client == nil {
-		return fmt.Errorf("not connected to dataplane")
+		return ErrNotConnected
 	}
 
 	_, err := client.UpdateConfig(ctx, &pb.UpdateConfigRequest{
@@ -352,7 +359,7 @@ func (c *Client) AttachProgram(ctx context.Context, iface string, attachType Att
 	c.mu.RUnlock()
 
 	if client == nil {
-		return fmt.Errorf("not connected to dataplane")
+		return ErrNotConnected
 	}
 
 	pbType := pb.AttachType_ATTACH_TC_INGRESS
@@ -377,7 +384,7 @@ func (c *Client) DetachProgram(ctx context.Context, iface string, attachType Att
 	c.mu.RUnlock()
 
 	if client == nil {
-		return fmt.Errorf("not connected to dataplane")
+		return ErrNotConnected
 	}
 
 	pbType := pb.AttachType_ATTACH_TC_INGRESS
@@ -404,7 +411,7 @@ func (c *Client) StreamFlows(ctx context.Context, identityFilter uint32) (<-chan
 	c.mu.RUnlock()
 
 	if client == nil {
-		return nil, fmt.Errorf("not connected to dataplane")
+		return nil, ErrNotConnected
 	}
 
 	stream, err := client.StreamFlows(ctx, &pb.StreamFlowsRequest{
@@ -451,13 +458,13 @@ func (c *Client) StreamFlows(ctx context.Context, identityFilter uint32) (<-chan
 }
 
 // GetStatus returns the current dataplane status.
-func (c *Client) GetStatus(ctx context.Context) (*DataplaneStatus, error) {
+func (c *Client) GetStatus(ctx context.Context) (*Status, error) {
 	c.mu.RLock()
 	client := c.client
 	c.mu.RUnlock()
 
 	if client == nil {
-		return nil, fmt.Errorf("not connected to dataplane")
+		return nil, ErrNotConnected
 	}
 
 	resp, err := client.GetDataplaneStatus(ctx, &pb.GetDataplaneStatusRequest{})
@@ -465,7 +472,7 @@ func (c *Client) GetStatus(ctx context.Context) (*DataplaneStatus, error) {
 		return nil, fmt.Errorf("getting dataplane status: %w", err)
 	}
 
-	return &DataplaneStatus{
+	return &Status{
 		EndpointCount:  resp.EndpointCount,
 		PolicyCount:    resp.PolicyCount,
 		TunnelCount:    resp.TunnelCount,

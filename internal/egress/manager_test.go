@@ -52,7 +52,7 @@ func TestSetMasqueradeEnabled(t *testing.T) {
 func TestAddEgressRule(t *testing.T) {
 	m := testManager()
 
-	err := m.AddEgressRule("default", EgressRule{
+	err := m.AddEgressRule("default", Rule{
 		Name:        "allow-external",
 		SrcIdentity: 100,
 		DstCIDR:     "0.0.0.0/0",
@@ -92,7 +92,7 @@ func TestAddEgressRule(t *testing.T) {
 func TestAddEgressRuleInvalidCIDR(t *testing.T) {
 	m := testManager()
 
-	err := m.AddEgressRule("default", EgressRule{
+	err := m.AddEgressRule("default", Rule{
 		Name:    "bad-rule",
 		DstCIDR: "not-a-cidr",
 	})
@@ -104,7 +104,7 @@ func TestAddEgressRuleInvalidCIDR(t *testing.T) {
 func TestAddEgressRuleOverwrite(t *testing.T) {
 	m := testManager()
 
-	err := m.AddEgressRule("default", EgressRule{
+	err := m.AddEgressRule("default", Rule{
 		Name:    "rule-1",
 		DstCIDR: "0.0.0.0/0",
 		Action:  ActionAllow,
@@ -114,7 +114,7 @@ func TestAddEgressRuleOverwrite(t *testing.T) {
 	}
 
 	// Overwrite with different action.
-	err = m.AddEgressRule("default", EgressRule{
+	err = m.AddEgressRule("default", Rule{
 		Name:    "rule-1",
 		DstCIDR: "0.0.0.0/0",
 		Action:  ActionDeny,
@@ -136,7 +136,7 @@ func TestAddEgressRuleOverwrite(t *testing.T) {
 func TestRemoveEgressRule(t *testing.T) {
 	m := testManager()
 
-	m.AddEgressRule("default", EgressRule{
+	_ = m.AddEgressRule("default", Rule{
 		Name:    "rule-1",
 		DstCIDR: "0.0.0.0/0",
 	})
@@ -163,12 +163,12 @@ func TestRemoveNonExistentRule(t *testing.T) {
 func TestGetRules(t *testing.T) {
 	m := testManager()
 
-	m.AddEgressRule("default", EgressRule{
+	_ = m.AddEgressRule("default", Rule{
 		Name:    "rule-1",
 		DstCIDR: "0.0.0.0/0",
 		Action:  ActionAllow,
 	})
-	m.AddEgressRule("kube-system", EgressRule{
+	_ = m.AddEgressRule("kube-system", Rule{
 		Name:    "rule-2",
 		DstCIDR: "10.0.0.0/8",
 		Action:  ActionSNAT,
@@ -192,12 +192,12 @@ func TestGetRulesEmpty(t *testing.T) {
 func TestSameNameDifferentNamespace(t *testing.T) {
 	m := testManager()
 
-	m.AddEgressRule("ns-a", EgressRule{
+	_ = m.AddEgressRule("ns-a", Rule{
 		Name:    "rule-1",
 		DstCIDR: "0.0.0.0/0",
 		Action:  ActionAllow,
 	})
-	m.AddEgressRule("ns-b", EgressRule{
+	_ = m.AddEgressRule("ns-b", Rule{
 		Name:    "rule-1",
 		DstCIDR: "10.0.0.0/8",
 		Action:  ActionDeny,
@@ -233,7 +233,7 @@ func TestConcurrentAccess(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			name := "rule-" + string(rune('a'+i%26))
-			m.AddEgressRule("default", EgressRule{
+			_ = m.AddEgressRule("default", Rule{
 				Name:    name,
 				DstCIDR: "0.0.0.0/0",
 				Action:  ActionAllow,
@@ -255,7 +255,7 @@ func TestConcurrentAccess(t *testing.T) {
 func TestSNATAction(t *testing.T) {
 	m := testManager()
 
-	err := m.AddEgressRule("default", EgressRule{
+	err := m.AddEgressRule("default", Rule{
 		Name:        "snat-rule",
 		SrcIdentity: 200,
 		DstCIDR:     "8.8.8.0/24",

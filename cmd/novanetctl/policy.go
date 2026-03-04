@@ -29,7 +29,7 @@ func runPolicy() error {
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	client := newAgentClient(conn)
 
@@ -42,19 +42,19 @@ func runPolicy() error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintf(w, "POLICY RULES\n")
-	fmt.Fprintf(w, "============\n\n")
-	fmt.Fprintf(w, "Total Rules:\t%d\n\n", len(resp.Rules))
+	_, _ = fmt.Fprintf(w, "POLICY RULES\n")
+	_, _ = fmt.Fprintf(w, "============\n\n")
+	_, _ = fmt.Fprintf(w, "Total Rules:\t%d\n\n", len(resp.Rules))
 
 	if len(resp.Rules) == 0 {
-		fmt.Fprintln(w, "No policies installed.")
-		fmt.Fprintln(w)
-		fmt.Fprintln(w, "Policies are compiled from Kubernetes NetworkPolicy resources.")
+		_, _ = fmt.Fprintln(w, "No policies installed.")
+		_, _ = fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w, "Policies are compiled from Kubernetes NetworkPolicy resources.")
 	} else {
-		fmt.Fprintf(w, "SRC_IDENTITY\tDST_IDENTITY\tPROTOCOL\tPORT\tACTION\n")
+		_, _ = fmt.Fprintf(w, "SRC_IDENTITY\tDST_IDENTITY\tPROTOCOL\tPORT\tACTION\n")
 		for _, r := range resp.Rules {
 			proto := protocolName(r.Protocol)
-			action := "DENY"
+			action := verdictDeny
 			if r.Action == pb.PolicyAction_POLICY_ACTION_ALLOW {
 				action = "ALLOW"
 			}
@@ -70,7 +70,7 @@ func runPolicy() error {
 			if r.DstIdentity != 0 {
 				dst = fmt.Sprintf("%d", r.DstIdentity)
 			}
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", src, dst, proto, port, action)
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", src, dst, proto, port, action)
 		}
 	}
 

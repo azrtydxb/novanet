@@ -1,6 +1,6 @@
-// Package metrics defines and registers Prometheus metrics for NovaNet.
+// Package agentmetrics defines and registers Prometheus metrics for NovaNet.
 // It follows the same patterns as NovaRoute's metrics package.
-package metrics
+package agentmetrics
 
 import (
 	"github.com/prometheus/client_golang/prometheus"

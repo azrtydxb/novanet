@@ -31,7 +31,7 @@ func runIdentity() error {
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	client := newAgentClient(conn)
 
@@ -44,19 +44,19 @@ func runIdentity() error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintf(w, "IDENTITY MAPPINGS\n")
-	fmt.Fprintf(w, "=================\n\n")
-	fmt.Fprintf(w, "Total Identities:\t%d\n\n", len(resp.Identities))
+	_, _ = fmt.Fprintf(w, "IDENTITY MAPPINGS\n")
+	_, _ = fmt.Fprintf(w, "=================\n\n")
+	_, _ = fmt.Fprintf(w, "Total Identities:\t%d\n\n", len(resp.Identities))
 
 	if len(resp.Identities) == 0 {
-		fmt.Fprintln(w, "No identities allocated.")
-		fmt.Fprintln(w)
-		fmt.Fprintln(w, "Identities are allocated when pods are scheduled to this node.")
+		_, _ = fmt.Fprintln(w, "No identities allocated.")
+		_, _ = fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w, "Identities are allocated when pods are scheduled to this node.")
 	} else {
-		fmt.Fprintf(w, "ID\tPOD_COUNT\tLABELS\n")
+		_, _ = fmt.Fprintf(w, "ID\tPOD_COUNT\tLABELS\n")
 		for _, id := range resp.Identities {
 			labels := formatLabels(id.Labels)
-			fmt.Fprintf(w, "%d\t%d\t%s\n", id.IdentityId, id.RefCount, labels)
+			_, _ = fmt.Fprintf(w, "%d\t%d\t%s\n", id.IdentityId, id.RefCount, labels)
 		}
 	}
 

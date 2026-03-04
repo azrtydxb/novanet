@@ -29,7 +29,7 @@ func runTunnels() error {
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	client := newAgentClient(conn)
 
@@ -48,24 +48,24 @@ func runTunnels() error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintf(w, "TUNNEL STATE\n")
-	fmt.Fprintf(w, "============\n\n")
-	fmt.Fprintf(w, "Routing Mode:\t%s\n", status.RoutingMode)
-	fmt.Fprintf(w, "Tunnel Protocol:\t%s\n", status.TunnelProtocol)
-	fmt.Fprintf(w, "Active Tunnels:\t%d\n\n", len(resp.Tunnels))
+	_, _ = fmt.Fprintf(w, "TUNNEL STATE\n")
+	_, _ = fmt.Fprintf(w, "============\n\n")
+	_, _ = fmt.Fprintf(w, "Routing Mode:\t%s\n", status.RoutingMode)
+	_, _ = fmt.Fprintf(w, "Tunnel Protocol:\t%s\n", status.TunnelProtocol)
+	_, _ = fmt.Fprintf(w, "Active Tunnels:\t%d\n\n", len(resp.Tunnels))
 
 	if len(resp.Tunnels) == 0 {
-		fmt.Fprintln(w, "No active tunnels.")
-		fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w, "No active tunnels.")
+		_, _ = fmt.Fprintln(w)
 		if status.RoutingMode == "native" {
-			fmt.Fprintln(w, "Note: Tunnels are not used in native routing mode.")
+			_, _ = fmt.Fprintln(w, "Note: Tunnels are not used in native routing mode.")
 		} else {
-			fmt.Fprintln(w, "Note: Tunnels are created when remote nodes join the cluster.")
+			_, _ = fmt.Fprintln(w, "Note: Tunnels are created when remote nodes join the cluster.")
 		}
 	} else {
-		fmt.Fprintf(w, "NODE\tNODE_IP\tPOD_CIDR\tINTERFACE\tIFINDEX\tPROTOCOL\n")
+		_, _ = fmt.Fprintf(w, "NODE\tNODE_IP\tPOD_CIDR\tINTERFACE\tIFINDEX\tPROTOCOL\n")
 		for _, t := range resp.Tunnels {
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\t%s\n",
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\t%s\n",
 				t.NodeName, t.NodeIp, t.PodCidr,
 				t.InterfaceName, t.Ifindex, t.Protocol)
 		}

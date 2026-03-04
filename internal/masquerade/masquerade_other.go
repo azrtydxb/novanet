@@ -1,10 +1,14 @@
 //go:build !linux
 
+// Package masquerade provides SNAT masquerade rule management.
 package masquerade
 
-import "fmt"
+import "errors"
+
+// errMasqueradeUnsupported indicates that masquerade is not available on this platform.
+var errMasqueradeUnsupported = errors.New("masquerade not supported on this platform")
 
 // EnsureMasquerade is not supported on non-Linux platforms.
-func EnsureMasquerade(podCIDR, clusterCIDR string) error {
-	return fmt.Errorf("masquerade not supported on this platform")
+func EnsureMasquerade(_, _ string) error {
+	return errMasqueradeUnsupported
 }

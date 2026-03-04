@@ -38,7 +38,7 @@ func runFlows(identityFilter uint32, dropsOnly bool) error {
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	client := newAgentClient(conn)
 
@@ -62,12 +62,12 @@ func runFlows(identityFilter uint32, dropsOnly bool) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintf(w, "TIMESTAMP\tSRC_IP\tDST_IP\tSRC_ID\tDST_ID\tPROTO\tPORT\tVERDICT\tBYTES")
+	_, _ = fmt.Fprintf(w, "TIMESTAMP\tSRC_IP\tDST_IP\tSRC_ID\tDST_ID\tPROTO\tPORT\tVERDICT\tBYTES")
 	if dropsOnly {
-		fmt.Fprintf(w, "\tDROP_REASON")
+		_, _ = fmt.Fprintf(w, "\tDROP_REASON")
 	}
-	fmt.Fprintln(w)
-	w.Flush()
+	_, _ = fmt.Fprintln(w)
+	_ = w.Flush()
 
 	for {
 		flow, err := stream.Recv()
@@ -77,14 +77,14 @@ func runFlows(identityFilter uint32, dropsOnly bool) error {
 		if err != nil {
 			// If context was cancelled (Ctrl+C), exit cleanly.
 			if ctx.Err() != nil {
-				fmt.Fprintln(os.Stderr, "\nStream interrupted.")
+				_, _ = fmt.Fprintln(os.Stderr, "\nStream interrupted.")
 				return nil
 			}
 			return fmt.Errorf("stream error: %w", err)
 		}
 
 		printFlow(w, flow, dropsOnly)
-		w.Flush()
+		_ = w.Flush()
 	}
 }
 
@@ -95,24 +95,24 @@ func printFlow(w *tabwriter.Writer, flow *pb.FlowEvent, showDropReason bool) {
 	proto := protocolName(flow.Protocol)
 	verdict := verdictName(flow.Verdict)
 
-	fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%d\t%s\t%d\t%s\t%d",
+	_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%d\t%s\t%d\t%s\t%d",
 		ts, srcIP, dstIP, flow.SrcIdentity, flow.DstIdentity,
 		proto, flow.DstPort, verdict, flow.Bytes)
 
 	if showDropReason {
-		fmt.Fprintf(w, "\t%s", dropReasonName(flow.DropReason))
+		_, _ = fmt.Fprintf(w, "\t%s", dropReasonName(flow.DropReason))
 	}
 
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w)
 }
 
 // uint32ToIP converts a uint32 in network byte order to a dotted-decimal IP string.
 func uint32ToIP(n uint32) string {
 	ip := net.IPv4(
-		byte(n>>24),
-		byte(n>>16),
-		byte(n>>8),
-		byte(n),
+		byte(n>>24),  //nolint:gosec // right-shifted to 0-255 range
+		byte(n>>16),  //nolint:gosec // right-shifted to 0-255 range
+		byte(n>>8),   //nolint:gosec // right-shifted to 0-255 range
+		byte(n&0xFF), //nolint:gosec // masked to 0-255 range
 	)
 	return ip.String()
 }
@@ -122,7 +122,7 @@ func verdictName(v pb.PolicyAction) string {
 	case pb.PolicyAction_POLICY_ACTION_ALLOW:
 		return "ALLOW"
 	case pb.PolicyAction_POLICY_ACTION_DENY:
-		return "DENY"
+		return verdictDeny
 	default:
 		return "UNKNOWN"
 	}

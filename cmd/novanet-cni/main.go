@@ -7,6 +7,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -35,6 +36,9 @@ const (
 	cniVersion = "1.0.0"
 )
 
+// ErrInvalidGateway is returned when the agent returns an unparseable gateway IP.
+var ErrInvalidGateway = errors.New("invalid gateway from agent")
+
 // NetConf is the CNI network configuration parsed from stdin.
 type NetConf struct {
 	types.NetConf
@@ -55,7 +59,7 @@ type cniLogger struct {
 func (l *cniLogger) Printf(format string, args ...interface{}) {
 	if l.w != nil {
 		ts := time.Now().UTC().Format(time.RFC3339)
-		fmt.Fprintf(l.w, "%s [novanet-cni] %s\n", ts, fmt.Sprintf(format, args...))
+		_, _ = fmt.Fprintf(l.w, "%s [novanet-cni] %s\n", ts, fmt.Sprintf(format, args...))
 	}
 }
 
@@ -88,7 +92,7 @@ func openLog(path string) *cniLogger {
 	if path == "" {
 		return &cniLogger{}
 	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644) //nolint:gosec // path is from CNI config, not user input
 	if err != nil {
 		return &cniLogger{}
 	}
@@ -150,7 +154,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 		log.Printf("ERROR: %v", err)
 		return fmt.Errorf("connecting to novanet-agent: %w", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	client := pb.NewAgentControlClient(conn)
 
@@ -182,7 +186,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 
 	gwIP := net.ParseIP(resp.Gateway)
 	if gwIP == nil {
-		return fmt.Errorf("invalid gateway from agent: %s", resp.Gateway)
+		return fmt.Errorf("%w: %s", ErrInvalidGateway, resp.Gateway)
 	}
 
 	_, defaultDst, err := net.ParseCIDR("0.0.0.0/0")
@@ -241,7 +245,7 @@ func cmdDel(args *skel.CmdArgs) error {
 		log.Printf("WARNING: agent unreachable on DEL, treating as success: %v", err)
 		return nil
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	client := pb.NewAgentControlClient(conn)
 
@@ -281,7 +285,7 @@ func cmdCheck(args *skel.CmdArgs) error {
 		log.Printf("ERROR: agent unreachable on CHECK: %v", err)
 		return fmt.Errorf("novanet-agent unreachable: %w", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	client := pb.NewAgentControlClient(conn)
 

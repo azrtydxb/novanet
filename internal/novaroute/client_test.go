@@ -91,7 +91,7 @@ func TestConnectCanceled(t *testing.T) {
 
 	err := c.Connect(ctx)
 	if err == nil {
-		c.Close()
+		_ = c.Close()
 	}
 }
 
@@ -106,7 +106,7 @@ func TestConnectSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error (grpc.NewClient is lazy): %v", err)
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	// Client field should be set.
 	c.mu.Lock()
@@ -124,7 +124,7 @@ func TestCloseAfterConnect(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
-	c.Connect(ctx)
+	_ = c.Connect(ctx)
 
 	err := c.Close()
 	if err != nil {

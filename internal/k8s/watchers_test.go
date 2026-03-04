@@ -19,7 +19,7 @@ func testLogger() *zap.Logger {
 }
 
 func TestWatchersNodeEvents(t *testing.T) {
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 	w := NewWatchers(clientset, "test-node", testLogger())
 
 	var mu sync.Mutex
@@ -108,7 +108,7 @@ func TestWatchersNodeEvents(t *testing.T) {
 }
 
 func TestWatchersPodFilterLocalNode(t *testing.T) {
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 	w := NewWatchers(clientset, "test-node", testLogger())
 
 	var mu sync.Mutex
@@ -193,7 +193,7 @@ func TestWatchersPodFilterLocalNode(t *testing.T) {
 }
 
 func TestWatchersNamespaceEvents(t *testing.T) {
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 	w := NewWatchers(clientset, "test-node", testLogger())
 
 	var mu sync.Mutex
@@ -252,7 +252,7 @@ func TestWatchersNamespaceEvents(t *testing.T) {
 }
 
 func TestWatchersNetworkPolicyEvents(t *testing.T) {
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 	w := NewWatchers(clientset, "test-node", testLogger())
 
 	var mu sync.Mutex
@@ -315,7 +315,7 @@ func TestWatchersNetworkPolicyEvents(t *testing.T) {
 }
 
 func TestWatchersNoCallbacks(t *testing.T) {
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 	w := NewWatchers(clientset, "test-node", testLogger())
 
 	// Do not set any callbacks. Verify no panic occurs.
@@ -346,16 +346,16 @@ func TestWatchersNoCallbacks(t *testing.T) {
 }
 
 func TestWatchersPodUpdateEvent(t *testing.T) {
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 	w := NewWatchers(clientset, "test-node", testLogger())
 
 	var mu sync.Mutex
 	var updatedPods []*corev1.Pod
 
 	w.OnPodAdd = func(pod *corev1.Pod) {}
-	w.OnPodUpdate = func(old, new *corev1.Pod) {
+	w.OnPodUpdate = func(_, updated *corev1.Pod) {
 		mu.Lock()
-		updatedPods = append(updatedPods, new)
+		updatedPods = append(updatedPods, updated)
 		mu.Unlock()
 	}
 

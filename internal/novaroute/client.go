@@ -4,6 +4,7 @@ package novaroute
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -13,6 +14,9 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
+
+// ErrNotConnected is returned when an RPC is attempted before Connect.
+var ErrNotConnected = errors.New("not connected to NovaRoute")
 
 // Client wraps a NovaRoute gRPC connection with retry logic and lifecycle management.
 type Client struct {
@@ -81,7 +85,7 @@ func (c *Client) Register(ctx context.Context) (*nrpb.RegisterResponse, error) {
 	c.mu.Unlock()
 
 	if cl == nil {
-		return nil, fmt.Errorf("not connected")
+		return nil, ErrNotConnected
 	}
 
 	resp, err := cl.Register(ctx, &nrpb.RegisterRequest{
@@ -107,7 +111,7 @@ func (c *Client) ConfigureBGP(ctx context.Context, localAS uint32, routerID stri
 	c.mu.Unlock()
 
 	if cl == nil {
-		return fmt.Errorf("not connected")
+		return ErrNotConnected
 	}
 
 	_, err := cl.ConfigureBGP(ctx, &nrpb.ConfigureBGPRequest{
@@ -134,7 +138,7 @@ func (c *Client) ApplyPeer(ctx context.Context, neighborAddr string, remoteAS ui
 	c.mu.Unlock()
 
 	if cl == nil {
-		return fmt.Errorf("not connected")
+		return ErrNotConnected
 	}
 
 	_, err := cl.ApplyPeer(ctx, &nrpb.ApplyPeerRequest{
@@ -165,7 +169,7 @@ func (c *Client) AdvertisePrefix(ctx context.Context, prefix string) error {
 	c.mu.Unlock()
 
 	if cl == nil {
-		return fmt.Errorf("not connected")
+		return ErrNotConnected
 	}
 
 	_, err := cl.AdvertisePrefix(ctx, &nrpb.AdvertisePrefixRequest{
@@ -189,7 +193,7 @@ func (c *Client) WithdrawPrefix(ctx context.Context, prefix string) error {
 	c.mu.Unlock()
 
 	if cl == nil {
-		return fmt.Errorf("not connected")
+		return ErrNotConnected
 	}
 
 	_, err := cl.WithdrawPrefix(ctx, &nrpb.WithdrawPrefixRequest{

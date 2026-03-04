@@ -29,7 +29,7 @@ func runMetrics() error {
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	client := newAgentClient(conn)
 
@@ -42,14 +42,14 @@ func runMetrics() error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintf(w, "NOVANET METRICS SUMMARY\n")
-	fmt.Fprintf(w, "=======================\n\n")
+	_, _ = fmt.Fprintf(w, "NOVANET METRICS SUMMARY\n")
+	_, _ = fmt.Fprintf(w, "=======================\n\n")
 
-	fmt.Fprintf(w, "Endpoints:\t%d\n", status.EndpointCount)
-	fmt.Fprintf(w, "Identities:\t%d\n", status.IdentityCount)
-	fmt.Fprintf(w, "Policies:\t%d\n", status.PolicyCount)
-	fmt.Fprintf(w, "Tunnels:\t%d\n", status.TunnelCount)
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintf(w, "Endpoints:\t%d\n", status.EndpointCount)
+	_, _ = fmt.Fprintf(w, "Identities:\t%d\n", status.IdentityCount)
+	_, _ = fmt.Fprintf(w, "Policies:\t%d\n", status.PolicyCount)
+	_, _ = fmt.Fprintf(w, "Tunnels:\t%d\n", status.TunnelCount)
+	_, _ = fmt.Fprintln(w)
 
 	dpStatus := "disconnected"
 	dpPrograms := uint32(0)
@@ -59,12 +59,12 @@ func runMetrics() error {
 		}
 		dpPrograms = status.Dataplane.AttachedPrograms
 	}
-	fmt.Fprintf(w, "Dataplane Status:\t%s\n", dpStatus)
-	fmt.Fprintf(w, "Attached Programs:\t%d\n", dpPrograms)
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintf(w, "Dataplane Status:\t%s\n", dpStatus)
+	_, _ = fmt.Fprintf(w, "Attached Programs:\t%d\n", dpPrograms)
+	_, _ = fmt.Fprintln(w)
 
-	fmt.Fprintln(w, "Note: Detailed flow/drop counters are available via the Prometheus")
-	fmt.Fprintf(w, "metrics endpoint or by using 'novanetctl flows' / 'novanetctl drops'.\n")
+	_, _ = fmt.Fprintln(w, "Note: Detailed flow/drop counters are available via the Prometheus")
+	_, _ = fmt.Fprintf(w, "metrics endpoint or by using 'novanetctl flows' / 'novanetctl drops'.\n")
 
 	return w.Flush()
 }

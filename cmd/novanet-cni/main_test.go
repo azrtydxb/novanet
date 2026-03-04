@@ -189,7 +189,7 @@ func TestCNILoggerPrintf_Output(t *testing.T) {
 
 // TestCNILoggerPrintf_NilWriter verifies that Printf is a no-op when the
 // writer is nil.
-func TestCNILoggerPrintf_NilWriter(t *testing.T) {
+func TestCNILoggerPrintf_NilWriter(_ *testing.T) {
 	l := &cniLogger{w: nil}
 	// Must not panic.
 	l.Printf("nothing should be written")

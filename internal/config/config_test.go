@@ -6,6 +6,8 @@ import (
 	"testing"
 )
 
+const testNativeMode = "native"
+
 func TestDefaultConfig(t *testing.T) {
 	cfg := DefaultConfig()
 	if cfg.ListenSocket != "/run/novanet/novanet.sock" {
@@ -39,7 +41,7 @@ func TestLoadFromFile(t *testing.T) {
 		"routing_mode": "overlay",
 		"log_level": "debug"
 	}`)
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -76,7 +78,7 @@ func TestLoadFromFile_NotFound(t *testing.T) {
 func TestLoadFromFile_InvalidJSON(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
-	if err := os.WriteFile(path, []byte("{invalid}"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte("{invalid}"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -95,7 +97,7 @@ func TestValidate_HappyPath(t *testing.T) {
 
 func TestValidate_NativeMode(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.RoutingMode = "native"
+	cfg.RoutingMode = testNativeMode
 	cfg.NovaRoute.Token = "secret"
 	cfg.NovaRoute.Protocol = "bgp"
 
@@ -106,7 +108,7 @@ func TestValidate_NativeMode(t *testing.T) {
 
 func TestValidate_NativeMode_MissingToken(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.RoutingMode = "native"
+	cfg.RoutingMode = testNativeMode
 	cfg.NovaRoute.Token = ""
 
 	err := Validate(cfg)
@@ -117,7 +119,7 @@ func TestValidate_NativeMode_MissingToken(t *testing.T) {
 
 func TestValidate_NativeMode_MissingProtocol(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.RoutingMode = "native"
+	cfg.RoutingMode = testNativeMode
 	cfg.NovaRoute.Token = "secret"
 	cfg.NovaRoute.Protocol = ""
 

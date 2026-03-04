@@ -15,6 +15,11 @@ import (
 )
 
 // requireRoot skips the test when not running as root (needed for netlink).
+const (
+	testOverlayMode = "overlay"
+	testGeneveProto = "geneve"
+)
+
 func requireRoot(t *testing.T) {
 	t.Helper()
 	if os.Getuid() != 0 {
@@ -29,8 +34,8 @@ func testLogger() *zap.Logger {
 
 func testOverlayConfig() *config.Config {
 	cfg := config.DefaultConfig()
-	cfg.RoutingMode = "overlay"
-	cfg.TunnelProtocol = "geneve"
+	cfg.RoutingMode = testOverlayMode
+	cfg.TunnelProtocol = testGeneveProto
 	return cfg
 }
 
@@ -52,7 +57,7 @@ func TestNewModeManager(t *testing.T) {
 	if m == nil {
 		t.Fatal("expected non-nil mode manager")
 	}
-	if m.Mode() != "overlay" {
+	if m.Mode() != testOverlayMode {
 		t.Fatalf("expected overlay mode, got %s", m.Mode())
 	}
 }
@@ -144,7 +149,7 @@ func TestOverlayModeStop(t *testing.T) {
 
 	ctx := t.Context()
 
-	m.Start(ctx)
+	_ = m.Start(ctx)
 
 	err := m.Stop(context.Background())
 	if err != nil {

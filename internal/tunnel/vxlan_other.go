@@ -7,11 +7,13 @@ import (
 	"sync/atomic"
 )
 
-var fakeVxlanIfindex atomic.Int32
-
-func init() {
-	fakeVxlanIfindex.Store(200)
-}
+// fakeVxlanIfindex provides monotonically increasing fake ifindex values for testing.
+// Initialized to 200 so the first Add(1) returns 201.
+var fakeVxlanIfindex = func() *atomic.Int32 {
+	v := &atomic.Int32{}
+	v.Store(200)
+	return v
+}()
 
 // createVxlanTunnel is a no-op on non-Linux platforms.
 func createVxlanTunnel(_ string, _ uint32, _ net.IP) (int, error) {

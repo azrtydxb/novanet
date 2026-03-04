@@ -9,8 +9,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// NodeInfo holds information about a cluster node.
-type NodeInfo struct {
+// Info holds information about a cluster node.
+type Info struct {
 	// Name is the Kubernetes node name.
 	Name string
 	// IP is the node's internal IP address.
@@ -22,14 +22,14 @@ type NodeInfo struct {
 }
 
 // ChangeCallback is called when a node is added, updated, or removed.
-type ChangeCallback func(event string, node *NodeInfo)
+type ChangeCallback func(event string, node *Info)
 
 // Registry tracks cluster nodes and notifies listeners on changes.
 type Registry struct {
 	mu sync.RWMutex
 
 	logger    *zap.Logger
-	nodes     map[string]*NodeInfo
+	nodes     map[string]*Info
 	callbacks []ChangeCallback
 }
 
@@ -37,7 +37,7 @@ type Registry struct {
 func NewRegistry(logger *zap.Logger) *Registry {
 	return &Registry{
 		logger: logger,
-		nodes:  make(map[string]*NodeInfo),
+		nodes:  make(map[string]*Info),
 	}
 }
 
@@ -46,7 +46,7 @@ func (r *Registry) AddNode(name, ip, podCIDR string) {
 	r.mu.Lock()
 
 	existing, isUpdate := r.nodes[name]
-	node := &NodeInfo{
+	node := &Info{
 		Name:    name,
 		IP:      ip,
 		PodCIDR: podCIDR,
@@ -106,7 +106,7 @@ func (r *Registry) RemoveNode(name string) {
 }
 
 // GetNode returns information about a specific node.
-func (r *Registry) GetNode(name string) (*NodeInfo, bool) {
+func (r *Registry) GetNode(name string) (*Info, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -121,11 +121,11 @@ func (r *Registry) GetNode(name string) (*NodeInfo, bool) {
 }
 
 // ListNodes returns a snapshot of all nodes, sorted by name.
-func (r *Registry) ListNodes() []*NodeInfo {
+func (r *Registry) ListNodes() []*Info {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	result := make([]*NodeInfo, 0, len(r.nodes))
+	result := make([]*Info, 0, len(r.nodes))
 	for _, node := range r.nodes {
 		n := *node
 		result = append(result, &n)
