@@ -496,6 +496,9 @@ jobs:
     needs: phase4-gate
     if: ${{ !cancelled() && needs.phase4-gate.result == 'success' && github.ref == 'refs/heads/main' && github.event_name == 'push' }}
     runs-on: arc-runner-novanet
+    permissions:
+      contents: write
+      packages: write
     strategy:
       matrix:
         include:
