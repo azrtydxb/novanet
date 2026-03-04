@@ -33,18 +33,22 @@ Example output:
 
 ```
 NovaNet Agent Status
-  Node IP:           192.168.100.21
-  Pod CIDR:          10.42.1.0/24
-  Cluster CIDR:      10.42.0.0/16
-  Mode:              overlay
-  Tunnel Protocol:   geneve
-  Endpoints:         12
-  Policies:          48
-  Identities:        6
-  Tunnels:           4
-  Attached Programs: 26
-  Dataplane:         connected
-  NovaRoute:         not connected
+====================
+
+Routing Mode:         overlay
+Tunnel Protocol:      geneve
+Node IP:              192.168.100.21
+Pod CIDR:             10.42.1.0/24
+Cluster CIDR:         10.42.0.0/16
+
+Endpoints:            12
+Policies:             48
+Tunnels:              4
+Identities:           6
+
+Dataplane:            connected
+Attached Programs:    26
+NovaRoute Connected:  false
 ```
 
 ---
