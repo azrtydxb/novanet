@@ -21,7 +21,7 @@ metadata:
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
 rules:
   - apiGroups: [""]
-    resources: ["pods", "nodes"]
+    resources: ["pods", "nodes", "services", "configmaps"]
     verbs: ["get", "list"]
   - apiGroups: ["apps"]
     resources: ["daemonsets"]
