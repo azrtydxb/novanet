@@ -72,8 +72,8 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/piwi3910/novanet/novanet-agent
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern=v{{version}}
+            type=semver,pattern=v{{major}}.{{minor}}
             type=sha,format=short
             type=raw,value=latest
 
@@ -114,8 +114,8 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/piwi3910/novanet/novanet-dataplane
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern=v{{version}}
+            type=semver,pattern=v{{major}}.{{minor}}
             type=sha,format=short
             type=raw,value=latest
 
