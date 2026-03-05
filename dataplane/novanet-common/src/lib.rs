@@ -1,6 +1,6 @@
 //! NovaNet common types shared between eBPF programs and the userspace dataplane.
 //!
-//! All types are `#[repr(C)]` so they can be used directly in eBPF maps from
+//! All types are `#[repr(C)]` so they can be safely used in eBPF maps from
 //! both the aya (userspace) and aya-ebpf (kernel) sides. No external dependencies
 //! are required — both libraries work with plain `repr(C)` types natively.
 
