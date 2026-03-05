@@ -320,6 +320,15 @@ pub fn tc_ingress(ctx: TcContext) -> i32 {
     }
 }
 
+/// Derive a deterministic tunnel MAC address from an IPv4 address.
+/// Format: `aa:bb:IP[0]:IP[1]:IP[2]:IP[3]` — matches Go's IPToTunnelMAC.
+/// The IP must be in network byte order (big-endian).
+#[inline(always)]
+fn ip_to_tunnel_mac(ip: u64) -> [u8; 6] {
+    let ip_bytes = (ip as u32).to_be_bytes();
+    [0xaa, 0xbb, ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3]]
+}
+
 #[inline(always)]
 fn try_tc_ingress(ctx: &TcContext) -> Result<i32, ()> {
     // Parse Ethernet header.
@@ -456,15 +465,15 @@ fn try_tc_ingress(ctx: &TcContext) -> Result<i32, ()> {
 // ===========================================================================
 
 #[classifier]
-pub fn tc_egress(ctx: TcContext) -> i32 {
-    match try_tc_egress(&ctx) {
+pub fn tc_egress(mut ctx: TcContext) -> i32 {
+    match try_tc_egress(&mut ctx) {
         Ok(action) => action,
         Err(_) => BPF_TC_ACT_OK as i32,
     }
 }
 
 #[inline(always)]
-fn try_tc_egress(ctx: &TcContext) -> Result<i32, ()> {
+fn try_tc_egress(ctx: &mut TcContext) -> Result<i32, ()> {
     // Parse Ethernet header.
     let eth: EthHdr = ctx.load(0).map_err(|_| ())?;
     let ether_type = eth.ether_type;
@@ -564,6 +573,21 @@ fn try_tc_egress(ctx: &TcContext) -> Result<i32, ()> {
             };
             // SAFETY: eBPF map lookup + BPF helper; safety guaranteed by verifier.
             if let Some(tunnel) = unsafe { TUNNELS.get(&tunnel_key) } {
+                // Rewrite inner Ethernet header MACs before redirecting to the
+                // tunnel interface. Without this, the inner frame carries the
+                // pod veth's MAC addresses. On the receiving node, the kernel
+                // classifies the decapsulated packet as PACKET_OTHERHOST (dst MAC
+                // doesn't match the tunnel interface MAC) and drops it in ip_rcv().
+                //
+                // MAC format matches Go's IPToTunnelMAC: aa:bb:IP[0]:IP[1]:IP[2]:IP[3]
+                let local_ip = get_config(CONFIG_KEY_NODE_IP);
+                let remote_ip = tunnel.remote_ip;
+                let src_mac: [u8; 6] = ip_to_tunnel_mac(local_ip);
+                let dst_mac: [u8; 6] = ip_to_tunnel_mac(remote_ip as u64);
+                // Write destination MAC at offset 0, source MAC at offset 6.
+                let _ = ctx.store(0, &dst_mac, 0);
+                let _ = ctx.store(6, &src_mac, 0);
+
                 // Redirect to tunnel interface for kernel encapsulation.
                 // Identity is resolved on the receiving side via endpoint map lookup.
                 emit_flow_event(

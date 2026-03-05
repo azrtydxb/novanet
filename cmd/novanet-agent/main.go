@@ -1968,6 +1968,22 @@ func (nw *nodeWatcherState) ensureTunnel(nodeName, nodeIP, podCIDR string, parse
 		if err != nil {
 			nw.logger.Error("failed to register tunnel with dataplane", zap.Error(err), zap.String("node", nodeName))
 		}
+
+		// Attach TC ingress and egress eBPF programs to the tunnel interface.
+		// The dataplane selects tc_tunnel_ingress/tc_tunnel_egress based on
+		// the interface name prefix (geneve* or vxlan*).
+		if _, err := nw.dpClient.AttachProgram(nw.ctx, &pb.AttachProgramRequest{
+			InterfaceName: tunnelInfo.InterfaceName,
+			AttachType:    pb.AttachType_ATTACH_TC_INGRESS,
+		}); err != nil {
+			nw.logger.Warn("failed to attach TC ingress to tunnel", zap.String("iface", tunnelInfo.InterfaceName), zap.Error(err))
+		}
+		if _, err := nw.dpClient.AttachProgram(nw.ctx, &pb.AttachProgramRequest{
+			InterfaceName: tunnelInfo.InterfaceName,
+			AttachType:    pb.AttachType_ATTACH_TC_EGRESS,
+		}); err != nil {
+			nw.logger.Warn("failed to attach TC egress to tunnel", zap.String("iface", tunnelInfo.InterfaceName), zap.Error(err))
+		}
 	}
 
 	// Add kernel route.
