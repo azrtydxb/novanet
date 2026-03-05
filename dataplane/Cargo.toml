@@ -5,3 +5,16 @@ members = ["novanet-common", "novanet-dataplane", "novanet-ebpf"]
 # Only build the userspace crates by default. The eBPF crate requires
 # --target bpfel-unknown-none and can only compile on Linux.
 default-members = ["novanet-common", "novanet-dataplane"]
+
+# Dev profile: fast compilation, minimal debug info.
+[profile.dev]
+debug = 1
+incremental = true
+opt-level = 0
+codegen-units = 16
+
+# Release profile: full optimization with thin LTO.
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

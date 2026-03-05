@@ -1,5 +1,8 @@
 [target.bpfel-unknown-none]
 rustflags = ["-C", "link-arg=--btf"]
 
+# mold linker: set RUSTFLAGS="-C link-arg=-fuse-ld=mold" in CI/local builds.
+# Not configured here to avoid conflicts with Docker cross-compilation.
+
 [build]
 target-dir = "target"

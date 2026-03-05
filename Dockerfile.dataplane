@@ -21,6 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     protobuf-compiler \
     gcc-aarch64-linux-gnu \
     libc6-dev-arm64-cross \
+    mold \
     && rm -rf /var/lib/apt/lists/*
 
 # Install nightly toolchain (required for -Z build-std=core in eBPF builds).
