@@ -766,8 +766,8 @@ fn try_tc_egress(ctx: &mut TcContext) -> Result<i32, ()> {
 // ===========================================================================
 
 #[classifier]
-pub fn tc_tunnel_ingress(ctx: TcContext) -> i32 {
-    match try_tc_tunnel_ingress(&ctx) {
+pub fn tc_tunnel_ingress(mut ctx: TcContext) -> i32 {
+    match try_tc_tunnel_ingress(&mut ctx) {
         Ok(action) => action,
         Err(_) => BPF_TC_ACT_OK as i32,
     }
@@ -818,7 +818,13 @@ struct VxlanHdr {
 }
 
 #[inline(always)]
-fn try_tc_tunnel_ingress(ctx: &TcContext) -> Result<i32, ()> {
+fn try_tc_tunnel_ingress(ctx: &mut TcContext) -> Result<i32, ()> {
+    // Mark ALL traffic arriving on tunnel interfaces so iptables KUBE-FORWARD
+    // accepts it. bpf_redirect on the sending side bypasses conntrack, so
+    // replies arrive as ctstate INVALID. The 0x4000 mark matches the
+    // KUBE-FORWARD "mark match 0x4000/0x4000 → ACCEPT" rule.
+    ctx.set_mark(0x4000);
+
     // The tunnel interface receives the outer packet. The kernel has already
     // stripped the outer Ethernet + IP + UDP headers for us on a GENEVE/VXLAN
     // tunnel device. What we see starts at the tunnel-specific header.
