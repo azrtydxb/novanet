@@ -19,6 +19,3 @@ var fakeVxlanIfindex = func() *atomic.Int32 {
 func createVxlanTunnel(_ string, _ uint32, _ net.IP) (int, error) {
 	return int(fakeVxlanIfindex.Add(1)), nil
 }
-
-func addVxlanFDB(_ string, _ net.HardwareAddr, _ net.IP) error    { return nil }
-func removeVxlanFDB(_ string, _ net.HardwareAddr, _ net.IP) error { return nil }
