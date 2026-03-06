@@ -254,28 +254,6 @@ func TestListTunnelsEmpty(t *testing.T) {
 	}
 }
 
-func TestTunnelInterfaceName(t *testing.T) {
-	tests := []struct {
-		protocol string
-		nodeName string
-		expected string
-	}{
-		{"geneve", "node-2", "nv_node-2"},
-		{"vxlan", "node-2", "nvx_node-2"},
-		{"geneve", "very-long-node-name-that-exceeds", "nv_very-long-no"},
-	}
-
-	for _, tt := range tests {
-		got := tunnelInterfaceName(tt.protocol, tt.nodeName)
-		if got != tt.expected {
-			t.Errorf("tunnelInterfaceName(%s, %s) = %s, want %s", tt.protocol, tt.nodeName, got, tt.expected)
-		}
-		if len(got) > 15 {
-			t.Errorf("interface name %s exceeds 15 chars", got)
-		}
-	}
-}
-
 func TestIPToUint32(t *testing.T) {
 	tests := []struct {
 		ip       string

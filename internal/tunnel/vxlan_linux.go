@@ -10,10 +10,10 @@ import (
 	"github.com/vishvananda/netlink"
 )
 
-// createVxlanTunnel creates or returns the single shared VXLAN interface.
-// Unlike Geneve (one interface per remote), Linux only allows one VXLAN device
-// per VNI. All remote nodes share this interface and are distinguished via FDB
-// and neighbor entries.
+// createVxlanTunnel creates or returns the single shared VXLAN interface
+// in collect-metadata (FlowBased) mode. The eBPF dataplane uses
+// bpf_skb_set_tunnel_key to set per-packet encap parameters before
+// redirecting to this interface.
 // If the interface already exists, its ifindex is returned without recreating it.
 func createVxlanTunnel(name string, vni uint32, localIP net.IP) (int, error) {
 	// Return existing interface if already created.
@@ -26,9 +26,10 @@ func createVxlanTunnel(name string, vni uint32, localIP net.IP) (int, error) {
 			Name:         name,
 			HardwareAddr: IPToTunnelMAC(localIP),
 		},
-		VxlanId:  int(vni),
-		Port:     4789,  // Standard VXLAN port.
-		Learning: false, // We manage FDB entries ourselves.
+		VxlanId:   int(vni),
+		Port:      4789,  // Standard VXLAN port.
+		Learning:  false, // We manage encap via eBPF.
+		FlowBased: true,  // Collect-metadata mode.
 	}
 
 	if err := netlink.LinkAdd(vxlan); err != nil {

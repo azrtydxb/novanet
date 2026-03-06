@@ -31,19 +31,16 @@ func IPToTunnelMAC(ip net.IP) net.HardwareAddr {
 	return net.HardwareAddr{0xaa, 0xbb, ip4[0], ip4[1], ip4[2], ip4[3]}
 }
 
-// AddRoute adds a kernel route for a CIDR via a tunnel interface.
-// srcIP is set as the preferred source on the route so that the kernel
-// uses the node's real IP instead of any VIP on loopback.
-// remoteNodeIP is the remote node's IP, used to derive the neighbor entry's
-// MAC address (must match the remote tunnel interface's MAC).
-// protocol determines the gateway strategy:
-//   - Geneve: uses the dummy gateway 169.254.1.1 (each interface is point-to-point)
-//   - VXLAN: uses the remote PodCIDR's .1 address as gateway (unique per remote,
-//     since a single shared interface carries traffic for all remotes)
+// AddRoute adds a kernel route for a CIDR via the tunnel interface.
+// With collect-metadata (FlowBased) tunnels, the eBPF dataplane handles
+// all encapsulation via bpf_skb_set_tunnel_key + bpf_redirect. The kernel
+// route exists so that the RIB knows the CIDR is reachable through the
+// tunnel device, which is needed for:
+//   - ip route get queries
+//   - host-originated traffic (kubelet health checks, DNS)
+//   - FRR/BGP prefix visibility
 //
-// Also adds an FDB entry for VXLAN so the driver knows which physical IP
-// corresponds to each inner destination MAC.
-// Uses RouteReplace and NeighSet to be idempotent.
+// Uses RouteReplace to be idempotent.
 func AddRoute(cidr string, ifName string, srcIP net.IP, remoteNodeIP net.IP, protocol string) error {
 	_, dst, err := net.ParseCIDR(cidr)
 	if err != nil {
@@ -57,35 +54,11 @@ func AddRoute(cidr string, ifName string, srcIP net.IP, remoteNodeIP net.IP, pro
 
 	linkIdx := link.Attrs().Index
 
-	// Determine the gateway IP based on protocol.
-	var gatewayIP net.IP
-	if protocol == "vxlan" {
-		// For VXLAN: use the remote PodCIDR's .1 address as gateway.
-		// Each remote has a unique PodCIDR, so each gateway is unique.
-		gatewayIP = podCIDRGateway(dst)
+	// Use the dummy gateway with a neighbor entry so the kernel can
+	// forward host-originated traffic through the tunnel device.
+	// For pod-to-pod traffic, the eBPF dataplane bypasses this entirely.
+	gatewayIP := dummyGateway
 
-		// Ensure FDB entry exists (idempotent via NeighSet).
-		remoteMAC := IPToTunnelMAC(remoteNodeIP)
-		fdb := &netlink.Neigh{
-			LinkIndex:    linkIdx,
-			Family:       syscall.AF_BRIDGE,
-			HardwareAddr: remoteMAC,
-			IP:           remoteNodeIP,
-			State:        netlink.NUD_PERMANENT,
-			Flags:        netlink.NTF_SELF,
-		}
-		if err := netlink.NeighSet(fdb); err != nil {
-			return fmt.Errorf("adding VXLAN FDB entry on %s: %w", ifName, err)
-		}
-	} else {
-		// For Geneve: each interface is point-to-point, use shared dummy gateway.
-		gatewayIP = dummyGateway
-	}
-
-	// Add a permanent neighbor entry for the gateway using the remote
-	// node's derived MAC. This MAC must match the receiving tunnel interface's
-	// MAC so that the kernel classifies decapsulated inner packets as
-	// PACKET_HOST (not PACKET_OTHERHOST or PACKET_LOOPBACK).
 	neigh := &netlink.Neigh{
 		LinkIndex:    linkIdx,
 		IP:           gatewayIP,
@@ -97,9 +70,6 @@ func AddRoute(cidr string, ifName string, srcIP net.IP, remoteNodeIP net.IP, pro
 		return fmt.Errorf("adding neighbor entry on %s: %w", ifName, err)
 	}
 
-	// Route the CIDR via the gateway with the onlink flag.
-	// The onlink flag tells the kernel the gateway is directly reachable on
-	// this link even though it's not in a connected subnet.
 	route := &netlink.Route{
 		Dst:       dst,
 		Gw:        gatewayIP,
@@ -113,20 +83,6 @@ func AddRoute(cidr string, ifName string, srcIP net.IP, remoteNodeIP net.IP, pro
 	}
 
 	return nil
-}
-
-// podCIDRGateway returns the .1 address of a parsed CIDR network.
-// Normalizes to IPv4 so that the last byte is correctly the host octet
-// even when Go stores the IP in 16-byte (IPv6-mapped) form.
-func podCIDRGateway(network *net.IPNet) net.IP {
-	ip := network.IP
-	if v4 := ip.To4(); v4 != nil {
-		ip = v4
-	}
-	gw := make(net.IP, len(ip))
-	copy(gw, ip)
-	gw[len(gw)-1] = 1
-	return gw
 }
 
 // AddBlackholeRoute installs a blackhole route for a CIDR. This makes the

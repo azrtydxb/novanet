@@ -50,6 +50,11 @@ type Manager struct {
 	dpClient dataplane.ClientInterface
 	logger   *zap.Logger
 
+	// tunnelIfName is the single collect-metadata tunnel interface name.
+	tunnelIfName string
+	// tunnelIfindex is the ifindex of the single tunnel interface.
+	tunnelIfindex int
+
 	// tunnels maps node name to tunnel info.
 	tunnels map[string]*Info
 }
@@ -66,7 +71,10 @@ func NewManager(protocol string, nodeIP net.IP, vni uint32, dpClient dataplane.C
 	}
 }
 
-// AddTunnel creates a tunnel interface to a remote node.
+// AddTunnel registers a remote node for overlay communication.
+// Both Geneve and VXLAN use a single collect-metadata (FlowBased) interface.
+// The eBPF dataplane sets per-packet tunnel metadata via bpf_skb_set_tunnel_key
+// and redirects to the shared tunnel interface.
 func (m *Manager) AddTunnel(ctx context.Context, nodeName, nodeIP, podCIDR string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -81,46 +89,20 @@ func (m *Manager) AddTunnel(ctx context.Context, nodeName, nodeIP, podCIDR strin
 			zap.String("node", nodeName),
 			zap.String("node_ip", nodeIP),
 		)
-		// Remove existing tunnel before recreating.
 		m.removeTunnelLocked(ctx, nodeName)
 	}
 
-	ifName := tunnelInterfaceName(m.protocol, nodeName)
-
-	var ifindex int
-	var err error
-	switch m.protocol {
-	case protocolGeneve:
-		ifindex, err = createGeneveTunnel(ifName, nodeIP, m.vni, m.nodeIP)
-	case protocolVxlan:
-		// VXLAN uses a single shared interface for all remotes.
-		// The interface name is always "nvx0" regardless of nodeName.
-		ifName = "nvx0"
-		ifindex, err = createVxlanTunnel(ifName, m.vni, m.nodeIP)
-		if err == nil {
-			// Add FDB entry mapping remote MAC → remote physical IP.
-			remoteMAC := IPToTunnelMAC(parsedIP)
-			if fdbErr := addVxlanFDB(ifName, remoteMAC, parsedIP); fdbErr != nil {
-				m.logger.Error("failed to add VXLAN FDB entry",
-					zap.Error(fdbErr),
-					zap.String("node", nodeName),
-					zap.String("node_ip", nodeIP),
-				)
-			}
-		}
-	default:
-		return fmt.Errorf("%w: %s", ErrUnsupportedTunnelProto, m.protocol)
+	// Ensure the single tunnel interface exists.
+	if err := m.ensureTunnelInterface(); err != nil {
+		return err
 	}
 
-	if err != nil {
-		return fmt.Errorf("creating %s tunnel to %s: %w", m.protocol, nodeName, err)
-	}
-
-	// Register the tunnel with the dataplane.
+	// Register this remote node in the eBPF TUNNELS map.
+	// All remotes share the same ifindex; the eBPF program sets per-packet
+	// tunnel metadata (remote IP, VNI) via bpf_skb_set_tunnel_key.
 	remoteIP := IPToUint32(parsedIP)
 	if m.dpClient != nil {
-		if err := m.dpClient.UpsertTunnel(ctx, remoteIP, uint32(ifindex), m.vni); err != nil { //nolint:gosec // ifindex is a kernel interface index, always positive and small
-			destroyTunnel(ifName)
+		if err := m.dpClient.UpsertTunnel(ctx, remoteIP, uint32(m.tunnelIfindex), m.vni); err != nil { //nolint:gosec // ifindex is always positive and small
 			return fmt.Errorf("registering tunnel with dataplane: %w", err)
 		}
 	}
@@ -129,13 +111,51 @@ func (m *Manager) AddTunnel(ctx context.Context, nodeName, nodeIP, podCIDR strin
 		NodeName:      nodeName,
 		NodeIP:        nodeIP,
 		PodCIDR:       podCIDR,
-		InterfaceName: ifName,
-		Ifindex:       ifindex,
+		InterfaceName: m.tunnelIfName,
+		Ifindex:       m.tunnelIfindex,
 	}
 
-	m.logger.Info("created tunnel",
+	m.logger.Info("registered remote node for tunnel",
 		zap.String("node", nodeName),
 		zap.String("node_ip", nodeIP),
+		zap.String("protocol", m.protocol),
+		zap.String("interface", m.tunnelIfName),
+		zap.Int("ifindex", m.tunnelIfindex),
+	)
+
+	return nil
+}
+
+// ensureTunnelInterface creates the single collect-metadata tunnel interface
+// if it doesn't already exist.
+func (m *Manager) ensureTunnelInterface() error {
+	if m.tunnelIfindex != 0 {
+		return nil
+	}
+
+	var ifindex int
+	var err error
+	var ifName string
+
+	switch m.protocol {
+	case protocolGeneve:
+		ifName = "nv_geneve"
+		ifindex, err = createGeneveTunnel(ifName, m.vni, m.nodeIP)
+	case protocolVxlan:
+		ifName = "nvx0"
+		ifindex, err = createVxlanTunnel(ifName, m.vni, m.nodeIP)
+	default:
+		return fmt.Errorf("%w: %s", ErrUnsupportedTunnelProto, m.protocol)
+	}
+
+	if err != nil {
+		return fmt.Errorf("creating %s tunnel interface: %w", m.protocol, err)
+	}
+
+	m.tunnelIfName = ifName
+	m.tunnelIfindex = ifindex
+
+	m.logger.Info("created collect-metadata tunnel interface",
 		zap.String("protocol", m.protocol),
 		zap.String("interface", ifName),
 		zap.Int("ifindex", ifindex),
@@ -152,14 +172,15 @@ func (m *Manager) RemoveTunnel(ctx context.Context, nodeName string) error {
 	return nil
 }
 
-// removeTunnelLocked removes a tunnel while already holding the lock.
+// removeTunnelLocked removes a remote node's tunnel entry while holding the lock.
+// The shared tunnel interface is kept — only the eBPF TUNNELS map entry is removed.
 func (m *Manager) removeTunnelLocked(ctx context.Context, nodeName string) {
 	info, ok := m.tunnels[nodeName]
 	if !ok {
 		return
 	}
 
-	// Remove from dataplane.
+	// Remove from eBPF TUNNELS map.
 	parsedIP := net.ParseIP(info.NodeIP)
 	if m.dpClient != nil && parsedIP != nil {
 		remoteIP := IPToUint32(parsedIP)
@@ -171,26 +192,10 @@ func (m *Manager) removeTunnelLocked(ctx context.Context, nodeName string) {
 		}
 	}
 
-	// For VXLAN, remove FDB entry but keep the shared interface.
-	// For Geneve, destroy the per-node interface.
-	if m.protocol == protocolVxlan && parsedIP != nil {
-		remoteMAC := IPToTunnelMAC(parsedIP)
-		if err := removeVxlanFDB(info.InterfaceName, remoteMAC, parsedIP); err != nil {
-			m.logger.Warn("failed to remove VXLAN FDB entry",
-				zap.Error(err),
-				zap.String("node", nodeName),
-				zap.String("interface", info.InterfaceName),
-			)
-		}
-	} else {
-		destroyTunnel(info.InterfaceName)
-	}
-
 	delete(m.tunnels, nodeName)
 
-	m.logger.Info("removed tunnel",
+	m.logger.Info("removed tunnel entry",
 		zap.String("node", nodeName),
-		zap.String("interface", info.InterfaceName),
 	)
 }
 
@@ -230,19 +235,6 @@ func (m *Manager) Count() int {
 // Protocol returns the tunnel protocol in use.
 func (m *Manager) Protocol() string {
 	return m.protocol
-}
-
-// tunnelInterfaceName generates a tunnel interface name. Truncated to 15 chars.
-func tunnelInterfaceName(protocol, nodeName string) string {
-	prefix := "nv_"
-	if protocol == protocolVxlan {
-		prefix = "nvx_"
-	}
-	name := prefix + nodeName
-	if len(name) > 15 {
-		name = name[:15]
-	}
-	return name
 }
 
 // IPToUint32 converts an IPv4 address to a uint32 in network byte order.

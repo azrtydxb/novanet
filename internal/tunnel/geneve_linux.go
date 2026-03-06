@@ -3,24 +3,21 @@
 package tunnel
 
 import (
-	"errors"
 	"fmt"
 	"net"
 
 	"github.com/vishvananda/netlink"
 )
 
-// ErrInvalidRemoteIP indicates the remote IP string could not be parsed.
-var ErrInvalidRemoteIP = errors.New("invalid remote IP")
-
-// createGeneveTunnel creates a Geneve tunnel interface on Linux.
-// The interface is assigned a MAC derived from localIP so that decapsulated
-// inner packets (whose destination MAC is set by the sending node's neighbor
-// entry) are classified as PACKET_HOST by the kernel.
-func createGeneveTunnel(name, remoteIP string, vni uint32, localIP net.IP) (int, error) {
-	remote := net.ParseIP(remoteIP)
-	if remote == nil {
-		return 0, fmt.Errorf("%w: %s", ErrInvalidRemoteIP, remoteIP)
+// createGeneveTunnel creates a single collect-metadata (FlowBased) Geneve
+// tunnel interface. The eBPF dataplane uses bpf_skb_set_tunnel_key to set
+// the remote IP, VNI, and TTL per-packet before redirecting to this interface.
+// This is the same approach used by Cilium and Calico.
+// If the interface already exists, its ifindex is returned without recreating.
+func createGeneveTunnel(name string, vni uint32, localIP net.IP) (int, error) {
+	// Return existing interface if already created.
+	if existing, err := netlink.LinkByName(name); err == nil {
+		return existing.Attrs().Index, nil
 	}
 
 	geneve := &netlink.Geneve{
@@ -28,14 +25,9 @@ func createGeneveTunnel(name, remoteIP string, vni uint32, localIP net.IP) (int,
 			Name:         name,
 			HardwareAddr: IPToTunnelMAC(localIP),
 		},
-		ID:     vni,
-		Remote: remote,
-		Dport:  6081, // Standard Geneve port.
-	}
-
-	// Delete any stale interface from a previous run.
-	if existing, err := netlink.LinkByName(name); err == nil {
-		_ = netlink.LinkDel(existing)
+		ID:        vni,
+		FlowBased: true, // Collect-metadata mode — no static Remote.
+		Dport:     6081,  // Standard Geneve port.
 	}
 
 	if err := netlink.LinkAdd(geneve); err != nil {

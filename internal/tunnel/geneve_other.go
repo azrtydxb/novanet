@@ -17,6 +17,6 @@ var fakeGenevIfindex = func() *atomic.Int32 {
 
 // createGeneveTunnel is a no-op on non-Linux platforms.
 // Returns a fake ifindex for testing.
-func createGeneveTunnel(_, _ string, _ uint32, _ net.IP) (int, error) {
+func createGeneveTunnel(_ string, _ uint32, _ net.IP) (int, error) {
 	return int(fakeGenevIfindex.Add(1)), nil
 }

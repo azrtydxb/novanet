@@ -14,7 +14,8 @@
 use aya_ebpf::{
     bindings::TC_ACT_OK as BPF_TC_ACT_OK,
     bindings::TC_ACT_SHOT as BPF_TC_ACT_SHOT,
-    helpers::bpf_redirect,
+    bindings::{BPF_F_ZERO_CSUM_TX, bpf_tunnel_key},
+    helpers::{bpf_redirect, bpf_skb_set_tunnel_key},
     macros::{classifier, map},
     maps::{HashMap, PerCpuArray, RingBuf},
     programs::TcContext,
@@ -336,6 +337,33 @@ fn ip_to_tunnel_mac(ip: u64) -> [u8; 6] {
     ]
 }
 
+// ---------------------------------------------------------------------------
+// Helper: set tunnel key metadata on skb for collect-metadata tunnel devices
+// ---------------------------------------------------------------------------
+
+/// Sets tunnel encapsulation metadata on the skb so a collect-metadata
+/// (external/FlowBased) tunnel device can perform encapsulation.
+/// This is the same approach used by Cilium and Calico:
+///   1. Call bpf_skb_set_tunnel_key with remote_ipv4, tunnel_id (VNI), TTL
+///   2. bpf_redirect to the tunnel ifindex
+///   3. Kernel reads metadata from skb and encapsulates (Geneve/VXLAN)
+#[inline(always)]
+fn set_tunnel_key(ctx: &mut TcContext, remote_ip: u32, vni: u32) -> i64 {
+    let mut key: bpf_tunnel_key = unsafe { core::mem::zeroed() };
+    key.tunnel_id = vni;
+    key.__bindgen_anon_1.remote_ipv4 = remote_ip;
+    key.tunnel_ttl = 64;
+
+    unsafe {
+        bpf_skb_set_tunnel_key(
+            ctx.skb.skb,
+            &mut key as *mut bpf_tunnel_key,
+            core::mem::size_of::<bpf_tunnel_key>() as u32,
+            BPF_F_ZERO_CSUM_TX as u64,
+        )
+    }
+}
+
 #[inline(always)]
 fn try_tc_ingress(ctx: &TcContext) -> Result<i32, ()> {
     // Parse Ethernet header.
@@ -578,38 +606,56 @@ fn try_tc_egress(ctx: &mut TcContext) -> Result<i32, ()> {
             let tunnel_key = TunnelKey {
                 node_ip: dst_ep.node_ip,
             };
-            // SAFETY: eBPF map lookup + BPF helper; safety guaranteed by verifier.
             if let Some(tunnel) = unsafe { TUNNELS.get(&tunnel_key) } {
-                // Rewrite inner Ethernet header MACs before redirecting to the
-                // tunnel interface. Without this, the inner frame carries the
-                // pod veth's MAC addresses. On the receiving node, the kernel
-                // classifies the decapsulated packet as PACKET_OTHERHOST (dst MAC
-                // doesn't match the tunnel interface MAC) and drops it in ip_rcv().
-                //
-                // MAC format matches Go's IPToTunnelMAC: aa:bb:IP[0]:IP[1]:IP[2]:IP[3]
-                let local_ip = get_config(CONFIG_KEY_NODE_IP);
-                let remote_ip = tunnel.remote_ip;
-                let src_mac: [u8; 6] = ip_to_tunnel_mac(local_ip);
-                let dst_mac: [u8; 6] = ip_to_tunnel_mac(remote_ip as u64);
-                // Write destination MAC at offset 0, source MAC at offset 6.
-                let _ = ctx.store(0, &dst_mac, 0);
-                let _ = ctx.store(6, &src_mac, 0);
+                // Policy check before encapsulation.
+                match check_policy(src_identity, dst_identity, protocol, dst_port) {
+                    Some(ACTION_DENY) => {
+                        inc_drop_counter(DROP_REASON_POLICY_DENIED);
+                        emit_flow_event(
+                            src_ip, dst_ip, src_identity, dst_identity,
+                            protocol, src_port, dst_port,
+                            ACTION_DENY, DROP_REASON_POLICY_DENIED,
+                            tcp_flags, total_len,
+                        );
+                        return Ok(BPF_TC_ACT_SHOT as i32);
+                    }
+                    Some(ACTION_ALLOW) => {
+                        // Explicit allow — proceed to encapsulation.
+                    }
+                    _ => {
+                        // No policy matched — check default deny.
+                        let default_deny = get_config(CONFIG_KEY_DEFAULT_DENY);
+                        if default_deny == 1 {
+                            inc_drop_counter(DROP_REASON_POLICY_DENIED);
+                            emit_flow_event(
+                                src_ip, dst_ip, src_identity, dst_identity,
+                                protocol, src_port, dst_port,
+                                ACTION_DENY, DROP_REASON_POLICY_DENIED,
+                                tcp_flags, total_len,
+                            );
+                            return Ok(BPF_TC_ACT_SHOT as i32);
+                        }
+                    }
+                }
 
-                // Redirect to tunnel interface for kernel encapsulation.
-                // Identity is resolved on the receiving side via endpoint map lookup.
+                // Set tunnel metadata on the skb so the kernel's collect-metadata
+                // tunnel device performs proper encapsulation (like Cilium/Calico).
+                // The tunnel device reads remote_ipv4/tunnel_id/ttl from skb metadata
+                // set by bpf_skb_set_tunnel_key, then encapsulates and transmits.
+                let ret = set_tunnel_key(ctx, tunnel.remote_ip, tunnel.vni);
+                if ret < 0 {
+                    inc_drop_counter(DROP_REASON_NO_TUNNEL);
+                    return Ok(BPF_TC_ACT_SHOT as i32);
+                }
+
                 emit_flow_event(
-                    src_ip,
-                    dst_ip,
-                    src_identity,
-                    dst_identity,
-                    protocol,
-                    src_port,
-                    dst_port,
-                    ACTION_ALLOW,
-                    DROP_REASON_NONE,
-                    tcp_flags,
-                    total_len,
+                    src_ip, dst_ip, src_identity, dst_identity,
+                    protocol, src_port, dst_port,
+                    ACTION_ALLOW, DROP_REASON_NONE,
+                    tcp_flags, total_len,
                 );
+                // Redirect to the tunnel interface. The kernel will read the
+                // tunnel metadata we just set and do Geneve/VXLAN encapsulation.
                 unsafe {
                     return Ok(bpf_redirect(tunnel.ifindex, 0) as i32);
                 }
@@ -617,17 +663,10 @@ fn try_tc_egress(ctx: &mut TcContext) -> Result<i32, ()> {
                 // No tunnel entry for remote node.
                 inc_drop_counter(DROP_REASON_NO_TUNNEL);
                 emit_flow_event(
-                    src_ip,
-                    dst_ip,
-                    src_identity,
-                    dst_identity,
-                    protocol,
-                    src_port,
-                    dst_port,
-                    ACTION_DENY,
-                    DROP_REASON_NO_TUNNEL,
-                    tcp_flags,
-                    total_len,
+                    src_ip, dst_ip, src_identity, dst_identity,
+                    protocol, src_port, dst_port,
+                    ACTION_DENY, DROP_REASON_NO_TUNNEL,
+                    tcp_flags, total_len,
                 );
                 return Ok(BPF_TC_ACT_SHOT as i32);
             }
@@ -733,28 +772,22 @@ fn try_tc_egress(ctx: &mut TcContext) -> Result<i32, ()> {
     }
 
     // Destination is a cluster IP but not in our endpoint map.
-    // In overlay mode, this means we don't know the remote node — drop.
+    // Let the kernel route it — in native mode the kernel routes via BGP.
+    // In overlay mode, unknown destinations are dropped since eBPF handles
+    // all tunnel encapsulation via bpf_skb_set_tunnel_key + bpf_redirect.
     let mode = get_config(CONFIG_KEY_MODE);
     if mode == MODE_OVERLAY {
         inc_drop_counter(DROP_REASON_NO_ROUTE);
         emit_flow_event(
-            src_ip,
-            dst_ip,
-            src_identity,
-            0,
-            protocol,
-            src_port,
-            dst_port,
-            ACTION_DENY,
-            DROP_REASON_NO_ROUTE,
-            tcp_flags,
-            total_len,
+            src_ip, dst_ip, src_identity, 0,
+            protocol, src_port, dst_port,
+            ACTION_DENY, DROP_REASON_NO_ROUTE,
+            tcp_flags, total_len,
         );
-        return Ok(BPF_TC_ACT_SHOT as i32);
+        Ok(BPF_TC_ACT_SHOT as i32)
+    } else {
+        Ok(BPF_TC_ACT_OK as i32)
     }
-
-    // Native mode: let kernel route it.
-    Ok(BPF_TC_ACT_OK as i32)
 }
 
 // ===========================================================================
