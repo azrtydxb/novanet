@@ -32,7 +32,7 @@ func GenerateMaglevTable(backends []string, tableSize int) []uint32 {
 
 	filled := 0
 	for filled < tableSize {
-		for i := 0; i < n; i++ {
+		for i := range n {
 			pos := next[i]
 			for table[pos] != ^uint32(0) {
 				pos = (pos + skips[i]) % uint32(tableSize)
