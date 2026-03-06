@@ -5,14 +5,14 @@ metadata:
   namespace: argocd
   annotations:
     argocd-image-updater.argoproj.io/image-list: >-
-      agent=ghcr.io/piwi3910/novanet-agent,
-      dataplane=ghcr.io/piwi3910/novanet-dataplane
-    argocd-image-updater.argoproj.io/agent.update-strategy: latest
-    argocd-image-updater.argoproj.io/dataplane.update-strategy: latest
-    argocd-image-updater.argoproj.io/agent.helm.image-name: agent.image.repository
-    argocd-image-updater.argoproj.io/agent.helm.image-tag: agent.image.tag
-    argocd-image-updater.argoproj.io/dataplane.helm.image-name: dataplane.image.repository
-    argocd-image-updater.argoproj.io/dataplane.helm.image-tag: dataplane.image.tag
+      agent=ghcr.io/piwi3910/novanet/novanet-agent,
+      dataplane=ghcr.io/piwi3910/novanet/novanet-dataplane
+    argocd-image-updater.argoproj.io/agent.update-strategy: semver
+    argocd-image-updater.argoproj.io/dataplane.update-strategy: semver
+    argocd-image-updater.argoproj.io/agent.helm.image-name: image.agent.repository
+    argocd-image-updater.argoproj.io/agent.helm.image-tag: image.agent.tag
+    argocd-image-updater.argoproj.io/dataplane.helm.image-name: image.dataplane.repository
+    argocd-image-updater.argoproj.io/dataplane.helm.image-tag: image.dataplane.tag
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
@@ -24,14 +24,15 @@ spec:
     helm:
       releaseName: novanet
       valuesObject:
-        agent:
-          image:
-            repository: ghcr.io/piwi3910/novanet-agent
-            tag: latest
-        dataplane:
-          image:
-            repository: ghcr.io/piwi3910/novanet-dataplane
-            tag: latest
+        image:
+          agent:
+            repository: ghcr.io/piwi3910/novanet/novanet-agent
+            tag: v1.6.0
+          dataplane:
+            repository: ghcr.io/piwi3910/novanet/novanet-dataplane
+            tag: v1.6.0
+        l4lb:
+          enabled: true
   destination:
     server: https://kubernetes.default.svc
     namespace: novanet-system
