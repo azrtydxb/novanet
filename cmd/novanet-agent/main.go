@@ -1876,6 +1876,11 @@ type nodeWatcherState struct {
 	tunnelMgr  *tunnel.Manager
 	dpClient   pb.DataplaneControlClient
 	selfNodeIP net.IP
+
+	// tunnelProgramsAttached tracks whether TC programs have been attached
+	// to the shared collect-metadata tunnel interface. With FlowBased tunnels,
+	// all remote nodes share a single interface, so programs are attached once.
+	tunnelProgramsAttached bool
 }
 
 func watchNodes(ctx context.Context, logger *zap.Logger, k8sClient *kubernetes.Clientset,
@@ -1969,20 +1974,21 @@ func (nw *nodeWatcherState) ensureTunnel(nodeName, nodeIP, podCIDR string, parse
 			nw.logger.Error("failed to register tunnel with dataplane", zap.Error(err), zap.String("node", nodeName))
 		}
 
-		// Attach TC ingress and egress eBPF programs to the tunnel interface.
-		// The dataplane selects tc_tunnel_ingress/tc_tunnel_egress based on
-		// the interface name prefix (geneve* or vxlan*).
-		if _, err := nw.dpClient.AttachProgram(nw.ctx, &pb.AttachProgramRequest{
-			InterfaceName: tunnelInfo.InterfaceName,
-			AttachType:    pb.AttachType_ATTACH_TC_INGRESS,
-		}); err != nil {
-			nw.logger.Warn("failed to attach TC ingress to tunnel", zap.String("iface", tunnelInfo.InterfaceName), zap.Error(err))
-		}
-		if _, err := nw.dpClient.AttachProgram(nw.ctx, &pb.AttachProgramRequest{
-			InterfaceName: tunnelInfo.InterfaceName,
-			AttachType:    pb.AttachType_ATTACH_TC_EGRESS,
-		}); err != nil {
-			nw.logger.Warn("failed to attach TC egress to tunnel", zap.String("iface", tunnelInfo.InterfaceName), zap.Error(err))
+		// Attach TC programs to the shared tunnel interface (once only).
+		if !nw.tunnelProgramsAttached {
+			if _, err := nw.dpClient.AttachProgram(nw.ctx, &pb.AttachProgramRequest{
+				InterfaceName: tunnelInfo.InterfaceName,
+				AttachType:    pb.AttachType_ATTACH_TC_INGRESS,
+			}); err != nil {
+				nw.logger.Warn("failed to attach TC ingress to tunnel", zap.String("iface", tunnelInfo.InterfaceName), zap.Error(err))
+			}
+			if _, err := nw.dpClient.AttachProgram(nw.ctx, &pb.AttachProgramRequest{
+				InterfaceName: tunnelInfo.InterfaceName,
+				AttachType:    pb.AttachType_ATTACH_TC_EGRESS,
+			}); err != nil {
+				nw.logger.Warn("failed to attach TC egress to tunnel", zap.String("iface", tunnelInfo.InterfaceName), zap.Error(err))
+			}
+			nw.tunnelProgramsAttached = true
 		}
 	}
 
