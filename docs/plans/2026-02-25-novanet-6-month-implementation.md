@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Build NovaNet from an empty repo to a production-ready eBPF-based Kubernetes CNI with identity-based policy, dual overlay support (Geneve/VXLAN), native routing via NovaRoute (BGP/OSPF), and deep observability. NovaNet does NOT do L4 load balancing or replace kube-proxy — that is NovaEdge's domain.
+**Goal:** Build NovaNet from an empty repo to a production-ready eBPF-based Kubernetes CNI with identity-based policy, dual overlay support (Geneve/VXLAN), native routing via NovaRoute (BGP/OSPF), and deep observability. NovaNet provides L4 load balancing (ClusterIP/NodePort DNAT) as a kube-proxy replacement. When NovaEdge is installed, it supersedes NovaNet's L4 LB with full L7 capabilities.
 
 **Architecture:** Go management plane (Kubernetes watchers, policy compiler, IPAM, state reconciler, NovaRoute gRPC client) communicates with a Rust+eBPF dataplane (TC hooks, eBPF maps, ring buffer) via gRPC over Unix socket. CNI binary handles pod setup. Follows NovaRoute's patterns: structured logging (zap), Prometheus metrics, cobra CLI, protobuf API.
 

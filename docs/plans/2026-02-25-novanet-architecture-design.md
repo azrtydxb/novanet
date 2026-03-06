@@ -28,15 +28,16 @@ Provide a simple, high-performance, policy-safe networking fabric for Kubernetes
 
 NovaNet does NOT:
 - Do L7 proxying (NovaEdge's domain)
-- Manage VIPs (NovaEdge's domain)
-- Do L4 load balancing or replace kube-proxy (NovaEdge's domain)
 - Run SD-WAN logic (NovaEdge's domain)
 - Run BGP/OSPF directly (NovaRoute's domain)
 
 NovaNet focuses on:
 - Pod networking (same-node and cross-node)
+- L4 load balancing (ClusterIP/NodePort/ExternalIP DNAT — replaces kube-proxy)
 - Identity-based L3/L4 policy enforcement
 - Egress control
+
+When NovaEdge is installed, it supersedes NovaNet's L4 LB with full L7 load balancing, VIP management, and advanced traffic routing.
 - Observability
 - Integration with NovaRoute for native routing
 
