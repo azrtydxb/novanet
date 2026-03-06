@@ -434,6 +434,10 @@ ls -la /sys/fs/bpf/novanet/
 
 ### Check Tunnel Interfaces
 
+NovaNet creates tunnel interfaces with the following naming conventions:
+- **Geneve**: per-node interfaces named `nv_<nodename>` (e.g., `nv_worker-24`)
+- **VXLAN**: a single shared interface named `nvx0`
+
 ```bash
 # List all Geneve interfaces
 ip link show type geneve
