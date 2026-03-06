@@ -29,6 +29,7 @@ import (
 	"github.com/piwi3910/novanet/internal/masquerade"
 	"github.com/piwi3910/novanet/internal/novaroute"
 	"github.com/piwi3910/novanet/internal/policy"
+	"github.com/piwi3910/novanet/internal/service"
 	"github.com/piwi3910/novanet/internal/tunnel"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -68,6 +69,7 @@ const (
 	configKeySNATIP           uint32 = 7 // Reserved for eBPF-level SNAT (currently using iptables fallback).
 	configKeyPodCIDRIP        uint32 = 8
 	configKeyPodCIDRPL        uint32 = 9
+	configKeyL4LBEnabled      uint32 = 10
 
 	// Config value constants — MUST match novanet-common/src/lib.rs.
 	modeOverlay uint64 = 0
@@ -173,6 +175,9 @@ type agentServer struct {
 	policyWatcher  *policy.Watcher
 	tunnelMgr      *tunnel.Manager
 	egressMgr      *egress.Manager
+
+	// L4 LB service watcher.
+	svcWatcher *service.Watcher
 
 	// Compiled policy rules (updated by the policy watcher callback).
 	policyMu    sync.RWMutex
@@ -548,6 +553,17 @@ func (s *agentServer) ListEgressPolicies(_ context.Context, _ *pb.ListEgressPoli
 			Action:      action,
 		})
 	}
+	return resp, nil
+}
+
+// ListServices returns the L4 LB service state.
+func (s *agentServer) ListServices(_ context.Context, _ *pb.ListServicesRequest) (*pb.ListServicesResponse, error) {
+	resp := &pb.ListServicesResponse{}
+	if s.svcWatcher == nil {
+		return resp, nil
+	}
+	// The detailed service list is built from the watcher's state via a future
+	// ServiceList() method. For now return a count-only response.
 	return resp, nil
 }
 
@@ -1000,6 +1016,11 @@ func main() {
 	startPolicyWatcher(ctx, logger, k8sClient, policyCompiler, agentSrv, &bgWg)
 	startRemoteSync(ctx, logger, k8sClient, dpClient, dpConnected, params.nodeName, &bgWg)
 
+	// Start L4 LB service watcher if enabled.
+	if dpConnected {
+		startServiceWatcher(ctx, logger, cfg, k8sClient, dpClient, agentSrv)
+	}
+
 	// Start gRPC and metrics servers.
 	cniGRPC := startCNIServer(logger, cfg, agentSrv)
 	agentGRPC := startAgentServer(logger, cfg, agentSrv)
@@ -1299,6 +1320,79 @@ func startRemoteSync(ctx context.Context, logger *zap.Logger, k8sClient *kuberne
 		defer bgWg.Done()
 		startRemoteEndpointSync(ctx, logger, k8sClient, dpClient, nodeName)
 	}()
+}
+
+// dpServiceAdapter wraps pb.DataplaneControlClient to satisfy
+// the service.DataplaneServiceClient interface (strips grpc.CallOption variadic).
+type dpServiceAdapter struct {
+	client pb.DataplaneControlClient
+}
+
+func (a *dpServiceAdapter) UpsertService(ctx context.Context, in *pb.UpsertServiceRequest) (*pb.UpsertServiceResponse, error) {
+	return a.client.UpsertService(ctx, in)
+}
+
+func (a *dpServiceAdapter) DeleteService(ctx context.Context, in *pb.DeleteServiceRequest) (*pb.DeleteServiceResponse, error) {
+	return a.client.DeleteService(ctx, in)
+}
+
+func (a *dpServiceAdapter) UpsertBackends(ctx context.Context, in *pb.UpsertBackendsRequest) (*pb.UpsertBackendsResponse, error) {
+	return a.client.UpsertBackends(ctx, in)
+}
+
+func (a *dpServiceAdapter) UpsertMaglevTable(ctx context.Context, in *pb.UpsertMaglevTableRequest) (*pb.UpsertMaglevTableResponse, error) {
+	return a.client.UpsertMaglevTable(ctx, in)
+}
+
+// startServiceWatcher starts the L4 LB service watcher when l4lb is enabled.
+func startServiceWatcher(ctx context.Context, logger *zap.Logger, cfg *config.Config,
+	k8sClient *kubernetes.Clientset, dpClient pb.DataplaneControlClient, agentSrv *agentServer) {
+
+	if !cfg.L4LB.Enabled {
+		return
+	}
+	if k8sClient == nil {
+		logger.Warn("no Kubernetes client — L4 LB service watcher disabled")
+		return
+	}
+
+	logger.Info("L4 LB enabled — starting service watcher",
+		zap.String("default_algorithm", cfg.L4LB.DefaultAlgorithm))
+
+	adapter := &dpServiceAdapter{client: dpClient}
+	allocator := service.NewSlotAllocator(65536)
+	svcWatcher := service.NewWatcher(k8sClient, adapter, allocator, cfg.L4LB.DefaultAlgorithm, logger)
+	agentSrv.svcWatcher = svcWatcher
+
+	if err := svcWatcher.Start(ctx); err != nil {
+		logger.Error("failed to start service watcher", zap.Error(err))
+		return
+	}
+
+	// Attach tc_host_ingress to physical interface for NodePort/ExternalIP.
+	hostIface := detectHostInterface(logger)
+	if _, err := dpClient.AttachProgram(ctx, &pb.AttachProgramRequest{
+		InterfaceName: hostIface,
+		AttachType:    pb.AttachType_ATTACH_TC_INGRESS,
+	}); err != nil {
+		logger.Error("failed to attach host ingress program",
+			zap.String("interface", hostIface), zap.Error(err))
+	} else {
+		logger.Info("attached tc_host_ingress for NodePort/ExternalIP",
+			zap.String("interface", hostIface))
+	}
+}
+
+// detectHostInterface returns the name of the node's primary physical interface.
+func detectHostInterface(logger *zap.Logger) string {
+	for _, name := range []string{"bond0", "eth0", "ens192", "enp0s3", "ens3", "ens5"} {
+		if _, err := net.InterfaceByName(name); err == nil {
+			logger.Debug("detected host interface", zap.String("interface", name))
+			return name
+		}
+	}
+	logger.Warn("no known physical interface found, falling back to eth0")
+	return "eth0"
 }
 
 // startCNIServer starts the CNI gRPC server and returns the server handle.
@@ -1738,6 +1832,13 @@ func pushDataplaneConfig(ctx context.Context, logger *zap.Logger, client pb.Data
 		entries[configKeyMasqueradeEnable] = 1
 	} else {
 		entries[configKeyMasqueradeEnable] = 0
+	}
+
+	// L4 LB enabled.
+	if cfg.L4LB.Enabled {
+		entries[configKeyL4LBEnabled] = 1
+	} else {
+		entries[configKeyL4LBEnabled] = 0
 	}
 
 	req := &pb.UpdateConfigRequest{Entries: entries}
