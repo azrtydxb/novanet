@@ -1387,6 +1387,7 @@ impl RealMaps {
         let prog_name = if interface.starts_with("geneve")
             || interface.starts_with("vxlan")
             || interface.starts_with("nv_")
+            || interface.starts_with("nvx")
         {
             match attach_type {
                 AttachDirection::Ingress => "tc_tunnel_ingress",
