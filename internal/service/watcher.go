@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -34,6 +35,8 @@ const (
 	algMaglev     uint32 = 2
 )
 
+var errCacheSyncFailed = errors.New("failed to sync service/endpointslice informer caches")
+
 // DataplaneServiceClient is the subset of the dataplane gRPC client
 // needed by the service watcher.
 type DataplaneServiceClient interface {
@@ -57,11 +60,11 @@ type serviceState struct {
 type Watcher struct {
 	mu sync.Mutex
 
-	clientset   kubernetes.Interface
-	dpClient    DataplaneServiceClient
-	allocator   *SlotAllocator
-	defaultAlg  string
-	logger      *zap.Logger
+	clientset  kubernetes.Interface
+	dpClient   DataplaneServiceClient
+	allocator  *SlotAllocator
+	defaultAlg string
+	logger     *zap.Logger
 
 	// maglevAllocator tracks Maglev table slots (each service needs MaglevTableSize entries).
 	maglevAllocator *SlotAllocator
@@ -126,7 +129,7 @@ func (w *Watcher) Start(ctx context.Context) error {
 
 	// Wait for caches to sync.
 	if !cache.WaitForCacheSync(ctx.Done(), svcInformer.HasSynced, epsInformer.HasSynced) {
-		return fmt.Errorf("failed to sync service/endpointslice informer caches")
+		return errCacheSyncFailed
 	}
 
 	w.logger.Info("L4 LB service watcher caches synced")
@@ -189,6 +192,144 @@ func (w *Watcher) onEndpointSliceChange(obj any) {
 	w.reconcileService(svc)
 }
 
+// freeOldState releases dataplane resources for a previously-reconciled service.
+func (w *Watcher) freeOldState(ctx context.Context, svc *corev1.Service, old *serviceState) {
+	if old.backendCount > 0 {
+		w.allocator.Free(old.backendOffset, old.backendCount)
+	}
+	if old.algorithm == algMaglev && old.maglevOffset > 0 {
+		w.maglevAllocator.Free(old.maglevOffset, MaglevTableSize)
+	}
+	// Delete old service map entries.
+	for _, scope := range old.scopes {
+		for _, port := range svc.Spec.Ports {
+			proto := protocolToNumber(port.Protocol)
+			ip := uint32(0)
+			if scope == scopeClusterIP || scope == scopeExternalIP || scope == scopeLoadBalancer {
+				ip = ipToU32(svc.Spec.ClusterIP)
+			}
+			_, _ = w.dpClient.DeleteService(ctx, &pb.DeleteServiceRequest{
+				Ip:       ip,
+				Port:     portToU32(port.Port),
+				Protocol: proto,
+				Scope:    scope,
+			})
+		}
+	}
+}
+
+// pushBackends sends backend entries to the dataplane for all ports.
+func (w *Watcher) pushBackends(ctx context.Context, key string, offset uint32, backends []backendInfo, ports []corev1.ServicePort) {
+	pbBackends := make([]*pb.BackendEntry, 0, len(backends)*len(ports))
+	for portIdx, port := range ports {
+		for i, be := range backends {
+			targetPort := resolveTargetPort(port, be)
+			idx := offset + intToU32(portIdx*len(backends)+i)
+			pbBackends = append(pbBackends, &pb.BackendEntry{
+				Index:  idx,
+				Ip:     ipToU32(be.ip),
+				Port:   targetPort,
+				NodeIp: ipToU32(be.nodeIP),
+			})
+		}
+	}
+
+	if len(pbBackends) > 0 {
+		_, err := w.dpClient.UpsertBackends(ctx, &pb.UpsertBackendsRequest{
+			Backends: pbBackends,
+		})
+		if err != nil {
+			w.logger.Error("failed to upsert backends", zap.String("service", key), zap.Error(err))
+		}
+	}
+}
+
+// upsertServiceEntries creates or updates dataplane service map entries for all scopes and ports.
+func (w *Watcher) upsertServiceEntries(ctx context.Context, key string, svc *corev1.Service, offset uint32, backends []backendInfo, alg, maglevOff uint32, scopes []uint32) {
+	for portIdx, port := range svc.Spec.Ports {
+		proto := protocolToNumber(port.Protocol)
+		portBackendOffset := offset + intToU32(portIdx*len(backends))
+		portBackendCount := intToU32(len(backends))
+
+		for _, scope := range scopes {
+			ip := w.serviceIPForScope(svc, scope, "")
+			req := &pb.UpsertServiceRequest{
+				Ip:              ip,
+				Port:            w.servicePortForScope(port, scope),
+				Protocol:        proto,
+				Scope:           scope,
+				BackendCount:    portBackendCount,
+				BackendOffset:   portBackendOffset,
+				Algorithm:       alg,
+				Flags:           w.computeFlags(svc),
+				AffinityTimeout: w.computeAffinityTimeout(svc),
+				MaglevOffset:    maglevOff,
+			}
+			_, err := w.dpClient.UpsertService(ctx, req)
+			if err != nil {
+				w.logger.Error("failed to upsert service",
+					zap.String("service", key),
+					zap.Uint32("scope", scope),
+					zap.Error(err),
+				)
+			}
+		}
+
+		// For ExternalIP scope, create one entry per external IP.
+		for _, extIP := range svc.Spec.ExternalIPs {
+			req := &pb.UpsertServiceRequest{
+				Ip:              ipToU32(extIP),
+				Port:            portToU32(port.Port),
+				Protocol:        proto,
+				Scope:           scopeExternalIP,
+				BackendCount:    portBackendCount,
+				BackendOffset:   portBackendOffset,
+				Algorithm:       alg,
+				Flags:           w.computeFlags(svc),
+				AffinityTimeout: w.computeAffinityTimeout(svc),
+				MaglevOffset:    maglevOff,
+			}
+			_, err := w.dpClient.UpsertService(ctx, req)
+			if err != nil {
+				w.logger.Error("failed to upsert external IP service",
+					zap.String("service", key),
+					zap.String("externalIP", extIP),
+					zap.Error(err),
+				)
+			}
+		}
+
+		// For LoadBalancer, create one entry per ingress IP.
+		if svc.Spec.Type == corev1.ServiceTypeLoadBalancer {
+			for _, ingress := range svc.Status.LoadBalancer.Ingress {
+				if ingress.IP == "" {
+					continue
+				}
+				req := &pb.UpsertServiceRequest{
+					Ip:              ipToU32(ingress.IP),
+					Port:            portToU32(port.Port),
+					Protocol:        proto,
+					Scope:           scopeLoadBalancer,
+					BackendCount:    portBackendCount,
+					BackendOffset:   portBackendOffset,
+					Algorithm:       alg,
+					Flags:           w.computeFlags(svc),
+					AffinityTimeout: w.computeAffinityTimeout(svc),
+					MaglevOffset:    maglevOff,
+				}
+				_, err := w.dpClient.UpsertService(ctx, req)
+				if err != nil {
+					w.logger.Error("failed to upsert LB ingress service",
+						zap.String("service", key),
+						zap.String("ingressIP", ingress.IP),
+						zap.Error(err),
+					)
+				}
+			}
+		}
+	}
+}
+
 func (w *Watcher) reconcileService(svc *corev1.Service) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -219,28 +360,7 @@ func (w *Watcher) reconcileService(svc *corev1.Service) {
 
 	// Free old state if it exists.
 	if old, exists := w.services[key]; exists {
-		if old.backendCount > 0 {
-			w.allocator.Free(old.backendOffset, old.backendCount)
-		}
-		if old.algorithm == algMaglev && old.maglevOffset > 0 {
-			w.maglevAllocator.Free(old.maglevOffset, MaglevTableSize)
-		}
-		// Delete old service map entries.
-		for _, scope := range old.scopes {
-			for _, port := range svc.Spec.Ports {
-				proto := protocolToNumber(port.Protocol)
-				ip := uint32(0)
-				if scope == scopeClusterIP || scope == scopeExternalIP || scope == scopeLoadBalancer {
-					ip = ipToU32(svc.Spec.ClusterIP)
-				}
-				_, _ = w.dpClient.DeleteService(ctx, &pb.DeleteServiceRequest{
-					Ip:       ip,
-					Port:     uint32(port.Port),
-					Protocol: proto,
-					Scope:    scope,
-				})
-			}
-		}
+		w.freeOldState(ctx, svc, old)
 	}
 
 	if len(backends) == 0 {
@@ -251,7 +371,7 @@ func (w *Watcher) reconcileService(svc *corev1.Service) {
 	// Allocate backend slots.
 	// We need total = len(backends) * len(svc.Spec.Ports) slots.
 	// Each service port gets its own backend range.
-	totalBackends := uint32(len(backends) * len(svc.Spec.Ports))
+	totalBackends := intToU32(len(backends) * len(svc.Spec.Ports))
 	offset, err := w.allocator.Alloc(totalBackends)
 	if err != nil {
 		w.logger.Error("failed to allocate backend slots",
@@ -264,28 +384,7 @@ func (w *Watcher) reconcileService(svc *corev1.Service) {
 	}
 
 	// Push backends to dataplane.
-	var pbBackends []*pb.BackendEntry
-	for portIdx, port := range svc.Spec.Ports {
-		for i, be := range backends {
-			targetPort := resolveTargetPort(port, be)
-			idx := offset + uint32(portIdx*len(backends)+i)
-			pbBackends = append(pbBackends, &pb.BackendEntry{
-				Index:  idx,
-				Ip:     ipToU32(be.ip),
-				Port:   targetPort,
-				NodeIp: ipToU32(be.nodeIP),
-			})
-		}
-	}
-
-	if len(pbBackends) > 0 {
-		_, err = w.dpClient.UpsertBackends(ctx, &pb.UpsertBackendsRequest{
-			Backends: pbBackends,
-		})
-		if err != nil {
-			w.logger.Error("failed to upsert backends", zap.String("service", key), zap.Error(err))
-		}
-	}
+	w.pushBackends(ctx, key, offset, backends, svc.Spec.Ports)
 
 	// Handle Maglev tables if needed.
 	var maglevOff uint32
@@ -316,88 +415,7 @@ func (w *Watcher) reconcileService(svc *corev1.Service) {
 	scopes := w.computeScopes(svc)
 
 	// Upsert service map entries.
-	for portIdx, port := range svc.Spec.Ports {
-		proto := protocolToNumber(port.Protocol)
-		portBackendOffset := offset + uint32(portIdx*len(backends))
-		portBackendCount := uint32(len(backends))
-
-		for _, scope := range scopes {
-			ip := w.serviceIPForScope(svc, scope, "")
-			req := &pb.UpsertServiceRequest{
-				Ip:              ip,
-				Port:            w.servicePortForScope(port, scope),
-				Protocol:        proto,
-				Scope:           scope,
-				BackendCount:    portBackendCount,
-				BackendOffset:   portBackendOffset,
-				Algorithm:       alg,
-				Flags:           w.computeFlags(svc),
-				AffinityTimeout: w.computeAffinityTimeout(svc),
-				MaglevOffset:    maglevOff,
-			}
-			_, err = w.dpClient.UpsertService(ctx, req)
-			if err != nil {
-				w.logger.Error("failed to upsert service",
-					zap.String("service", key),
-					zap.Uint32("scope", scope),
-					zap.Error(err),
-				)
-			}
-		}
-
-		// For ExternalIP scope, create one entry per external IP.
-		for _, extIP := range svc.Spec.ExternalIPs {
-			req := &pb.UpsertServiceRequest{
-				Ip:              ipToU32(extIP),
-				Port:            uint32(port.Port),
-				Protocol:        proto,
-				Scope:           scopeExternalIP,
-				BackendCount:    portBackendCount,
-				BackendOffset:   portBackendOffset,
-				Algorithm:       alg,
-				Flags:           w.computeFlags(svc),
-				AffinityTimeout: w.computeAffinityTimeout(svc),
-				MaglevOffset:    maglevOff,
-			}
-			_, err = w.dpClient.UpsertService(ctx, req)
-			if err != nil {
-				w.logger.Error("failed to upsert external IP service",
-					zap.String("service", key),
-					zap.String("externalIP", extIP),
-					zap.Error(err),
-				)
-			}
-		}
-
-		// For LoadBalancer, create one entry per ingress IP.
-		if svc.Spec.Type == corev1.ServiceTypeLoadBalancer {
-			for _, ingress := range svc.Status.LoadBalancer.Ingress {
-				if ingress.IP == "" {
-					continue
-				}
-				req := &pb.UpsertServiceRequest{
-					Ip:              ipToU32(ingress.IP),
-					Port:            uint32(port.Port),
-					Protocol:        proto,
-					Scope:           scopeLoadBalancer,
-					BackendCount:    portBackendCount,
-					BackendOffset:   portBackendOffset,
-					Algorithm:       alg,
-					Flags:           w.computeFlags(svc),
-					AffinityTimeout: w.computeAffinityTimeout(svc),
-					MaglevOffset:    maglevOff,
-				}
-				_, err = w.dpClient.UpsertService(ctx, req)
-				if err != nil {
-					w.logger.Error("failed to upsert LB ingress service",
-						zap.String("service", key),
-						zap.String("ingressIP", ingress.IP),
-						zap.Error(err),
-					)
-				}
-			}
-		}
-	}
+	w.upsertServiceEntries(ctx, key, svc, offset, backends, alg, maglevOff, scopes)
 
 	// Save state.
 	w.services[key] = &serviceState{
@@ -449,7 +467,7 @@ func (w *Watcher) deleteServiceLocked(svc *corev1.Service) {
 				for _, port := range svc.Spec.Ports {
 					_, _ = w.dpClient.DeleteService(ctx, &pb.DeleteServiceRequest{
 						Ip:       ipToU32(extIP),
-						Port:     uint32(port.Port),
+						Port:     portToU32(port.Port),
 						Protocol: protocolToNumber(port.Protocol),
 						Scope:    scopeExternalIP,
 					})
@@ -466,7 +484,7 @@ func (w *Watcher) deleteServiceLocked(svc *corev1.Service) {
 				for _, port := range svc.Spec.Ports {
 					_, _ = w.dpClient.DeleteService(ctx, &pb.DeleteServiceRequest{
 						Ip:       ipToU32(ingress.IP),
-						Port:     uint32(port.Port),
+						Port:     portToU32(port.Port),
 						Protocol: protocolToNumber(port.Protocol),
 						Scope:    scopeLoadBalancer,
 					})
@@ -492,7 +510,7 @@ func (w *Watcher) deleteServiceLocked(svc *corev1.Service) {
 type backendInfo struct {
 	ip       string
 	nodeIP   string
-	port     int32  // target port from EndpointSlice (may be 0 if using named port)
+	port     int32 // target port from EndpointSlice (may be 0 if using named port)
 	portName string
 }
 
@@ -555,10 +573,14 @@ func (w *Watcher) computeScopes(svc *corev1.Service) []uint32 {
 	scopes := []uint32{scopeClusterIP}
 
 	switch svc.Spec.Type {
+	case corev1.ServiceTypeClusterIP:
+		// ClusterIP is the base scope, already included above.
 	case corev1.ServiceTypeNodePort:
 		scopes = append(scopes, scopeNodePort)
 	case corev1.ServiceTypeLoadBalancer:
 		scopes = append(scopes, scopeNodePort, scopeLoadBalancer)
+	case corev1.ServiceTypeExternalName:
+		// ExternalName services resolve via DNS; no extra eBPF scopes needed.
 	}
 
 	if len(svc.Spec.ExternalIPs) > 0 {
@@ -591,9 +613,9 @@ func (w *Watcher) serviceIPForScope(svc *corev1.Service, scope uint32, specificI
 
 func (w *Watcher) servicePortForScope(port corev1.ServicePort, scope uint32) uint32 {
 	if scope == scopeNodePort && port.NodePort > 0 {
-		return uint32(port.NodePort)
+		return portToU32(port.NodePort)
 	}
-	return uint32(port.Port)
+	return portToU32(port.Port)
 }
 
 func (w *Watcher) computeFlags(svc *corev1.Service) uint32 {
@@ -611,7 +633,7 @@ func (w *Watcher) computeAffinityTimeout(svc *corev1.Service) uint32 {
 	if svc.Spec.SessionAffinityConfig != nil &&
 		svc.Spec.SessionAffinityConfig.ClientIP != nil &&
 		svc.Spec.SessionAffinityConfig.ClientIP.TimeoutSeconds != nil {
-		return uint32(*svc.Spec.SessionAffinityConfig.ClientIP.TimeoutSeconds)
+		return portToU32(*svc.Spec.SessionAffinityConfig.ClientIP.TimeoutSeconds)
 	}
 	return 0
 }
@@ -624,6 +646,23 @@ func (w *Watcher) ServiceCount() int {
 }
 
 // --- Helpers ---
+
+// portToU32 safely converts a Kubernetes port (int32) to uint32.
+// Kubernetes ports are always 1-65535, so negative values map to 0.
+func portToU32(port int32) uint32 {
+	if port < 0 {
+		return 0
+	}
+	return uint32(port) //nolint:gosec // bounds-checked above
+}
+
+// intToU32 safely converts a non-negative int to uint32.
+func intToU32(n int) uint32 {
+	if n < 0 {
+		return 0
+	}
+	return uint32(n) //nolint:gosec // bounds-checked above
+}
 
 func ipToU32(ipStr string) uint32 {
 	ip := net.ParseIP(ipStr)
@@ -653,16 +692,16 @@ func protocolToNumber(proto corev1.Protocol) uint32 {
 func resolveTargetPort(port corev1.ServicePort, be backendInfo) uint32 {
 	// If the EndpointSlice has port info matching this service port, use it.
 	if be.portName != "" && be.portName == port.Name {
-		return uint32(be.port)
+		return portToU32(be.port)
 	}
 	if be.port > 0 && port.Name == "" {
-		return uint32(be.port)
+		return portToU32(be.port)
 	}
 	// Fallback to the service target port number.
 	if port.TargetPort.IntValue() > 0 {
-		return uint32(port.TargetPort.IntValue())
+		return intToU32(port.TargetPort.IntValue())
 	}
-	return uint32(port.Port)
+	return portToU32(port.Port)
 }
 
 // scopeName returns a human-readable name for a scope constant.
@@ -727,10 +766,10 @@ func (w *Watcher) ListTrackedServices() []*pb.ServiceInfo {
 			for _, scope := range state.scopes {
 				info := &pb.ServiceInfo{
 					ClusterIp:    svc.Spec.ClusterIP,
-					Port:         uint32(port.Port),
+					Port:         portToU32(port.Port),
 					Protocol:     string(port.Protocol),
 					Scope:        scopeName(scope),
-					BackendCount: uint32(len(backends)),
+					BackendCount: intToU32(len(backends)),
 					Algorithm:    algName(state.algorithm),
 					Backends:     backendStrs,
 				}
