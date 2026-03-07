@@ -83,9 +83,15 @@ type NovaRouteConfig struct {
 	Protocol string `json:"protocol"`
 
 	// ControlPlaneVIP is the virtual IP for the Kubernetes API server.
-	// When set on a control-plane node, the agent binds this IP on loopback
-	// and advertises it via BGP through NovaRoute.
+	// When set, the agent registers the VIP as an L4 LB service with
+	// health-checked control-plane node backends. On CP nodes the VIP
+	// is also bound on loopback and advertised via BGP, but only while
+	// the local API server health check passes.
 	ControlPlaneVIP string `json:"control_plane_vip"`
+
+	// ControlPlaneVIPHealthInterval is the interval between API server
+	// health checks in seconds. Default: 5.
+	ControlPlaneVIPHealthInterval int `json:"control_plane_vip_health_interval"`
 
 	// BFDEnabled enables BFD (Bidirectional Forwarding Detection) on mesh
 	// BGP peers for sub-second failover detection.

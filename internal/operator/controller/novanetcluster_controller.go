@@ -292,10 +292,11 @@ type novanetConfig struct {
 }
 
 type novanetNovaRouteCfg struct {
-	Socket          string `json:"socket"`
-	Token           string `json:"token"`
-	Protocol        string `json:"protocol"`
-	ControlPlaneVIP string `json:"control_plane_vip,omitempty"`
+	Socket                        string `json:"socket"`
+	Token                         string `json:"token"`
+	Protocol                      string `json:"protocol"`
+	ControlPlaneVIP               string `json:"control_plane_vip,omitempty"`
+	ControlPlaneVIPHealthInterval int    `json:"control_plane_vip_health_interval,omitempty"`
 }
 
 type novanetEgressCfg struct {
