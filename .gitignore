@@ -31,3 +31,4 @@ credentials.json
 /novanet-operator
 site/
 .worktrees/
+.serena/
