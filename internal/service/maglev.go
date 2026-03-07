@@ -1,3 +1,5 @@
+// Package service implements internal services for the NovaNet controller,
+// including load-balancing algorithms and backend allocation logic.
 package service
 
 import "hash/fnv"
@@ -10,14 +12,20 @@ func GenerateMaglevTable(backends []string, tableSize int) []uint32 {
 		return make([]uint32, tableSize)
 	}
 
+	if tableSize <= 0 || tableSize > int(^uint32(0)) {
+		return nil
+	}
+	ts64 := uint64(tableSize)
+	ts32 := uint32(tableSize)
+
 	offsets := make([]uint32, n)
 	skips := make([]uint32, n)
 	for i, b := range backends {
 		h := fnv.New64a()
-		h.Write([]byte(b))
+		_, _ = h.Write([]byte(b))
 		hash := h.Sum64()
-		offsets[i] = uint32(hash % uint64(tableSize))
-		skips[i] = uint32(hash>>32%uint64(tableSize-1)) + 1
+		offsets[i] = uint32(hash % ts64)         //nolint:gosec // result < ts64 which fits in uint32
+		skips[i] = uint32(hash>>32%(ts64-1)) + 1 //nolint:gosec // result < ts64-1 which fits in uint32
 	}
 
 	table := make([]uint32, tableSize)
@@ -35,10 +43,10 @@ func GenerateMaglevTable(backends []string, tableSize int) []uint32 {
 		for i := range n {
 			pos := next[i]
 			for table[pos] != ^uint32(0) {
-				pos = (pos + skips[i]) % uint32(tableSize)
+				pos = (pos + skips[i]) % ts32
 			}
 			table[pos] = uint32(i)
-			next[i] = (pos + skips[i]) % uint32(tableSize)
+			next[i] = (pos + skips[i]) % ts32
 			filled++
 			if filled >= tableSize {
 				break
