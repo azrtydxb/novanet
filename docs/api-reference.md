@@ -249,7 +249,7 @@ Config keys:
 
 ## Protobuf Source
 
-The full protobuf definition is at [`api/v1/novanet.proto`](../api/v1/novanet.proto).
+The full protobuf definition is at [`api/v1/novanet.proto`](https://github.com/piwi3910/novanet/blob/main/api/v1/novanet.proto).
 
 ---
 

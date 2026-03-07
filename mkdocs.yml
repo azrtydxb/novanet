@@ -1,0 +1,76 @@
+site_name: NovaNet
+site_description: High-performance eBPF-based Kubernetes CNI
+site_url: https://piwi3910.github.io/novanet
+repo_url: https://github.com/piwi3910/novanet
+repo_name: piwi3910/novanet
+
+theme:
+  name: material
+  logo: assets/novanet-logo-light.svg
+  favicon: assets/novanet-logo-light.svg
+  palette:
+    - scheme: default
+      primary: teal
+      accent: cyan
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: teal
+      accent: cyan
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.footer
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.details
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - attr_list
+  - md_in_html
+
+nav:
+  - Home: index.md
+  - Architecture: architecture.md
+  - Installation: installation.md
+  - Configuration: configuration.md
+  - CLI Reference: cli-reference.md
+  - API Reference: api-reference.md
+  - NovaRoute Integration: novaroute-integration.md
+  - Troubleshooting: troubleshooting.md
+  - Development: development.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/piwi3910/novanet
