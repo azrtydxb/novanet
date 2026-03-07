@@ -64,6 +64,27 @@ type Config struct {
 	// L4LB holds L4 load balancer settings.
 	L4LB L4LBConfig `json:"l4lb"`
 
+	// Encryption holds transparent encryption settings.
+	Encryption EncryptionConfig `json:"encryption"`
+
+	// HostFirewall holds host firewall settings.
+	HostFirewall HostFirewallConfig `json:"host_firewall"`
+
+	// Bandwidth holds bandwidth management settings.
+	Bandwidth BandwidthConfig `json:"bandwidth"`
+
+	// LBIPAM holds LoadBalancer IPAM settings.
+	LBIPAM LBIPAMConfig `json:"lb_ipam"`
+
+	// IPv6 holds IPv6 and dual-stack settings.
+	IPv6 IPv6Config `json:"ipv6"`
+
+	// DSR enables Direct Server Return for L4 LB.
+	DSR bool `json:"dsr"`
+
+	// XDPAcceleration selects the XDP mode: "disabled", "native", or "best-effort".
+	XDPAcceleration string `json:"xdp_acceleration"`
+
 	// LogLevel sets the logging verbosity (debug, info, warn, error).
 	LogLevel string `json:"log_level"`
 
@@ -135,6 +156,51 @@ type L4LBConfig struct {
 	DefaultAlgorithm string `json:"default_algorithm"`
 }
 
+// EncryptionConfig holds transparent encryption settings.
+type EncryptionConfig struct {
+	// Type selects the encryption method: "disabled" or "wireguard".
+	Type string `json:"type"`
+
+	// WireGuardPort is the UDP listen port for WireGuard.
+	WireGuardPort int `json:"wireguard_port"`
+
+	// NodeAnnotationKey is the annotation key for the WireGuard public key.
+	NodeAnnotationKey string `json:"node_annotation_key"`
+}
+
+// HostFirewallConfig holds host firewall settings.
+type HostFirewallConfig struct {
+	// Enabled activates host-level firewall enforcement.
+	Enabled bool `json:"enabled"`
+}
+
+// BandwidthConfig holds bandwidth management settings.
+type BandwidthConfig struct {
+	// Enabled activates per-pod bandwidth enforcement via TC qdisc.
+	Enabled bool `json:"enabled"`
+}
+
+// LBIPAMConfig holds LoadBalancer IP address management settings.
+type LBIPAMConfig struct {
+	// Enabled activates LB-IPAM.
+	Enabled bool `json:"enabled"`
+
+	// L2AnnouncementEnabled enables Gratuitous ARP/NDP.
+	L2AnnouncementEnabled bool `json:"l2_announcement_enabled"`
+}
+
+// IPv6Config holds IPv6 and dual-stack settings.
+type IPv6Config struct {
+	// Enabled activates IPv6 and dual-stack support.
+	Enabled bool `json:"enabled"`
+
+	// ClusterCIDRv6 is the IPv6 pod CIDR for dual-stack.
+	ClusterCIDRv6 string `json:"cluster_cidr_v6"`
+
+	// NodeCIDRv6MaskSize is the prefix length for per-node IPv6 PodCIDR.
+	NodeCIDRv6MaskSize int `json:"node_cidr_v6_mask_size"`
+}
+
 // DefaultConfig returns a Config populated with sensible defaults.
 func DefaultConfig() *Config {
 	return &Config{
@@ -159,8 +225,29 @@ func DefaultConfig() *Config {
 			Enabled:          false,
 			DefaultAlgorithm: "random",
 		},
-		LogLevel:       "info",
-		MetricsAddress: ":9103",
+		Encryption: EncryptionConfig{
+			Type:              "disabled",
+			WireGuardPort:     51871,
+			NodeAnnotationKey: "novanet.io/wireguard-pubkey",
+		},
+		HostFirewall: HostFirewallConfig{
+			Enabled: false,
+		},
+		Bandwidth: BandwidthConfig{
+			Enabled: false,
+		},
+		LBIPAM: LBIPAMConfig{
+			Enabled:               false,
+			L2AnnouncementEnabled: true,
+		},
+		IPv6: IPv6Config{
+			Enabled:            false,
+			NodeCIDRv6MaskSize: 112,
+		},
+		DSR:             false,
+		XDPAcceleration: "disabled",
+		LogLevel:        "info",
+		MetricsAddress:  ":9103",
 	}
 }
 
@@ -250,6 +337,9 @@ func Validate(cfg *Config) error {
 	return nil
 }
 
+// envTrue is the string representation of boolean true used for environment variable comparisons.
+const envTrue = "true"
+
 // ExpandEnvVars replaces ${VAR} placeholders in configuration strings with
 // the corresponding environment variable values.
 //
@@ -272,7 +362,31 @@ func ExpandEnvVars(cfg *Config) {
 	if v := os.Getenv("NOVANET_TUNNEL_PROTOCOL"); v != "" {
 		cfg.TunnelProtocol = v
 	}
-	if v := os.Getenv("NOVANET_L4LB_ENABLED"); v == "true" || v == "1" {
+	if v := os.Getenv("NOVANET_L4LB_ENABLED"); v == envTrue || v == "1" {
 		cfg.L4LB.Enabled = true
+	}
+	if v := os.Getenv("NOVANET_ENCRYPTION_TYPE"); v != "" {
+		cfg.Encryption.Type = v
+	}
+	if v := os.Getenv("NOVANET_HOST_FIREWALL_ENABLED"); v == envTrue || v == "1" {
+		cfg.HostFirewall.Enabled = true
+	}
+	if v := os.Getenv("NOVANET_BANDWIDTH_ENABLED"); v == envTrue || v == "1" {
+		cfg.Bandwidth.Enabled = true
+	}
+	if v := os.Getenv("NOVANET_LBIPAM_ENABLED"); v == envTrue || v == "1" {
+		cfg.LBIPAM.Enabled = true
+	}
+	if v := os.Getenv("NOVANET_IPV6_ENABLED"); v == envTrue || v == "1" {
+		cfg.IPv6.Enabled = true
+	}
+	if v := os.Getenv("NOVANET_CLUSTER_CIDR_V6"); v != "" {
+		cfg.IPv6.ClusterCIDRv6 = v
+	}
+	if v := os.Getenv("NOVANET_DSR_ENABLED"); v == envTrue || v == "1" {
+		cfg.DSR = true
+	}
+	if v := os.Getenv("NOVANET_XDP_ACCELERATION"); v != "" {
+		cfg.XDPAcceleration = v
 	}
 }

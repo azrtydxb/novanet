@@ -220,6 +220,151 @@ func (EgressAction) EnumDescriptor() ([]byte, []int) {
 	return file_api_v1_novanet_proto_rawDescGZIP(), []int{3}
 }
 
+// Service flags.
+type ServiceFlag int32
+
+const (
+	ServiceFlag_SERVICE_FLAG_NONE           ServiceFlag = 0
+	ServiceFlag_SERVICE_FLAG_DSR            ServiceFlag = 1 // Direct Server Return
+	ServiceFlag_SERVICE_FLAG_EXTERNAL_LOCAL ServiceFlag = 2 // externalTrafficPolicy: Local
+	ServiceFlag_SERVICE_FLAG_INTERNAL_LOCAL ServiceFlag = 4 // internalTrafficPolicy: Local
+)
+
+// Enum value maps for ServiceFlag.
+var (
+	ServiceFlag_name = map[int32]string{
+		0: "SERVICE_FLAG_NONE",
+		1: "SERVICE_FLAG_DSR",
+		2: "SERVICE_FLAG_EXTERNAL_LOCAL",
+		4: "SERVICE_FLAG_INTERNAL_LOCAL",
+	}
+	ServiceFlag_value = map[string]int32{
+		"SERVICE_FLAG_NONE":           0,
+		"SERVICE_FLAG_DSR":            1,
+		"SERVICE_FLAG_EXTERNAL_LOCAL": 2,
+		"SERVICE_FLAG_INTERNAL_LOCAL": 4,
+	}
+)
+
+func (x ServiceFlag) Enum() *ServiceFlag {
+	p := new(ServiceFlag)
+	*p = x
+	return p
+}
+
+func (x ServiceFlag) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ServiceFlag) Descriptor() protoreflect.EnumDescriptor {
+	return file_api_v1_novanet_proto_enumTypes[4].Descriptor()
+}
+
+func (ServiceFlag) Type() protoreflect.EnumType {
+	return &file_api_v1_novanet_proto_enumTypes[4]
+}
+
+func (x ServiceFlag) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ServiceFlag.Descriptor instead.
+func (ServiceFlag) EnumDescriptor() ([]byte, []int) {
+	return file_api_v1_novanet_proto_rawDescGZIP(), []int{4}
+}
+
+type HostPolicyDirection int32
+
+const (
+	HostPolicyDirection_HOST_POLICY_INGRESS HostPolicyDirection = 0
+	HostPolicyDirection_HOST_POLICY_EGRESS  HostPolicyDirection = 1
+)
+
+// Enum value maps for HostPolicyDirection.
+var (
+	HostPolicyDirection_name = map[int32]string{
+		0: "HOST_POLICY_INGRESS",
+		1: "HOST_POLICY_EGRESS",
+	}
+	HostPolicyDirection_value = map[string]int32{
+		"HOST_POLICY_INGRESS": 0,
+		"HOST_POLICY_EGRESS":  1,
+	}
+)
+
+func (x HostPolicyDirection) Enum() *HostPolicyDirection {
+	p := new(HostPolicyDirection)
+	*p = x
+	return p
+}
+
+func (x HostPolicyDirection) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (HostPolicyDirection) Descriptor() protoreflect.EnumDescriptor {
+	return file_api_v1_novanet_proto_enumTypes[5].Descriptor()
+}
+
+func (HostPolicyDirection) Type() protoreflect.EnumType {
+	return &file_api_v1_novanet_proto_enumTypes[5]
+}
+
+func (x HostPolicyDirection) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use HostPolicyDirection.Descriptor instead.
+func (HostPolicyDirection) EnumDescriptor() ([]byte, []int) {
+	return file_api_v1_novanet_proto_rawDescGZIP(), []int{5}
+}
+
+type XDPMode int32
+
+const (
+	XDPMode_XDP_MODE_NATIVE XDPMode = 0
+	XDPMode_XDP_MODE_SKB    XDPMode = 1 // Generic/SKB fallback.
+)
+
+// Enum value maps for XDPMode.
+var (
+	XDPMode_name = map[int32]string{
+		0: "XDP_MODE_NATIVE",
+		1: "XDP_MODE_SKB",
+	}
+	XDPMode_value = map[string]int32{
+		"XDP_MODE_NATIVE": 0,
+		"XDP_MODE_SKB":    1,
+	}
+)
+
+func (x XDPMode) Enum() *XDPMode {
+	p := new(XDPMode)
+	*p = x
+	return p
+}
+
+func (x XDPMode) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (XDPMode) Descriptor() protoreflect.EnumDescriptor {
+	return file_api_v1_novanet_proto_enumTypes[6].Descriptor()
+}
+
+func (XDPMode) Type() protoreflect.EnumType {
+	return &file_api_v1_novanet_proto_enumTypes[6]
+}
+
+func (x XDPMode) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use XDPMode.Descriptor instead.
+func (XDPMode) EnumDescriptor() ([]byte, []int) {
+	return file_api_v1_novanet_proto_rawDescGZIP(), []int{6}
+}
+
 type UpsertEndpointRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Ip            uint32                 `protobuf:"varint,1,opt,name=ip,proto3" json:"ip,omitempty"`
@@ -229,6 +374,8 @@ type UpsertEndpointRequest struct {
 	PodName       string                 `protobuf:"bytes,5,opt,name=pod_name,json=podName,proto3" json:"pod_name,omitempty"` // Logging only — not stored in eBPF maps.
 	Namespace     string                 `protobuf:"bytes,6,opt,name=namespace,proto3" json:"namespace,omitempty"`            // Logging only — not stored in eBPF maps.
 	NodeIp        uint32                 `protobuf:"varint,7,opt,name=node_ip,json=nodeIp,proto3" json:"node_ip,omitempty"`
+	Ipv6          []byte                 `protobuf:"bytes,8,opt,name=ipv6,proto3" json:"ipv6,omitempty"`                         // 16-byte IPv6 address (dual-stack).
+	NodeIpv6      []byte                 `protobuf:"bytes,9,opt,name=node_ipv6,json=nodeIpv6,proto3" json:"node_ipv6,omitempty"` // 16-byte IPv6 node address (dual-stack).
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -312,6 +459,20 @@ func (x *UpsertEndpointRequest) GetNodeIp() uint32 {
 	return 0
 }
 
+func (x *UpsertEndpointRequest) GetIpv6() []byte {
+	if x != nil {
+		return x.Ipv6
+	}
+	return nil
+}
+
+func (x *UpsertEndpointRequest) GetNodeIpv6() []byte {
+	if x != nil {
+		return x.NodeIpv6
+	}
+	return nil
+}
+
 type UpsertEndpointResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -351,6 +512,7 @@ func (*UpsertEndpointResponse) Descriptor() ([]byte, []int) {
 type DeleteEndpointRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Ip            uint32                 `protobuf:"varint,1,opt,name=ip,proto3" json:"ip,omitempty"`
+	Ipv6          []byte                 `protobuf:"bytes,2,opt,name=ipv6,proto3" json:"ipv6,omitempty"` // 16-byte IPv6 address for dual-stack cleanup.
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -390,6 +552,13 @@ func (x *DeleteEndpointRequest) GetIp() uint32 {
 		return x.Ip
 	}
 	return 0
+}
+
+func (x *DeleteEndpointRequest) GetIpv6() []byte {
+	if x != nil {
+		return x.Ipv6
+	}
+	return nil
 }
 
 type DeleteEndpointResponse struct {
@@ -1729,13 +1898,16 @@ func (x *AddPodRequest) GetLabels() map[string]string {
 }
 
 type AddPodResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Ip            string                 `protobuf:"bytes,1,opt,name=ip,proto3" json:"ip,omitempty"`
-	Gateway       string                 `protobuf:"bytes,2,opt,name=gateway,proto3" json:"gateway,omitempty"`
-	Mac           string                 `protobuf:"bytes,3,opt,name=mac,proto3" json:"mac,omitempty"`
-	PrefixLength  int32                  `protobuf:"varint,4,opt,name=prefix_length,json=prefixLength,proto3" json:"prefix_length,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Ip             string                 `protobuf:"bytes,1,opt,name=ip,proto3" json:"ip,omitempty"`
+	Gateway        string                 `protobuf:"bytes,2,opt,name=gateway,proto3" json:"gateway,omitempty"`
+	Mac            string                 `protobuf:"bytes,3,opt,name=mac,proto3" json:"mac,omitempty"`
+	PrefixLength   int32                  `protobuf:"varint,4,opt,name=prefix_length,json=prefixLength,proto3" json:"prefix_length,omitempty"`
+	Ipv6           string                 `protobuf:"bytes,5,opt,name=ipv6,proto3" json:"ipv6,omitempty"`                                              // IPv6 address (dual-stack).
+	GatewayV6      string                 `protobuf:"bytes,6,opt,name=gateway_v6,json=gatewayV6,proto3" json:"gateway_v6,omitempty"`                   // IPv6 gateway (dual-stack).
+	PrefixLengthV6 int32                  `protobuf:"varint,7,opt,name=prefix_length_v6,json=prefixLengthV6,proto3" json:"prefix_length_v6,omitempty"` // IPv6 prefix length (dual-stack).
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *AddPodResponse) Reset() {
@@ -1792,6 +1964,27 @@ func (x *AddPodResponse) GetMac() string {
 func (x *AddPodResponse) GetPrefixLength() int32 {
 	if x != nil {
 		return x.PrefixLength
+	}
+	return 0
+}
+
+func (x *AddPodResponse) GetIpv6() string {
+	if x != nil {
+		return x.Ipv6
+	}
+	return ""
+}
+
+func (x *AddPodResponse) GetGatewayV6() string {
+	if x != nil {
+		return x.GatewayV6
+	}
+	return ""
+}
+
+func (x *AddPodResponse) GetPrefixLengthV6() int32 {
+	if x != nil {
+		return x.PrefixLengthV6
 	}
 	return 0
 }
@@ -1957,6 +2150,13 @@ type GetAgentStatusResponse struct {
 	ClusterCidr        string                 `protobuf:"bytes,9,opt,name=cluster_cidr,json=clusterCidr,proto3" json:"cluster_cidr,omitempty"`
 	NovarouteConnected bool                   `protobuf:"varint,10,opt,name=novaroute_connected,json=novarouteConnected,proto3" json:"novaroute_connected,omitempty"`
 	Dataplane          *DataplaneStatusInfo   `protobuf:"bytes,11,opt,name=dataplane,proto3" json:"dataplane,omitempty"`
+	Encryption         string                 `protobuf:"bytes,12,opt,name=encryption,proto3" json:"encryption,omitempty"` // "disabled" or "wireguard"
+	HostFirewall       bool                   `protobuf:"varint,13,opt,name=host_firewall,json=hostFirewall,proto3" json:"host_firewall,omitempty"`
+	BandwidthEnabled   bool                   `protobuf:"varint,14,opt,name=bandwidth_enabled,json=bandwidthEnabled,proto3" json:"bandwidth_enabled,omitempty"`
+	Ipv6Enabled        bool                   `protobuf:"varint,15,opt,name=ipv6_enabled,json=ipv6Enabled,proto3" json:"ipv6_enabled,omitempty"`
+	DsrEnabled         bool                   `protobuf:"varint,16,opt,name=dsr_enabled,json=dsrEnabled,proto3" json:"dsr_enabled,omitempty"`
+	XdpMode            string                 `protobuf:"bytes,17,opt,name=xdp_mode,json=xdpMode,proto3" json:"xdp_mode,omitempty"`
+	LbIpamEnabled      bool                   `protobuf:"varint,18,opt,name=lb_ipam_enabled,json=lbIpamEnabled,proto3" json:"lb_ipam_enabled,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -2066,6 +2266,55 @@ func (x *GetAgentStatusResponse) GetDataplane() *DataplaneStatusInfo {
 		return x.Dataplane
 	}
 	return nil
+}
+
+func (x *GetAgentStatusResponse) GetEncryption() string {
+	if x != nil {
+		return x.Encryption
+	}
+	return ""
+}
+
+func (x *GetAgentStatusResponse) GetHostFirewall() bool {
+	if x != nil {
+		return x.HostFirewall
+	}
+	return false
+}
+
+func (x *GetAgentStatusResponse) GetBandwidthEnabled() bool {
+	if x != nil {
+		return x.BandwidthEnabled
+	}
+	return false
+}
+
+func (x *GetAgentStatusResponse) GetIpv6Enabled() bool {
+	if x != nil {
+		return x.Ipv6Enabled
+	}
+	return false
+}
+
+func (x *GetAgentStatusResponse) GetDsrEnabled() bool {
+	if x != nil {
+		return x.DsrEnabled
+	}
+	return false
+}
+
+func (x *GetAgentStatusResponse) GetXdpMode() string {
+	if x != nil {
+		return x.XdpMode
+	}
+	return ""
+}
+
+func (x *GetAgentStatusResponse) GetLbIpamEnabled() bool {
+	if x != nil {
+		return x.LbIpamEnabled
+	}
+	return false
 }
 
 type DataplaneStatusInfo struct {
@@ -2424,6 +2673,7 @@ type UpsertServiceRequest struct {
 	Flags           uint32                 `protobuf:"varint,8,opt,name=flags,proto3" json:"flags,omitempty"`
 	AffinityTimeout uint32                 `protobuf:"varint,9,opt,name=affinity_timeout,json=affinityTimeout,proto3" json:"affinity_timeout,omitempty"`
 	MaglevOffset    uint32                 `protobuf:"varint,10,opt,name=maglev_offset,json=maglevOffset,proto3" json:"maglev_offset,omitempty"`
+	Ipv6            []byte                 `protobuf:"bytes,11,opt,name=ipv6,proto3" json:"ipv6,omitempty"` // 16-byte IPv6 service address (dual-stack).
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -2526,6 +2776,13 @@ func (x *UpsertServiceRequest) GetMaglevOffset() uint32 {
 		return x.MaglevOffset
 	}
 	return 0
+}
+
+func (x *UpsertServiceRequest) GetIpv6() []byte {
+	if x != nil {
+		return x.Ipv6
+	}
+	return nil
 }
 
 type UpsertServiceResponse struct {
@@ -2718,6 +2975,7 @@ type BackendEntry struct {
 	Ip            uint32                 `protobuf:"varint,2,opt,name=ip,proto3" json:"ip,omitempty"`
 	Port          uint32                 `protobuf:"varint,3,opt,name=port,proto3" json:"port,omitempty"`
 	NodeIp        uint32                 `protobuf:"varint,4,opt,name=node_ip,json=nodeIp,proto3" json:"node_ip,omitempty"`
+	Ipv6          []byte                 `protobuf:"bytes,5,opt,name=ipv6,proto3" json:"ipv6,omitempty"` // 16-byte IPv6 backend address (dual-stack).
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2778,6 +3036,13 @@ func (x *BackendEntry) GetNodeIp() uint32 {
 		return x.NodeIp
 	}
 	return 0
+}
+
+func (x *BackendEntry) GetIpv6() []byte {
+	if x != nil {
+		return x.Ipv6
+	}
+	return nil
 }
 
 type UpsertBackendsResponse struct {
@@ -3845,6 +4110,7 @@ type ServiceInfo struct {
 	BackendCount  uint32                 `protobuf:"varint,5,opt,name=backend_count,json=backendCount,proto3" json:"backend_count,omitempty"`
 	Algorithm     string                 `protobuf:"bytes,6,opt,name=algorithm,proto3" json:"algorithm,omitempty"`
 	Backends      []string               `protobuf:"bytes,7,rep,name=backends,proto3" json:"backends,omitempty"`
+	Dsr           bool                   `protobuf:"varint,8,opt,name=dsr,proto3" json:"dsr,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3928,12 +4194,755 @@ func (x *ServiceInfo) GetBackends() []string {
 	return nil
 }
 
+func (x *ServiceInfo) GetDsr() bool {
+	if x != nil {
+		return x.Dsr
+	}
+	return false
+}
+
+type UpsertHostPolicyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RuleId        string                 `protobuf:"bytes,1,opt,name=rule_id,json=ruleId,proto3" json:"rule_id,omitempty"` // Unique rule identifier.
+	Direction     HostPolicyDirection    `protobuf:"varint,2,opt,name=direction,proto3,enum=novanet.v1.HostPolicyDirection" json:"direction,omitempty"`
+	Protocol      uint32                 `protobuf:"varint,3,opt,name=protocol,proto3" json:"protocol,omitempty"`
+	CidrIp        []byte                 `protobuf:"bytes,4,opt,name=cidr_ip,json=cidrIp,proto3" json:"cidr_ip,omitempty"` // 4 or 16 bytes for IPv4/IPv6.
+	CidrPrefixLen uint32                 `protobuf:"varint,5,opt,name=cidr_prefix_len,json=cidrPrefixLen,proto3" json:"cidr_prefix_len,omitempty"`
+	Port          uint32                 `protobuf:"varint,6,opt,name=port,proto3" json:"port,omitempty"`
+	EndPort       uint32                 `protobuf:"varint,7,opt,name=end_port,json=endPort,proto3" json:"end_port,omitempty"` // 0 = single port.
+	Action        PolicyAction           `protobuf:"varint,8,opt,name=action,proto3,enum=novanet.v1.PolicyAction" json:"action,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpsertHostPolicyRequest) Reset() {
+	*x = UpsertHostPolicyRequest{}
+	mi := &file_api_v1_novanet_proto_msgTypes[65]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpsertHostPolicyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpsertHostPolicyRequest) ProtoMessage() {}
+
+func (x *UpsertHostPolicyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_novanet_proto_msgTypes[65]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpsertHostPolicyRequest.ProtoReflect.Descriptor instead.
+func (*UpsertHostPolicyRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_novanet_proto_rawDescGZIP(), []int{65}
+}
+
+func (x *UpsertHostPolicyRequest) GetRuleId() string {
+	if x != nil {
+		return x.RuleId
+	}
+	return ""
+}
+
+func (x *UpsertHostPolicyRequest) GetDirection() HostPolicyDirection {
+	if x != nil {
+		return x.Direction
+	}
+	return HostPolicyDirection_HOST_POLICY_INGRESS
+}
+
+func (x *UpsertHostPolicyRequest) GetProtocol() uint32 {
+	if x != nil {
+		return x.Protocol
+	}
+	return 0
+}
+
+func (x *UpsertHostPolicyRequest) GetCidrIp() []byte {
+	if x != nil {
+		return x.CidrIp
+	}
+	return nil
+}
+
+func (x *UpsertHostPolicyRequest) GetCidrPrefixLen() uint32 {
+	if x != nil {
+		return x.CidrPrefixLen
+	}
+	return 0
+}
+
+func (x *UpsertHostPolicyRequest) GetPort() uint32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
+}
+
+func (x *UpsertHostPolicyRequest) GetEndPort() uint32 {
+	if x != nil {
+		return x.EndPort
+	}
+	return 0
+}
+
+func (x *UpsertHostPolicyRequest) GetAction() PolicyAction {
+	if x != nil {
+		return x.Action
+	}
+	return PolicyAction_POLICY_ACTION_DENY
+}
+
+type UpsertHostPolicyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpsertHostPolicyResponse) Reset() {
+	*x = UpsertHostPolicyResponse{}
+	mi := &file_api_v1_novanet_proto_msgTypes[66]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpsertHostPolicyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpsertHostPolicyResponse) ProtoMessage() {}
+
+func (x *UpsertHostPolicyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_novanet_proto_msgTypes[66]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpsertHostPolicyResponse.ProtoReflect.Descriptor instead.
+func (*UpsertHostPolicyResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_novanet_proto_rawDescGZIP(), []int{66}
+}
+
+type DeleteHostPolicyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RuleId        string                 `protobuf:"bytes,1,opt,name=rule_id,json=ruleId,proto3" json:"rule_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteHostPolicyRequest) Reset() {
+	*x = DeleteHostPolicyRequest{}
+	mi := &file_api_v1_novanet_proto_msgTypes[67]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteHostPolicyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteHostPolicyRequest) ProtoMessage() {}
+
+func (x *DeleteHostPolicyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_novanet_proto_msgTypes[67]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteHostPolicyRequest.ProtoReflect.Descriptor instead.
+func (*DeleteHostPolicyRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_novanet_proto_rawDescGZIP(), []int{67}
+}
+
+func (x *DeleteHostPolicyRequest) GetRuleId() string {
+	if x != nil {
+		return x.RuleId
+	}
+	return ""
+}
+
+type DeleteHostPolicyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteHostPolicyResponse) Reset() {
+	*x = DeleteHostPolicyResponse{}
+	mi := &file_api_v1_novanet_proto_msgTypes[68]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteHostPolicyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteHostPolicyResponse) ProtoMessage() {}
+
+func (x *DeleteHostPolicyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_novanet_proto_msgTypes[68]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteHostPolicyResponse.ProtoReflect.Descriptor instead.
+func (*DeleteHostPolicyResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_novanet_proto_rawDescGZIP(), []int{68}
+}
+
+type SyncHostPoliciesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Policies      []*HostPolicyEntry     `protobuf:"bytes,1,rep,name=policies,proto3" json:"policies,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SyncHostPoliciesRequest) Reset() {
+	*x = SyncHostPoliciesRequest{}
+	mi := &file_api_v1_novanet_proto_msgTypes[69]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SyncHostPoliciesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SyncHostPoliciesRequest) ProtoMessage() {}
+
+func (x *SyncHostPoliciesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_novanet_proto_msgTypes[69]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SyncHostPoliciesRequest.ProtoReflect.Descriptor instead.
+func (*SyncHostPoliciesRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_novanet_proto_rawDescGZIP(), []int{69}
+}
+
+func (x *SyncHostPoliciesRequest) GetPolicies() []*HostPolicyEntry {
+	if x != nil {
+		return x.Policies
+	}
+	return nil
+}
+
+type HostPolicyEntry struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RuleId        string                 `protobuf:"bytes,1,opt,name=rule_id,json=ruleId,proto3" json:"rule_id,omitempty"`
+	Direction     HostPolicyDirection    `protobuf:"varint,2,opt,name=direction,proto3,enum=novanet.v1.HostPolicyDirection" json:"direction,omitempty"`
+	Protocol      uint32                 `protobuf:"varint,3,opt,name=protocol,proto3" json:"protocol,omitempty"`
+	CidrIp        []byte                 `protobuf:"bytes,4,opt,name=cidr_ip,json=cidrIp,proto3" json:"cidr_ip,omitempty"`
+	CidrPrefixLen uint32                 `protobuf:"varint,5,opt,name=cidr_prefix_len,json=cidrPrefixLen,proto3" json:"cidr_prefix_len,omitempty"`
+	Port          uint32                 `protobuf:"varint,6,opt,name=port,proto3" json:"port,omitempty"`
+	EndPort       uint32                 `protobuf:"varint,7,opt,name=end_port,json=endPort,proto3" json:"end_port,omitempty"`
+	Action        PolicyAction           `protobuf:"varint,8,opt,name=action,proto3,enum=novanet.v1.PolicyAction" json:"action,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HostPolicyEntry) Reset() {
+	*x = HostPolicyEntry{}
+	mi := &file_api_v1_novanet_proto_msgTypes[70]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HostPolicyEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HostPolicyEntry) ProtoMessage() {}
+
+func (x *HostPolicyEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_novanet_proto_msgTypes[70]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HostPolicyEntry.ProtoReflect.Descriptor instead.
+func (*HostPolicyEntry) Descriptor() ([]byte, []int) {
+	return file_api_v1_novanet_proto_rawDescGZIP(), []int{70}
+}
+
+func (x *HostPolicyEntry) GetRuleId() string {
+	if x != nil {
+		return x.RuleId
+	}
+	return ""
+}
+
+func (x *HostPolicyEntry) GetDirection() HostPolicyDirection {
+	if x != nil {
+		return x.Direction
+	}
+	return HostPolicyDirection_HOST_POLICY_INGRESS
+}
+
+func (x *HostPolicyEntry) GetProtocol() uint32 {
+	if x != nil {
+		return x.Protocol
+	}
+	return 0
+}
+
+func (x *HostPolicyEntry) GetCidrIp() []byte {
+	if x != nil {
+		return x.CidrIp
+	}
+	return nil
+}
+
+func (x *HostPolicyEntry) GetCidrPrefixLen() uint32 {
+	if x != nil {
+		return x.CidrPrefixLen
+	}
+	return 0
+}
+
+func (x *HostPolicyEntry) GetPort() uint32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
+}
+
+func (x *HostPolicyEntry) GetEndPort() uint32 {
+	if x != nil {
+		return x.EndPort
+	}
+	return 0
+}
+
+func (x *HostPolicyEntry) GetAction() PolicyAction {
+	if x != nil {
+		return x.Action
+	}
+	return PolicyAction_POLICY_ACTION_DENY
+}
+
+type SyncHostPoliciesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Added         uint32                 `protobuf:"varint,1,opt,name=added,proto3" json:"added,omitempty"`
+	Removed       uint32                 `protobuf:"varint,2,opt,name=removed,proto3" json:"removed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SyncHostPoliciesResponse) Reset() {
+	*x = SyncHostPoliciesResponse{}
+	mi := &file_api_v1_novanet_proto_msgTypes[71]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SyncHostPoliciesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SyncHostPoliciesResponse) ProtoMessage() {}
+
+func (x *SyncHostPoliciesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_novanet_proto_msgTypes[71]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SyncHostPoliciesResponse.ProtoReflect.Descriptor instead.
+func (*SyncHostPoliciesResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_novanet_proto_rawDescGZIP(), []int{71}
+}
+
+func (x *SyncHostPoliciesResponse) GetAdded() uint32 {
+	if x != nil {
+		return x.Added
+	}
+	return 0
+}
+
+func (x *SyncHostPoliciesResponse) GetRemoved() uint32 {
+	if x != nil {
+		return x.Removed
+	}
+	return 0
+}
+
+type AttachXDPRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	InterfaceName string                 `protobuf:"bytes,1,opt,name=interface_name,json=interfaceName,proto3" json:"interface_name,omitempty"`
+	Mode          XDPMode                `protobuf:"varint,2,opt,name=mode,proto3,enum=novanet.v1.XDPMode" json:"mode,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AttachXDPRequest) Reset() {
+	*x = AttachXDPRequest{}
+	mi := &file_api_v1_novanet_proto_msgTypes[72]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AttachXDPRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AttachXDPRequest) ProtoMessage() {}
+
+func (x *AttachXDPRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_novanet_proto_msgTypes[72]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AttachXDPRequest.ProtoReflect.Descriptor instead.
+func (*AttachXDPRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_novanet_proto_rawDescGZIP(), []int{72}
+}
+
+func (x *AttachXDPRequest) GetInterfaceName() string {
+	if x != nil {
+		return x.InterfaceName
+	}
+	return ""
+}
+
+func (x *AttachXDPRequest) GetMode() XDPMode {
+	if x != nil {
+		return x.Mode
+	}
+	return XDPMode_XDP_MODE_NATIVE
+}
+
+type AttachXDPResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AttachXDPResponse) Reset() {
+	*x = AttachXDPResponse{}
+	mi := &file_api_v1_novanet_proto_msgTypes[73]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AttachXDPResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AttachXDPResponse) ProtoMessage() {}
+
+func (x *AttachXDPResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_novanet_proto_msgTypes[73]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AttachXDPResponse.ProtoReflect.Descriptor instead.
+func (*AttachXDPResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_novanet_proto_rawDescGZIP(), []int{73}
+}
+
+type DetachXDPRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	InterfaceName string                 `protobuf:"bytes,1,opt,name=interface_name,json=interfaceName,proto3" json:"interface_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DetachXDPRequest) Reset() {
+	*x = DetachXDPRequest{}
+	mi := &file_api_v1_novanet_proto_msgTypes[74]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DetachXDPRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DetachXDPRequest) ProtoMessage() {}
+
+func (x *DetachXDPRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_novanet_proto_msgTypes[74]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DetachXDPRequest.ProtoReflect.Descriptor instead.
+func (*DetachXDPRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_novanet_proto_rawDescGZIP(), []int{74}
+}
+
+func (x *DetachXDPRequest) GetInterfaceName() string {
+	if x != nil {
+		return x.InterfaceName
+	}
+	return ""
+}
+
+type DetachXDPResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DetachXDPResponse) Reset() {
+	*x = DetachXDPResponse{}
+	mi := &file_api_v1_novanet_proto_msgTypes[75]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DetachXDPResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DetachXDPResponse) ProtoMessage() {}
+
+func (x *DetachXDPResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_novanet_proto_msgTypes[75]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DetachXDPResponse.ProtoReflect.Descriptor instead.
+func (*DetachXDPResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_novanet_proto_rawDescGZIP(), []int{75}
+}
+
+type UpsertTunnelV6Request struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NodeIpv6      []byte                 `protobuf:"bytes,1,opt,name=node_ipv6,json=nodeIpv6,proto3" json:"node_ipv6,omitempty"` // 16-byte IPv6 node address.
+	TunnelIfindex uint32                 `protobuf:"varint,2,opt,name=tunnel_ifindex,json=tunnelIfindex,proto3" json:"tunnel_ifindex,omitempty"`
+	Vni           uint32                 `protobuf:"varint,3,opt,name=vni,proto3" json:"vni,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpsertTunnelV6Request) Reset() {
+	*x = UpsertTunnelV6Request{}
+	mi := &file_api_v1_novanet_proto_msgTypes[76]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpsertTunnelV6Request) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpsertTunnelV6Request) ProtoMessage() {}
+
+func (x *UpsertTunnelV6Request) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_novanet_proto_msgTypes[76]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpsertTunnelV6Request.ProtoReflect.Descriptor instead.
+func (*UpsertTunnelV6Request) Descriptor() ([]byte, []int) {
+	return file_api_v1_novanet_proto_rawDescGZIP(), []int{76}
+}
+
+func (x *UpsertTunnelV6Request) GetNodeIpv6() []byte {
+	if x != nil {
+		return x.NodeIpv6
+	}
+	return nil
+}
+
+func (x *UpsertTunnelV6Request) GetTunnelIfindex() uint32 {
+	if x != nil {
+		return x.TunnelIfindex
+	}
+	return 0
+}
+
+func (x *UpsertTunnelV6Request) GetVni() uint32 {
+	if x != nil {
+		return x.Vni
+	}
+	return 0
+}
+
+type UpsertTunnelV6Response struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpsertTunnelV6Response) Reset() {
+	*x = UpsertTunnelV6Response{}
+	mi := &file_api_v1_novanet_proto_msgTypes[77]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpsertTunnelV6Response) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpsertTunnelV6Response) ProtoMessage() {}
+
+func (x *UpsertTunnelV6Response) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_novanet_proto_msgTypes[77]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpsertTunnelV6Response.ProtoReflect.Descriptor instead.
+func (*UpsertTunnelV6Response) Descriptor() ([]byte, []int) {
+	return file_api_v1_novanet_proto_rawDescGZIP(), []int{77}
+}
+
+type AddPodV6Response struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Ipv6           string                 `protobuf:"bytes,1,opt,name=ipv6,proto3" json:"ipv6,omitempty"`
+	GatewayV6      string                 `protobuf:"bytes,2,opt,name=gateway_v6,json=gatewayV6,proto3" json:"gateway_v6,omitempty"`
+	PrefixLengthV6 int32                  `protobuf:"varint,3,opt,name=prefix_length_v6,json=prefixLengthV6,proto3" json:"prefix_length_v6,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *AddPodV6Response) Reset() {
+	*x = AddPodV6Response{}
+	mi := &file_api_v1_novanet_proto_msgTypes[78]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddPodV6Response) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddPodV6Response) ProtoMessage() {}
+
+func (x *AddPodV6Response) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_novanet_proto_msgTypes[78]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddPodV6Response.ProtoReflect.Descriptor instead.
+func (*AddPodV6Response) Descriptor() ([]byte, []int) {
+	return file_api_v1_novanet_proto_rawDescGZIP(), []int{78}
+}
+
+func (x *AddPodV6Response) GetIpv6() string {
+	if x != nil {
+		return x.Ipv6
+	}
+	return ""
+}
+
+func (x *AddPodV6Response) GetGatewayV6() string {
+	if x != nil {
+		return x.GatewayV6
+	}
+	return ""
+}
+
+func (x *AddPodV6Response) GetPrefixLengthV6() int32 {
+	if x != nil {
+		return x.PrefixLengthV6
+	}
+	return 0
+}
+
 var File_api_v1_novanet_proto protoreflect.FileDescriptor
 
 const file_api_v1_novanet_proto_rawDesc = "" +
 	"\n" +
 	"\x14api/v1/novanet.proto\x12\n" +
-	"novanet.v1\"\xc6\x01\n" +
+	"novanet.v1\"\xf7\x01\n" +
 	"\x15UpsertEndpointRequest\x12\x0e\n" +
 	"\x02ip\x18\x01 \x01(\rR\x02ip\x12\x18\n" +
 	"\aifindex\x18\x02 \x01(\rR\aifindex\x12\x10\n" +
@@ -3942,10 +4951,13 @@ const file_api_v1_novanet_proto_rawDesc = "" +
 	"identityId\x12\x19\n" +
 	"\bpod_name\x18\x05 \x01(\tR\apodName\x12\x1c\n" +
 	"\tnamespace\x18\x06 \x01(\tR\tnamespace\x12\x17\n" +
-	"\anode_ip\x18\a \x01(\rR\x06nodeIp\"\x18\n" +
-	"\x16UpsertEndpointResponse\"'\n" +
+	"\anode_ip\x18\a \x01(\rR\x06nodeIp\x12\x12\n" +
+	"\x04ipv6\x18\b \x01(\fR\x04ipv6\x12\x1b\n" +
+	"\tnode_ipv6\x18\t \x01(\fR\bnodeIpv6\"\x18\n" +
+	"\x16UpsertEndpointResponse\";\n" +
 	"\x15DeleteEndpointRequest\x12\x0e\n" +
-	"\x02ip\x18\x01 \x01(\rR\x02ip\"\x18\n" +
+	"\x02ip\x18\x01 \x01(\rR\x02ip\x12\x12\n" +
+	"\x04ipv6\x18\x02 \x01(\fR\x04ipv6\"\x18\n" +
 	"\x16DeleteEndpointResponse\"\xc4\x01\n" +
 	"\x13UpsertPolicyRequest\x12!\n" +
 	"\fsrc_identity\x18\x01 \x01(\rR\vsrcIdentity\x12!\n" +
@@ -4043,12 +5055,16 @@ const file_api_v1_novanet_proto_rawDesc = "" +
 	"\x06labels\x18\x06 \x03(\v2%.novanet.v1.AddPodRequest.LabelsEntryR\x06labels\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"q\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xce\x01\n" +
 	"\x0eAddPodResponse\x12\x0e\n" +
 	"\x02ip\x18\x01 \x01(\tR\x02ip\x12\x18\n" +
 	"\agateway\x18\x02 \x01(\tR\agateway\x12\x10\n" +
 	"\x03mac\x18\x03 \x01(\tR\x03mac\x12#\n" +
-	"\rprefix_length\x18\x04 \x01(\x05R\fprefixLength\"\xa1\x01\n" +
+	"\rprefix_length\x18\x04 \x01(\x05R\fprefixLength\x12\x12\n" +
+	"\x04ipv6\x18\x05 \x01(\tR\x04ipv6\x12\x1d\n" +
+	"\n" +
+	"gateway_v6\x18\x06 \x01(\tR\tgatewayV6\x12(\n" +
+	"\x10prefix_length_v6\x18\a \x01(\x05R\x0eprefixLengthV6\"\xa1\x01\n" +
 	"\rDelPodRequest\x12\x19\n" +
 	"\bpod_name\x18\x01 \x01(\tR\apodName\x12#\n" +
 	"\rpod_namespace\x18\x02 \x01(\tR\fpodNamespace\x12!\n" +
@@ -4056,7 +5072,7 @@ const file_api_v1_novanet_proto_rawDesc = "" +
 	"\x05netns\x18\x04 \x01(\tR\x05netns\x12\x17\n" +
 	"\aif_name\x18\x05 \x01(\tR\x06ifName\"\x10\n" +
 	"\x0eDelPodResponse\"\x17\n" +
-	"\x15GetAgentStatusRequest\"\xbf\x03\n" +
+	"\x15GetAgentStatusRequest\"\xb8\x05\n" +
 	"\x16GetAgentStatusResponse\x12!\n" +
 	"\frouting_mode\x18\x01 \x01(\tR\vroutingMode\x12'\n" +
 	"\x0ftunnel_protocol\x18\x02 \x01(\tR\x0etunnelProtocol\x12%\n" +
@@ -4069,7 +5085,17 @@ const file_api_v1_novanet_proto_rawDesc = "" +
 	"\fcluster_cidr\x18\t \x01(\tR\vclusterCidr\x12/\n" +
 	"\x13novaroute_connected\x18\n" +
 	" \x01(\bR\x12novarouteConnected\x12=\n" +
-	"\tdataplane\x18\v \x01(\v2\x1f.novanet.v1.DataplaneStatusInfoR\tdataplane\"`\n" +
+	"\tdataplane\x18\v \x01(\v2\x1f.novanet.v1.DataplaneStatusInfoR\tdataplane\x12\x1e\n" +
+	"\n" +
+	"encryption\x18\f \x01(\tR\n" +
+	"encryption\x12#\n" +
+	"\rhost_firewall\x18\r \x01(\bR\fhostFirewall\x12+\n" +
+	"\x11bandwidth_enabled\x18\x0e \x01(\bR\x10bandwidthEnabled\x12!\n" +
+	"\fipv6_enabled\x18\x0f \x01(\bR\vipv6Enabled\x12\x1f\n" +
+	"\vdsr_enabled\x18\x10 \x01(\bR\n" +
+	"dsrEnabled\x12\x19\n" +
+	"\bxdp_mode\x18\x11 \x01(\tR\axdpMode\x12&\n" +
+	"\x0flb_ipam_enabled\x18\x12 \x01(\bR\rlbIpamEnabled\"`\n" +
 	"\x13DataplaneStatusInfo\x12\x1c\n" +
 	"\tconnected\x18\x01 \x01(\bR\tconnected\x12+\n" +
 	"\x11attached_programs\x18\x02 \x01(\rR\x10attachedPrograms\"a\n" +
@@ -4092,7 +5118,7 @@ const file_api_v1_novanet_proto_rawDesc = "" +
 	"\x13dst_cidr_prefix_len\x18\x03 \x01(\rR\x10dstCidrPrefixLen\x12\x1a\n" +
 	"\bprotocol\x18\x04 \x01(\rR\bprotocol\x12\x19\n" +
 	"\bdst_port\x18\x05 \x01(\rR\adstPort\"\x1c\n" +
-	"\x1aDeleteEgressPolicyResponse\"\xbc\x02\n" +
+	"\x1aDeleteEgressPolicyResponse\"\xd0\x02\n" +
 	"\x14UpsertServiceRequest\x12\x0e\n" +
 	"\x02ip\x18\x01 \x01(\rR\x02ip\x12\x12\n" +
 	"\x04port\x18\x02 \x01(\rR\x04port\x12\x1a\n" +
@@ -4104,7 +5130,8 @@ const file_api_v1_novanet_proto_rawDesc = "" +
 	"\x05flags\x18\b \x01(\rR\x05flags\x12)\n" +
 	"\x10affinity_timeout\x18\t \x01(\rR\x0faffinityTimeout\x12#\n" +
 	"\rmaglev_offset\x18\n" +
-	" \x01(\rR\fmaglevOffset\"\x17\n" +
+	" \x01(\rR\fmaglevOffset\x12\x12\n" +
+	"\x04ipv6\x18\v \x01(\fR\x04ipv6\"\x17\n" +
 	"\x15UpsertServiceResponse\"l\n" +
 	"\x14DeleteServiceRequest\x12\x0e\n" +
 	"\x02ip\x18\x01 \x01(\rR\x02ip\x12\x12\n" +
@@ -4113,12 +5140,13 @@ const file_api_v1_novanet_proto_rawDesc = "" +
 	"\x05scope\x18\x04 \x01(\rR\x05scope\"\x17\n" +
 	"\x15DeleteServiceResponse\"M\n" +
 	"\x15UpsertBackendsRequest\x124\n" +
-	"\bbackends\x18\x01 \x03(\v2\x18.novanet.v1.BackendEntryR\bbackends\"a\n" +
+	"\bbackends\x18\x01 \x03(\v2\x18.novanet.v1.BackendEntryR\bbackends\"u\n" +
 	"\fBackendEntry\x12\x14\n" +
 	"\x05index\x18\x01 \x01(\rR\x05index\x12\x0e\n" +
 	"\x02ip\x18\x02 \x01(\rR\x02ip\x12\x12\n" +
 	"\x04port\x18\x03 \x01(\rR\x04port\x12\x17\n" +
-	"\anode_ip\x18\x04 \x01(\rR\x06nodeIp\"\x18\n" +
+	"\anode_ip\x18\x04 \x01(\rR\x06nodeIp\x12\x12\n" +
+	"\x04ipv6\x18\x05 \x01(\fR\x04ipv6\"\x18\n" +
 	"\x16UpsertBackendsResponse\"\x81\x01\n" +
 	"\x13SyncServicesRequest\x124\n" +
 	"\bservices\x18\x01 \x03(\v2\x18.novanet.v1.ServiceEntryR\bservices\x124\n" +
@@ -4187,7 +5215,7 @@ const file_api_v1_novanet_proto_rawDesc = "" +
 	"\x06action\x18\a \x01(\x0e2\x18.novanet.v1.EgressActionR\x06action\"\x15\n" +
 	"\x13ListServicesRequest\"K\n" +
 	"\x14ListServicesResponse\x123\n" +
-	"\bservices\x18\x01 \x03(\v2\x17.novanet.v1.ServiceInfoR\bservices\"\xd1\x01\n" +
+	"\bservices\x18\x01 \x03(\v2\x17.novanet.v1.ServiceInfoR\bservices\"\xe3\x01\n" +
 	"\vServiceInfo\x12\x1d\n" +
 	"\n" +
 	"cluster_ip\x18\x01 \x01(\tR\tclusterIp\x12\x12\n" +
@@ -4196,7 +5224,52 @@ const file_api_v1_novanet_proto_rawDesc = "" +
 	"\x05scope\x18\x04 \x01(\tR\x05scope\x12#\n" +
 	"\rbackend_count\x18\x05 \x01(\rR\fbackendCount\x12\x1c\n" +
 	"\talgorithm\x18\x06 \x01(\tR\talgorithm\x12\x1a\n" +
-	"\bbackends\x18\a \x03(\tR\bbackends*?\n" +
+	"\bbackends\x18\a \x03(\tR\bbackends\x12\x10\n" +
+	"\x03dsr\x18\b \x01(\bR\x03dsr\"\xaf\x02\n" +
+	"\x17UpsertHostPolicyRequest\x12\x17\n" +
+	"\arule_id\x18\x01 \x01(\tR\x06ruleId\x12=\n" +
+	"\tdirection\x18\x02 \x01(\x0e2\x1f.novanet.v1.HostPolicyDirectionR\tdirection\x12\x1a\n" +
+	"\bprotocol\x18\x03 \x01(\rR\bprotocol\x12\x17\n" +
+	"\acidr_ip\x18\x04 \x01(\fR\x06cidrIp\x12&\n" +
+	"\x0fcidr_prefix_len\x18\x05 \x01(\rR\rcidrPrefixLen\x12\x12\n" +
+	"\x04port\x18\x06 \x01(\rR\x04port\x12\x19\n" +
+	"\bend_port\x18\a \x01(\rR\aendPort\x120\n" +
+	"\x06action\x18\b \x01(\x0e2\x18.novanet.v1.PolicyActionR\x06action\"\x1a\n" +
+	"\x18UpsertHostPolicyResponse\"2\n" +
+	"\x17DeleteHostPolicyRequest\x12\x17\n" +
+	"\arule_id\x18\x01 \x01(\tR\x06ruleId\"\x1a\n" +
+	"\x18DeleteHostPolicyResponse\"R\n" +
+	"\x17SyncHostPoliciesRequest\x127\n" +
+	"\bpolicies\x18\x01 \x03(\v2\x1b.novanet.v1.HostPolicyEntryR\bpolicies\"\xa7\x02\n" +
+	"\x0fHostPolicyEntry\x12\x17\n" +
+	"\arule_id\x18\x01 \x01(\tR\x06ruleId\x12=\n" +
+	"\tdirection\x18\x02 \x01(\x0e2\x1f.novanet.v1.HostPolicyDirectionR\tdirection\x12\x1a\n" +
+	"\bprotocol\x18\x03 \x01(\rR\bprotocol\x12\x17\n" +
+	"\acidr_ip\x18\x04 \x01(\fR\x06cidrIp\x12&\n" +
+	"\x0fcidr_prefix_len\x18\x05 \x01(\rR\rcidrPrefixLen\x12\x12\n" +
+	"\x04port\x18\x06 \x01(\rR\x04port\x12\x19\n" +
+	"\bend_port\x18\a \x01(\rR\aendPort\x120\n" +
+	"\x06action\x18\b \x01(\x0e2\x18.novanet.v1.PolicyActionR\x06action\"J\n" +
+	"\x18SyncHostPoliciesResponse\x12\x14\n" +
+	"\x05added\x18\x01 \x01(\rR\x05added\x12\x18\n" +
+	"\aremoved\x18\x02 \x01(\rR\aremoved\"b\n" +
+	"\x10AttachXDPRequest\x12%\n" +
+	"\x0einterface_name\x18\x01 \x01(\tR\rinterfaceName\x12'\n" +
+	"\x04mode\x18\x02 \x01(\x0e2\x13.novanet.v1.XDPModeR\x04mode\"\x13\n" +
+	"\x11AttachXDPResponse\"9\n" +
+	"\x10DetachXDPRequest\x12%\n" +
+	"\x0einterface_name\x18\x01 \x01(\tR\rinterfaceName\"\x13\n" +
+	"\x11DetachXDPResponse\"m\n" +
+	"\x15UpsertTunnelV6Request\x12\x1b\n" +
+	"\tnode_ipv6\x18\x01 \x01(\fR\bnodeIpv6\x12%\n" +
+	"\x0etunnel_ifindex\x18\x02 \x01(\rR\rtunnelIfindex\x12\x10\n" +
+	"\x03vni\x18\x03 \x01(\rR\x03vni\"\x18\n" +
+	"\x16UpsertTunnelV6Response\"o\n" +
+	"\x10AddPodV6Response\x12\x12\n" +
+	"\x04ipv6\x18\x01 \x01(\tR\x04ipv6\x12\x1d\n" +
+	"\n" +
+	"gateway_v6\x18\x02 \x01(\tR\tgatewayV6\x12(\n" +
+	"\x10prefix_length_v6\x18\x03 \x01(\x05R\x0eprefixLengthV6*?\n" +
 	"\fPolicyAction\x12\x16\n" +
 	"\x12POLICY_ACTION_DENY\x10\x00\x12\x17\n" +
 	"\x13POLICY_ACTION_ALLOW\x10\x01*9\n" +
@@ -4215,7 +5288,18 @@ const file_api_v1_novanet_proto_rawDesc = "" +
 	"\fEgressAction\x12\x16\n" +
 	"\x12EGRESS_ACTION_DENY\x10\x00\x12\x17\n" +
 	"\x13EGRESS_ACTION_ALLOW\x10\x01\x12\x16\n" +
-	"\x12EGRESS_ACTION_SNAT\x10\x022\x93\r\n" +
+	"\x12EGRESS_ACTION_SNAT\x10\x02*|\n" +
+	"\vServiceFlag\x12\x15\n" +
+	"\x11SERVICE_FLAG_NONE\x10\x00\x12\x14\n" +
+	"\x10SERVICE_FLAG_DSR\x10\x01\x12\x1f\n" +
+	"\x1bSERVICE_FLAG_EXTERNAL_LOCAL\x10\x02\x12\x1f\n" +
+	"\x1bSERVICE_FLAG_INTERNAL_LOCAL\x10\x04*F\n" +
+	"\x13HostPolicyDirection\x12\x17\n" +
+	"\x13HOST_POLICY_INGRESS\x10\x00\x12\x16\n" +
+	"\x12HOST_POLICY_EGRESS\x10\x01*0\n" +
+	"\aXDPMode\x12\x13\n" +
+	"\x0fXDP_MODE_NATIVE\x10\x00\x12\x10\n" +
+	"\fXDP_MODE_SKB\x10\x012\xc4\x10\n" +
 	"\x10DataplaneControl\x12W\n" +
 	"\x0eUpsertEndpoint\x12!.novanet.v1.UpsertEndpointRequest\x1a\".novanet.v1.UpsertEndpointResponse\x12W\n" +
 	"\x0eDeleteEndpoint\x12!.novanet.v1.DeleteEndpointRequest\x1a\".novanet.v1.DeleteEndpointResponse\x12Q\n" +
@@ -4233,7 +5317,12 @@ const file_api_v1_novanet_proto_rawDesc = "" +
 	"\rDeleteService\x12 .novanet.v1.DeleteServiceRequest\x1a!.novanet.v1.DeleteServiceResponse\x12W\n" +
 	"\x0eUpsertBackends\x12!.novanet.v1.UpsertBackendsRequest\x1a\".novanet.v1.UpsertBackendsResponse\x12Q\n" +
 	"\fSyncServices\x12\x1f.novanet.v1.SyncServicesRequest\x1a .novanet.v1.SyncServicesResponse\x12`\n" +
-	"\x11UpsertMaglevTable\x12$.novanet.v1.UpsertMaglevTableRequest\x1a%.novanet.v1.UpsertMaglevTableResponse\x12F\n" +
+	"\x11UpsertMaglevTable\x12$.novanet.v1.UpsertMaglevTableRequest\x1a%.novanet.v1.UpsertMaglevTableResponse\x12]\n" +
+	"\x10UpsertHostPolicy\x12#.novanet.v1.UpsertHostPolicyRequest\x1a$.novanet.v1.UpsertHostPolicyResponse\x12]\n" +
+	"\x10DeleteHostPolicy\x12#.novanet.v1.DeleteHostPolicyRequest\x1a$.novanet.v1.DeleteHostPolicyResponse\x12]\n" +
+	"\x10SyncHostPolicies\x12#.novanet.v1.SyncHostPoliciesRequest\x1a$.novanet.v1.SyncHostPoliciesResponse\x12H\n" +
+	"\tAttachXDP\x12\x1c.novanet.v1.AttachXDPRequest\x1a\x1d.novanet.v1.AttachXDPResponse\x12H\n" +
+	"\tDetachXDP\x12\x1c.novanet.v1.DetachXDPRequest\x1a\x1d.novanet.v1.DetachXDPResponse\x12F\n" +
 	"\vStreamFlows\x12\x1e.novanet.v1.StreamFlowsRequest\x1a\x15.novanet.v1.FlowEvent0\x01\x12c\n" +
 	"\x12GetDataplaneStatus\x12%.novanet.v1.GetDataplaneStatusRequest\x1a&.novanet.v1.GetDataplaneStatusResponse2\xef\x05\n" +
 	"\fAgentControl\x12?\n" +
@@ -4259,169 +5348,202 @@ func file_api_v1_novanet_proto_rawDescGZIP() []byte {
 	return file_api_v1_novanet_proto_rawDescData
 }
 
-var file_api_v1_novanet_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_api_v1_novanet_proto_msgTypes = make([]protoimpl.MessageInfo, 69)
+var file_api_v1_novanet_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
+var file_api_v1_novanet_proto_msgTypes = make([]protoimpl.MessageInfo, 83)
 var file_api_v1_novanet_proto_goTypes = []any{
 	(PolicyAction)(0),                  // 0: novanet.v1.PolicyAction
 	(AttachType)(0),                    // 1: novanet.v1.AttachType
 	(DropReason)(0),                    // 2: novanet.v1.DropReason
 	(EgressAction)(0),                  // 3: novanet.v1.EgressAction
-	(*UpsertEndpointRequest)(nil),      // 4: novanet.v1.UpsertEndpointRequest
-	(*UpsertEndpointResponse)(nil),     // 5: novanet.v1.UpsertEndpointResponse
-	(*DeleteEndpointRequest)(nil),      // 6: novanet.v1.DeleteEndpointRequest
-	(*DeleteEndpointResponse)(nil),     // 7: novanet.v1.DeleteEndpointResponse
-	(*UpsertPolicyRequest)(nil),        // 8: novanet.v1.UpsertPolicyRequest
-	(*UpsertPolicyResponse)(nil),       // 9: novanet.v1.UpsertPolicyResponse
-	(*DeletePolicyRequest)(nil),        // 10: novanet.v1.DeletePolicyRequest
-	(*DeletePolicyResponse)(nil),       // 11: novanet.v1.DeletePolicyResponse
-	(*SyncPoliciesRequest)(nil),        // 12: novanet.v1.SyncPoliciesRequest
-	(*PolicyEntry)(nil),                // 13: novanet.v1.PolicyEntry
-	(*SyncPoliciesResponse)(nil),       // 14: novanet.v1.SyncPoliciesResponse
-	(*UpsertTunnelRequest)(nil),        // 15: novanet.v1.UpsertTunnelRequest
-	(*UpsertTunnelResponse)(nil),       // 16: novanet.v1.UpsertTunnelResponse
-	(*DeleteTunnelRequest)(nil),        // 17: novanet.v1.DeleteTunnelRequest
-	(*DeleteTunnelResponse)(nil),       // 18: novanet.v1.DeleteTunnelResponse
-	(*UpdateConfigRequest)(nil),        // 19: novanet.v1.UpdateConfigRequest
-	(*UpdateConfigResponse)(nil),       // 20: novanet.v1.UpdateConfigResponse
-	(*AttachProgramRequest)(nil),       // 21: novanet.v1.AttachProgramRequest
-	(*AttachProgramResponse)(nil),      // 22: novanet.v1.AttachProgramResponse
-	(*DetachProgramRequest)(nil),       // 23: novanet.v1.DetachProgramRequest
-	(*DetachProgramResponse)(nil),      // 24: novanet.v1.DetachProgramResponse
-	(*StreamFlowsRequest)(nil),         // 25: novanet.v1.StreamFlowsRequest
-	(*FlowEvent)(nil),                  // 26: novanet.v1.FlowEvent
-	(*GetDataplaneStatusRequest)(nil),  // 27: novanet.v1.GetDataplaneStatusRequest
-	(*GetDataplaneStatusResponse)(nil), // 28: novanet.v1.GetDataplaneStatusResponse
-	(*AttachedProgram)(nil),            // 29: novanet.v1.AttachedProgram
-	(*AddPodRequest)(nil),              // 30: novanet.v1.AddPodRequest
-	(*AddPodResponse)(nil),             // 31: novanet.v1.AddPodResponse
-	(*DelPodRequest)(nil),              // 32: novanet.v1.DelPodRequest
-	(*DelPodResponse)(nil),             // 33: novanet.v1.DelPodResponse
-	(*GetAgentStatusRequest)(nil),      // 34: novanet.v1.GetAgentStatusRequest
-	(*GetAgentStatusResponse)(nil),     // 35: novanet.v1.GetAgentStatusResponse
-	(*DataplaneStatusInfo)(nil),        // 36: novanet.v1.DataplaneStatusInfo
-	(*StreamAgentFlowsRequest)(nil),    // 37: novanet.v1.StreamAgentFlowsRequest
-	(*UpsertEgressPolicyRequest)(nil),  // 38: novanet.v1.UpsertEgressPolicyRequest
-	(*UpsertEgressPolicyResponse)(nil), // 39: novanet.v1.UpsertEgressPolicyResponse
-	(*DeleteEgressPolicyRequest)(nil),  // 40: novanet.v1.DeleteEgressPolicyRequest
-	(*DeleteEgressPolicyResponse)(nil), // 41: novanet.v1.DeleteEgressPolicyResponse
-	(*UpsertServiceRequest)(nil),       // 42: novanet.v1.UpsertServiceRequest
-	(*UpsertServiceResponse)(nil),      // 43: novanet.v1.UpsertServiceResponse
-	(*DeleteServiceRequest)(nil),       // 44: novanet.v1.DeleteServiceRequest
-	(*DeleteServiceResponse)(nil),      // 45: novanet.v1.DeleteServiceResponse
-	(*UpsertBackendsRequest)(nil),      // 46: novanet.v1.UpsertBackendsRequest
-	(*BackendEntry)(nil),               // 47: novanet.v1.BackendEntry
-	(*UpsertBackendsResponse)(nil),     // 48: novanet.v1.UpsertBackendsResponse
-	(*SyncServicesRequest)(nil),        // 49: novanet.v1.SyncServicesRequest
-	(*ServiceEntry)(nil),               // 50: novanet.v1.ServiceEntry
-	(*SyncServicesResponse)(nil),       // 51: novanet.v1.SyncServicesResponse
-	(*UpsertMaglevTableRequest)(nil),   // 52: novanet.v1.UpsertMaglevTableRequest
-	(*UpsertMaglevTableResponse)(nil),  // 53: novanet.v1.UpsertMaglevTableResponse
-	(*ListPoliciesRequest)(nil),        // 54: novanet.v1.ListPoliciesRequest
-	(*ListPoliciesResponse)(nil),       // 55: novanet.v1.ListPoliciesResponse
-	(*PolicyRuleInfo)(nil),             // 56: novanet.v1.PolicyRuleInfo
-	(*ListIdentitiesRequest)(nil),      // 57: novanet.v1.ListIdentitiesRequest
-	(*ListIdentitiesResponse)(nil),     // 58: novanet.v1.ListIdentitiesResponse
-	(*IdentityInfo)(nil),               // 59: novanet.v1.IdentityInfo
-	(*ListTunnelsRequest)(nil),         // 60: novanet.v1.ListTunnelsRequest
-	(*ListTunnelsResponse)(nil),        // 61: novanet.v1.ListTunnelsResponse
-	(*TunnelInfoMsg)(nil),              // 62: novanet.v1.TunnelInfoMsg
-	(*ListEgressPoliciesRequest)(nil),  // 63: novanet.v1.ListEgressPoliciesRequest
-	(*ListEgressPoliciesResponse)(nil), // 64: novanet.v1.ListEgressPoliciesResponse
-	(*EgressPolicyInfo)(nil),           // 65: novanet.v1.EgressPolicyInfo
-	(*ListServicesRequest)(nil),        // 66: novanet.v1.ListServicesRequest
-	(*ListServicesResponse)(nil),       // 67: novanet.v1.ListServicesResponse
-	(*ServiceInfo)(nil),                // 68: novanet.v1.ServiceInfo
-	nil,                                // 69: novanet.v1.UpdateConfigRequest.EntriesEntry
-	nil,                                // 70: novanet.v1.GetDataplaneStatusResponse.DropCountersEntry
-	nil,                                // 71: novanet.v1.AddPodRequest.LabelsEntry
-	nil,                                // 72: novanet.v1.IdentityInfo.LabelsEntry
+	(ServiceFlag)(0),                   // 4: novanet.v1.ServiceFlag
+	(HostPolicyDirection)(0),           // 5: novanet.v1.HostPolicyDirection
+	(XDPMode)(0),                       // 6: novanet.v1.XDPMode
+	(*UpsertEndpointRequest)(nil),      // 7: novanet.v1.UpsertEndpointRequest
+	(*UpsertEndpointResponse)(nil),     // 8: novanet.v1.UpsertEndpointResponse
+	(*DeleteEndpointRequest)(nil),      // 9: novanet.v1.DeleteEndpointRequest
+	(*DeleteEndpointResponse)(nil),     // 10: novanet.v1.DeleteEndpointResponse
+	(*UpsertPolicyRequest)(nil),        // 11: novanet.v1.UpsertPolicyRequest
+	(*UpsertPolicyResponse)(nil),       // 12: novanet.v1.UpsertPolicyResponse
+	(*DeletePolicyRequest)(nil),        // 13: novanet.v1.DeletePolicyRequest
+	(*DeletePolicyResponse)(nil),       // 14: novanet.v1.DeletePolicyResponse
+	(*SyncPoliciesRequest)(nil),        // 15: novanet.v1.SyncPoliciesRequest
+	(*PolicyEntry)(nil),                // 16: novanet.v1.PolicyEntry
+	(*SyncPoliciesResponse)(nil),       // 17: novanet.v1.SyncPoliciesResponse
+	(*UpsertTunnelRequest)(nil),        // 18: novanet.v1.UpsertTunnelRequest
+	(*UpsertTunnelResponse)(nil),       // 19: novanet.v1.UpsertTunnelResponse
+	(*DeleteTunnelRequest)(nil),        // 20: novanet.v1.DeleteTunnelRequest
+	(*DeleteTunnelResponse)(nil),       // 21: novanet.v1.DeleteTunnelResponse
+	(*UpdateConfigRequest)(nil),        // 22: novanet.v1.UpdateConfigRequest
+	(*UpdateConfigResponse)(nil),       // 23: novanet.v1.UpdateConfigResponse
+	(*AttachProgramRequest)(nil),       // 24: novanet.v1.AttachProgramRequest
+	(*AttachProgramResponse)(nil),      // 25: novanet.v1.AttachProgramResponse
+	(*DetachProgramRequest)(nil),       // 26: novanet.v1.DetachProgramRequest
+	(*DetachProgramResponse)(nil),      // 27: novanet.v1.DetachProgramResponse
+	(*StreamFlowsRequest)(nil),         // 28: novanet.v1.StreamFlowsRequest
+	(*FlowEvent)(nil),                  // 29: novanet.v1.FlowEvent
+	(*GetDataplaneStatusRequest)(nil),  // 30: novanet.v1.GetDataplaneStatusRequest
+	(*GetDataplaneStatusResponse)(nil), // 31: novanet.v1.GetDataplaneStatusResponse
+	(*AttachedProgram)(nil),            // 32: novanet.v1.AttachedProgram
+	(*AddPodRequest)(nil),              // 33: novanet.v1.AddPodRequest
+	(*AddPodResponse)(nil),             // 34: novanet.v1.AddPodResponse
+	(*DelPodRequest)(nil),              // 35: novanet.v1.DelPodRequest
+	(*DelPodResponse)(nil),             // 36: novanet.v1.DelPodResponse
+	(*GetAgentStatusRequest)(nil),      // 37: novanet.v1.GetAgentStatusRequest
+	(*GetAgentStatusResponse)(nil),     // 38: novanet.v1.GetAgentStatusResponse
+	(*DataplaneStatusInfo)(nil),        // 39: novanet.v1.DataplaneStatusInfo
+	(*StreamAgentFlowsRequest)(nil),    // 40: novanet.v1.StreamAgentFlowsRequest
+	(*UpsertEgressPolicyRequest)(nil),  // 41: novanet.v1.UpsertEgressPolicyRequest
+	(*UpsertEgressPolicyResponse)(nil), // 42: novanet.v1.UpsertEgressPolicyResponse
+	(*DeleteEgressPolicyRequest)(nil),  // 43: novanet.v1.DeleteEgressPolicyRequest
+	(*DeleteEgressPolicyResponse)(nil), // 44: novanet.v1.DeleteEgressPolicyResponse
+	(*UpsertServiceRequest)(nil),       // 45: novanet.v1.UpsertServiceRequest
+	(*UpsertServiceResponse)(nil),      // 46: novanet.v1.UpsertServiceResponse
+	(*DeleteServiceRequest)(nil),       // 47: novanet.v1.DeleteServiceRequest
+	(*DeleteServiceResponse)(nil),      // 48: novanet.v1.DeleteServiceResponse
+	(*UpsertBackendsRequest)(nil),      // 49: novanet.v1.UpsertBackendsRequest
+	(*BackendEntry)(nil),               // 50: novanet.v1.BackendEntry
+	(*UpsertBackendsResponse)(nil),     // 51: novanet.v1.UpsertBackendsResponse
+	(*SyncServicesRequest)(nil),        // 52: novanet.v1.SyncServicesRequest
+	(*ServiceEntry)(nil),               // 53: novanet.v1.ServiceEntry
+	(*SyncServicesResponse)(nil),       // 54: novanet.v1.SyncServicesResponse
+	(*UpsertMaglevTableRequest)(nil),   // 55: novanet.v1.UpsertMaglevTableRequest
+	(*UpsertMaglevTableResponse)(nil),  // 56: novanet.v1.UpsertMaglevTableResponse
+	(*ListPoliciesRequest)(nil),        // 57: novanet.v1.ListPoliciesRequest
+	(*ListPoliciesResponse)(nil),       // 58: novanet.v1.ListPoliciesResponse
+	(*PolicyRuleInfo)(nil),             // 59: novanet.v1.PolicyRuleInfo
+	(*ListIdentitiesRequest)(nil),      // 60: novanet.v1.ListIdentitiesRequest
+	(*ListIdentitiesResponse)(nil),     // 61: novanet.v1.ListIdentitiesResponse
+	(*IdentityInfo)(nil),               // 62: novanet.v1.IdentityInfo
+	(*ListTunnelsRequest)(nil),         // 63: novanet.v1.ListTunnelsRequest
+	(*ListTunnelsResponse)(nil),        // 64: novanet.v1.ListTunnelsResponse
+	(*TunnelInfoMsg)(nil),              // 65: novanet.v1.TunnelInfoMsg
+	(*ListEgressPoliciesRequest)(nil),  // 66: novanet.v1.ListEgressPoliciesRequest
+	(*ListEgressPoliciesResponse)(nil), // 67: novanet.v1.ListEgressPoliciesResponse
+	(*EgressPolicyInfo)(nil),           // 68: novanet.v1.EgressPolicyInfo
+	(*ListServicesRequest)(nil),        // 69: novanet.v1.ListServicesRequest
+	(*ListServicesResponse)(nil),       // 70: novanet.v1.ListServicesResponse
+	(*ServiceInfo)(nil),                // 71: novanet.v1.ServiceInfo
+	(*UpsertHostPolicyRequest)(nil),    // 72: novanet.v1.UpsertHostPolicyRequest
+	(*UpsertHostPolicyResponse)(nil),   // 73: novanet.v1.UpsertHostPolicyResponse
+	(*DeleteHostPolicyRequest)(nil),    // 74: novanet.v1.DeleteHostPolicyRequest
+	(*DeleteHostPolicyResponse)(nil),   // 75: novanet.v1.DeleteHostPolicyResponse
+	(*SyncHostPoliciesRequest)(nil),    // 76: novanet.v1.SyncHostPoliciesRequest
+	(*HostPolicyEntry)(nil),            // 77: novanet.v1.HostPolicyEntry
+	(*SyncHostPoliciesResponse)(nil),   // 78: novanet.v1.SyncHostPoliciesResponse
+	(*AttachXDPRequest)(nil),           // 79: novanet.v1.AttachXDPRequest
+	(*AttachXDPResponse)(nil),          // 80: novanet.v1.AttachXDPResponse
+	(*DetachXDPRequest)(nil),           // 81: novanet.v1.DetachXDPRequest
+	(*DetachXDPResponse)(nil),          // 82: novanet.v1.DetachXDPResponse
+	(*UpsertTunnelV6Request)(nil),      // 83: novanet.v1.UpsertTunnelV6Request
+	(*UpsertTunnelV6Response)(nil),     // 84: novanet.v1.UpsertTunnelV6Response
+	(*AddPodV6Response)(nil),           // 85: novanet.v1.AddPodV6Response
+	nil,                                // 86: novanet.v1.UpdateConfigRequest.EntriesEntry
+	nil,                                // 87: novanet.v1.GetDataplaneStatusResponse.DropCountersEntry
+	nil,                                // 88: novanet.v1.AddPodRequest.LabelsEntry
+	nil,                                // 89: novanet.v1.IdentityInfo.LabelsEntry
 }
 var file_api_v1_novanet_proto_depIdxs = []int32{
 	0,  // 0: novanet.v1.UpsertPolicyRequest.action:type_name -> novanet.v1.PolicyAction
-	13, // 1: novanet.v1.SyncPoliciesRequest.policies:type_name -> novanet.v1.PolicyEntry
+	16, // 1: novanet.v1.SyncPoliciesRequest.policies:type_name -> novanet.v1.PolicyEntry
 	0,  // 2: novanet.v1.PolicyEntry.action:type_name -> novanet.v1.PolicyAction
-	69, // 3: novanet.v1.UpdateConfigRequest.entries:type_name -> novanet.v1.UpdateConfigRequest.EntriesEntry
+	86, // 3: novanet.v1.UpdateConfigRequest.entries:type_name -> novanet.v1.UpdateConfigRequest.EntriesEntry
 	1,  // 4: novanet.v1.AttachProgramRequest.attach_type:type_name -> novanet.v1.AttachType
 	1,  // 5: novanet.v1.DetachProgramRequest.attach_type:type_name -> novanet.v1.AttachType
 	0,  // 6: novanet.v1.FlowEvent.verdict:type_name -> novanet.v1.PolicyAction
 	2,  // 7: novanet.v1.FlowEvent.drop_reason:type_name -> novanet.v1.DropReason
-	29, // 8: novanet.v1.GetDataplaneStatusResponse.programs:type_name -> novanet.v1.AttachedProgram
-	70, // 9: novanet.v1.GetDataplaneStatusResponse.drop_counters:type_name -> novanet.v1.GetDataplaneStatusResponse.DropCountersEntry
-	71, // 10: novanet.v1.AddPodRequest.labels:type_name -> novanet.v1.AddPodRequest.LabelsEntry
-	36, // 11: novanet.v1.GetAgentStatusResponse.dataplane:type_name -> novanet.v1.DataplaneStatusInfo
+	32, // 8: novanet.v1.GetDataplaneStatusResponse.programs:type_name -> novanet.v1.AttachedProgram
+	87, // 9: novanet.v1.GetDataplaneStatusResponse.drop_counters:type_name -> novanet.v1.GetDataplaneStatusResponse.DropCountersEntry
+	88, // 10: novanet.v1.AddPodRequest.labels:type_name -> novanet.v1.AddPodRequest.LabelsEntry
+	39, // 11: novanet.v1.GetAgentStatusResponse.dataplane:type_name -> novanet.v1.DataplaneStatusInfo
 	3,  // 12: novanet.v1.UpsertEgressPolicyRequest.action:type_name -> novanet.v1.EgressAction
-	47, // 13: novanet.v1.UpsertBackendsRequest.backends:type_name -> novanet.v1.BackendEntry
-	50, // 14: novanet.v1.SyncServicesRequest.services:type_name -> novanet.v1.ServiceEntry
-	47, // 15: novanet.v1.SyncServicesRequest.backends:type_name -> novanet.v1.BackendEntry
-	56, // 16: novanet.v1.ListPoliciesResponse.rules:type_name -> novanet.v1.PolicyRuleInfo
+	50, // 13: novanet.v1.UpsertBackendsRequest.backends:type_name -> novanet.v1.BackendEntry
+	53, // 14: novanet.v1.SyncServicesRequest.services:type_name -> novanet.v1.ServiceEntry
+	50, // 15: novanet.v1.SyncServicesRequest.backends:type_name -> novanet.v1.BackendEntry
+	59, // 16: novanet.v1.ListPoliciesResponse.rules:type_name -> novanet.v1.PolicyRuleInfo
 	0,  // 17: novanet.v1.PolicyRuleInfo.action:type_name -> novanet.v1.PolicyAction
-	59, // 18: novanet.v1.ListIdentitiesResponse.identities:type_name -> novanet.v1.IdentityInfo
-	72, // 19: novanet.v1.IdentityInfo.labels:type_name -> novanet.v1.IdentityInfo.LabelsEntry
-	62, // 20: novanet.v1.ListTunnelsResponse.tunnels:type_name -> novanet.v1.TunnelInfoMsg
-	65, // 21: novanet.v1.ListEgressPoliciesResponse.rules:type_name -> novanet.v1.EgressPolicyInfo
+	62, // 18: novanet.v1.ListIdentitiesResponse.identities:type_name -> novanet.v1.IdentityInfo
+	89, // 19: novanet.v1.IdentityInfo.labels:type_name -> novanet.v1.IdentityInfo.LabelsEntry
+	65, // 20: novanet.v1.ListTunnelsResponse.tunnels:type_name -> novanet.v1.TunnelInfoMsg
+	68, // 21: novanet.v1.ListEgressPoliciesResponse.rules:type_name -> novanet.v1.EgressPolicyInfo
 	3,  // 22: novanet.v1.EgressPolicyInfo.action:type_name -> novanet.v1.EgressAction
-	68, // 23: novanet.v1.ListServicesResponse.services:type_name -> novanet.v1.ServiceInfo
-	4,  // 24: novanet.v1.DataplaneControl.UpsertEndpoint:input_type -> novanet.v1.UpsertEndpointRequest
-	6,  // 25: novanet.v1.DataplaneControl.DeleteEndpoint:input_type -> novanet.v1.DeleteEndpointRequest
-	8,  // 26: novanet.v1.DataplaneControl.UpsertPolicy:input_type -> novanet.v1.UpsertPolicyRequest
-	10, // 27: novanet.v1.DataplaneControl.DeletePolicy:input_type -> novanet.v1.DeletePolicyRequest
-	12, // 28: novanet.v1.DataplaneControl.SyncPolicies:input_type -> novanet.v1.SyncPoliciesRequest
-	15, // 29: novanet.v1.DataplaneControl.UpsertTunnel:input_type -> novanet.v1.UpsertTunnelRequest
-	17, // 30: novanet.v1.DataplaneControl.DeleteTunnel:input_type -> novanet.v1.DeleteTunnelRequest
-	19, // 31: novanet.v1.DataplaneControl.UpdateConfig:input_type -> novanet.v1.UpdateConfigRequest
-	21, // 32: novanet.v1.DataplaneControl.AttachProgram:input_type -> novanet.v1.AttachProgramRequest
-	23, // 33: novanet.v1.DataplaneControl.DetachProgram:input_type -> novanet.v1.DetachProgramRequest
-	38, // 34: novanet.v1.DataplaneControl.UpsertEgressPolicy:input_type -> novanet.v1.UpsertEgressPolicyRequest
-	40, // 35: novanet.v1.DataplaneControl.DeleteEgressPolicy:input_type -> novanet.v1.DeleteEgressPolicyRequest
-	42, // 36: novanet.v1.DataplaneControl.UpsertService:input_type -> novanet.v1.UpsertServiceRequest
-	44, // 37: novanet.v1.DataplaneControl.DeleteService:input_type -> novanet.v1.DeleteServiceRequest
-	46, // 38: novanet.v1.DataplaneControl.UpsertBackends:input_type -> novanet.v1.UpsertBackendsRequest
-	49, // 39: novanet.v1.DataplaneControl.SyncServices:input_type -> novanet.v1.SyncServicesRequest
-	52, // 40: novanet.v1.DataplaneControl.UpsertMaglevTable:input_type -> novanet.v1.UpsertMaglevTableRequest
-	25, // 41: novanet.v1.DataplaneControl.StreamFlows:input_type -> novanet.v1.StreamFlowsRequest
-	27, // 42: novanet.v1.DataplaneControl.GetDataplaneStatus:input_type -> novanet.v1.GetDataplaneStatusRequest
-	30, // 43: novanet.v1.AgentControl.AddPod:input_type -> novanet.v1.AddPodRequest
-	32, // 44: novanet.v1.AgentControl.DelPod:input_type -> novanet.v1.DelPodRequest
-	34, // 45: novanet.v1.AgentControl.GetAgentStatus:input_type -> novanet.v1.GetAgentStatusRequest
-	37, // 46: novanet.v1.AgentControl.StreamAgentFlows:input_type -> novanet.v1.StreamAgentFlowsRequest
-	54, // 47: novanet.v1.AgentControl.ListPolicies:input_type -> novanet.v1.ListPoliciesRequest
-	57, // 48: novanet.v1.AgentControl.ListIdentities:input_type -> novanet.v1.ListIdentitiesRequest
-	60, // 49: novanet.v1.AgentControl.ListTunnels:input_type -> novanet.v1.ListTunnelsRequest
-	63, // 50: novanet.v1.AgentControl.ListEgressPolicies:input_type -> novanet.v1.ListEgressPoliciesRequest
-	66, // 51: novanet.v1.AgentControl.ListServices:input_type -> novanet.v1.ListServicesRequest
-	5,  // 52: novanet.v1.DataplaneControl.UpsertEndpoint:output_type -> novanet.v1.UpsertEndpointResponse
-	7,  // 53: novanet.v1.DataplaneControl.DeleteEndpoint:output_type -> novanet.v1.DeleteEndpointResponse
-	9,  // 54: novanet.v1.DataplaneControl.UpsertPolicy:output_type -> novanet.v1.UpsertPolicyResponse
-	11, // 55: novanet.v1.DataplaneControl.DeletePolicy:output_type -> novanet.v1.DeletePolicyResponse
-	14, // 56: novanet.v1.DataplaneControl.SyncPolicies:output_type -> novanet.v1.SyncPoliciesResponse
-	16, // 57: novanet.v1.DataplaneControl.UpsertTunnel:output_type -> novanet.v1.UpsertTunnelResponse
-	18, // 58: novanet.v1.DataplaneControl.DeleteTunnel:output_type -> novanet.v1.DeleteTunnelResponse
-	20, // 59: novanet.v1.DataplaneControl.UpdateConfig:output_type -> novanet.v1.UpdateConfigResponse
-	22, // 60: novanet.v1.DataplaneControl.AttachProgram:output_type -> novanet.v1.AttachProgramResponse
-	24, // 61: novanet.v1.DataplaneControl.DetachProgram:output_type -> novanet.v1.DetachProgramResponse
-	39, // 62: novanet.v1.DataplaneControl.UpsertEgressPolicy:output_type -> novanet.v1.UpsertEgressPolicyResponse
-	41, // 63: novanet.v1.DataplaneControl.DeleteEgressPolicy:output_type -> novanet.v1.DeleteEgressPolicyResponse
-	43, // 64: novanet.v1.DataplaneControl.UpsertService:output_type -> novanet.v1.UpsertServiceResponse
-	45, // 65: novanet.v1.DataplaneControl.DeleteService:output_type -> novanet.v1.DeleteServiceResponse
-	48, // 66: novanet.v1.DataplaneControl.UpsertBackends:output_type -> novanet.v1.UpsertBackendsResponse
-	51, // 67: novanet.v1.DataplaneControl.SyncServices:output_type -> novanet.v1.SyncServicesResponse
-	53, // 68: novanet.v1.DataplaneControl.UpsertMaglevTable:output_type -> novanet.v1.UpsertMaglevTableResponse
-	26, // 69: novanet.v1.DataplaneControl.StreamFlows:output_type -> novanet.v1.FlowEvent
-	28, // 70: novanet.v1.DataplaneControl.GetDataplaneStatus:output_type -> novanet.v1.GetDataplaneStatusResponse
-	31, // 71: novanet.v1.AgentControl.AddPod:output_type -> novanet.v1.AddPodResponse
-	33, // 72: novanet.v1.AgentControl.DelPod:output_type -> novanet.v1.DelPodResponse
-	35, // 73: novanet.v1.AgentControl.GetAgentStatus:output_type -> novanet.v1.GetAgentStatusResponse
-	26, // 74: novanet.v1.AgentControl.StreamAgentFlows:output_type -> novanet.v1.FlowEvent
-	55, // 75: novanet.v1.AgentControl.ListPolicies:output_type -> novanet.v1.ListPoliciesResponse
-	58, // 76: novanet.v1.AgentControl.ListIdentities:output_type -> novanet.v1.ListIdentitiesResponse
-	61, // 77: novanet.v1.AgentControl.ListTunnels:output_type -> novanet.v1.ListTunnelsResponse
-	64, // 78: novanet.v1.AgentControl.ListEgressPolicies:output_type -> novanet.v1.ListEgressPoliciesResponse
-	67, // 79: novanet.v1.AgentControl.ListServices:output_type -> novanet.v1.ListServicesResponse
-	52, // [52:80] is the sub-list for method output_type
-	24, // [24:52] is the sub-list for method input_type
-	24, // [24:24] is the sub-list for extension type_name
-	24, // [24:24] is the sub-list for extension extendee
-	0,  // [0:24] is the sub-list for field type_name
+	71, // 23: novanet.v1.ListServicesResponse.services:type_name -> novanet.v1.ServiceInfo
+	5,  // 24: novanet.v1.UpsertHostPolicyRequest.direction:type_name -> novanet.v1.HostPolicyDirection
+	0,  // 25: novanet.v1.UpsertHostPolicyRequest.action:type_name -> novanet.v1.PolicyAction
+	77, // 26: novanet.v1.SyncHostPoliciesRequest.policies:type_name -> novanet.v1.HostPolicyEntry
+	5,  // 27: novanet.v1.HostPolicyEntry.direction:type_name -> novanet.v1.HostPolicyDirection
+	0,  // 28: novanet.v1.HostPolicyEntry.action:type_name -> novanet.v1.PolicyAction
+	6,  // 29: novanet.v1.AttachXDPRequest.mode:type_name -> novanet.v1.XDPMode
+	7,  // 30: novanet.v1.DataplaneControl.UpsertEndpoint:input_type -> novanet.v1.UpsertEndpointRequest
+	9,  // 31: novanet.v1.DataplaneControl.DeleteEndpoint:input_type -> novanet.v1.DeleteEndpointRequest
+	11, // 32: novanet.v1.DataplaneControl.UpsertPolicy:input_type -> novanet.v1.UpsertPolicyRequest
+	13, // 33: novanet.v1.DataplaneControl.DeletePolicy:input_type -> novanet.v1.DeletePolicyRequest
+	15, // 34: novanet.v1.DataplaneControl.SyncPolicies:input_type -> novanet.v1.SyncPoliciesRequest
+	18, // 35: novanet.v1.DataplaneControl.UpsertTunnel:input_type -> novanet.v1.UpsertTunnelRequest
+	20, // 36: novanet.v1.DataplaneControl.DeleteTunnel:input_type -> novanet.v1.DeleteTunnelRequest
+	22, // 37: novanet.v1.DataplaneControl.UpdateConfig:input_type -> novanet.v1.UpdateConfigRequest
+	24, // 38: novanet.v1.DataplaneControl.AttachProgram:input_type -> novanet.v1.AttachProgramRequest
+	26, // 39: novanet.v1.DataplaneControl.DetachProgram:input_type -> novanet.v1.DetachProgramRequest
+	41, // 40: novanet.v1.DataplaneControl.UpsertEgressPolicy:input_type -> novanet.v1.UpsertEgressPolicyRequest
+	43, // 41: novanet.v1.DataplaneControl.DeleteEgressPolicy:input_type -> novanet.v1.DeleteEgressPolicyRequest
+	45, // 42: novanet.v1.DataplaneControl.UpsertService:input_type -> novanet.v1.UpsertServiceRequest
+	47, // 43: novanet.v1.DataplaneControl.DeleteService:input_type -> novanet.v1.DeleteServiceRequest
+	49, // 44: novanet.v1.DataplaneControl.UpsertBackends:input_type -> novanet.v1.UpsertBackendsRequest
+	52, // 45: novanet.v1.DataplaneControl.SyncServices:input_type -> novanet.v1.SyncServicesRequest
+	55, // 46: novanet.v1.DataplaneControl.UpsertMaglevTable:input_type -> novanet.v1.UpsertMaglevTableRequest
+	72, // 47: novanet.v1.DataplaneControl.UpsertHostPolicy:input_type -> novanet.v1.UpsertHostPolicyRequest
+	74, // 48: novanet.v1.DataplaneControl.DeleteHostPolicy:input_type -> novanet.v1.DeleteHostPolicyRequest
+	76, // 49: novanet.v1.DataplaneControl.SyncHostPolicies:input_type -> novanet.v1.SyncHostPoliciesRequest
+	79, // 50: novanet.v1.DataplaneControl.AttachXDP:input_type -> novanet.v1.AttachXDPRequest
+	81, // 51: novanet.v1.DataplaneControl.DetachXDP:input_type -> novanet.v1.DetachXDPRequest
+	28, // 52: novanet.v1.DataplaneControl.StreamFlows:input_type -> novanet.v1.StreamFlowsRequest
+	30, // 53: novanet.v1.DataplaneControl.GetDataplaneStatus:input_type -> novanet.v1.GetDataplaneStatusRequest
+	33, // 54: novanet.v1.AgentControl.AddPod:input_type -> novanet.v1.AddPodRequest
+	35, // 55: novanet.v1.AgentControl.DelPod:input_type -> novanet.v1.DelPodRequest
+	37, // 56: novanet.v1.AgentControl.GetAgentStatus:input_type -> novanet.v1.GetAgentStatusRequest
+	40, // 57: novanet.v1.AgentControl.StreamAgentFlows:input_type -> novanet.v1.StreamAgentFlowsRequest
+	57, // 58: novanet.v1.AgentControl.ListPolicies:input_type -> novanet.v1.ListPoliciesRequest
+	60, // 59: novanet.v1.AgentControl.ListIdentities:input_type -> novanet.v1.ListIdentitiesRequest
+	63, // 60: novanet.v1.AgentControl.ListTunnels:input_type -> novanet.v1.ListTunnelsRequest
+	66, // 61: novanet.v1.AgentControl.ListEgressPolicies:input_type -> novanet.v1.ListEgressPoliciesRequest
+	69, // 62: novanet.v1.AgentControl.ListServices:input_type -> novanet.v1.ListServicesRequest
+	8,  // 63: novanet.v1.DataplaneControl.UpsertEndpoint:output_type -> novanet.v1.UpsertEndpointResponse
+	10, // 64: novanet.v1.DataplaneControl.DeleteEndpoint:output_type -> novanet.v1.DeleteEndpointResponse
+	12, // 65: novanet.v1.DataplaneControl.UpsertPolicy:output_type -> novanet.v1.UpsertPolicyResponse
+	14, // 66: novanet.v1.DataplaneControl.DeletePolicy:output_type -> novanet.v1.DeletePolicyResponse
+	17, // 67: novanet.v1.DataplaneControl.SyncPolicies:output_type -> novanet.v1.SyncPoliciesResponse
+	19, // 68: novanet.v1.DataplaneControl.UpsertTunnel:output_type -> novanet.v1.UpsertTunnelResponse
+	21, // 69: novanet.v1.DataplaneControl.DeleteTunnel:output_type -> novanet.v1.DeleteTunnelResponse
+	23, // 70: novanet.v1.DataplaneControl.UpdateConfig:output_type -> novanet.v1.UpdateConfigResponse
+	25, // 71: novanet.v1.DataplaneControl.AttachProgram:output_type -> novanet.v1.AttachProgramResponse
+	27, // 72: novanet.v1.DataplaneControl.DetachProgram:output_type -> novanet.v1.DetachProgramResponse
+	42, // 73: novanet.v1.DataplaneControl.UpsertEgressPolicy:output_type -> novanet.v1.UpsertEgressPolicyResponse
+	44, // 74: novanet.v1.DataplaneControl.DeleteEgressPolicy:output_type -> novanet.v1.DeleteEgressPolicyResponse
+	46, // 75: novanet.v1.DataplaneControl.UpsertService:output_type -> novanet.v1.UpsertServiceResponse
+	48, // 76: novanet.v1.DataplaneControl.DeleteService:output_type -> novanet.v1.DeleteServiceResponse
+	51, // 77: novanet.v1.DataplaneControl.UpsertBackends:output_type -> novanet.v1.UpsertBackendsResponse
+	54, // 78: novanet.v1.DataplaneControl.SyncServices:output_type -> novanet.v1.SyncServicesResponse
+	56, // 79: novanet.v1.DataplaneControl.UpsertMaglevTable:output_type -> novanet.v1.UpsertMaglevTableResponse
+	73, // 80: novanet.v1.DataplaneControl.UpsertHostPolicy:output_type -> novanet.v1.UpsertHostPolicyResponse
+	75, // 81: novanet.v1.DataplaneControl.DeleteHostPolicy:output_type -> novanet.v1.DeleteHostPolicyResponse
+	78, // 82: novanet.v1.DataplaneControl.SyncHostPolicies:output_type -> novanet.v1.SyncHostPoliciesResponse
+	80, // 83: novanet.v1.DataplaneControl.AttachXDP:output_type -> novanet.v1.AttachXDPResponse
+	82, // 84: novanet.v1.DataplaneControl.DetachXDP:output_type -> novanet.v1.DetachXDPResponse
+	29, // 85: novanet.v1.DataplaneControl.StreamFlows:output_type -> novanet.v1.FlowEvent
+	31, // 86: novanet.v1.DataplaneControl.GetDataplaneStatus:output_type -> novanet.v1.GetDataplaneStatusResponse
+	34, // 87: novanet.v1.AgentControl.AddPod:output_type -> novanet.v1.AddPodResponse
+	36, // 88: novanet.v1.AgentControl.DelPod:output_type -> novanet.v1.DelPodResponse
+	38, // 89: novanet.v1.AgentControl.GetAgentStatus:output_type -> novanet.v1.GetAgentStatusResponse
+	29, // 90: novanet.v1.AgentControl.StreamAgentFlows:output_type -> novanet.v1.FlowEvent
+	58, // 91: novanet.v1.AgentControl.ListPolicies:output_type -> novanet.v1.ListPoliciesResponse
+	61, // 92: novanet.v1.AgentControl.ListIdentities:output_type -> novanet.v1.ListIdentitiesResponse
+	64, // 93: novanet.v1.AgentControl.ListTunnels:output_type -> novanet.v1.ListTunnelsResponse
+	67, // 94: novanet.v1.AgentControl.ListEgressPolicies:output_type -> novanet.v1.ListEgressPoliciesResponse
+	70, // 95: novanet.v1.AgentControl.ListServices:output_type -> novanet.v1.ListServicesResponse
+	63, // [63:96] is the sub-list for method output_type
+	30, // [30:63] is the sub-list for method input_type
+	30, // [30:30] is the sub-list for extension type_name
+	30, // [30:30] is the sub-list for extension extendee
+	0,  // [0:30] is the sub-list for field type_name
 }
 
 func init() { file_api_v1_novanet_proto_init() }
@@ -4434,8 +5556,8 @@ func file_api_v1_novanet_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_v1_novanet_proto_rawDesc), len(file_api_v1_novanet_proto_rawDesc)),
-			NumEnums:      4,
-			NumMessages:   69,
+			NumEnums:      7,
+			NumMessages:   83,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

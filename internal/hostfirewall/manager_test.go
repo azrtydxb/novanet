@@ -15,7 +15,7 @@ func testLogger() *zap.Logger {
 }
 
 func ptrProtocol(p corev1.Protocol) *corev1.Protocol { return &p }
-func ptrInt32(v int32) *int32                         { return &v }
+func ptrInt32(v int32) *int32                        { return &v }
 
 func makePolicy(name string, ingress, egress []v1alpha1.HostRule) *v1alpha1.HostEndpointPolicy {
 	return &v1alpha1.HostEndpointPolicy{

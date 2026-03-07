@@ -1,14 +1,24 @@
+// Package hostfirewall manages host-level firewall rules compiled from
+// HostEndpointPolicy resources. It converts high-level policy specs into
+// CompiledHostRules suitable for programming into the eBPF dataplane.
 package hostfirewall
 
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"sync"
 
 	"github.com/azrtydxb/novanet/api/v1alpha1"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
+)
+
+// Sentinel errors for the host firewall manager.
+var (
+	ErrNilPolicy     = errors.New("policy must not be nil")
+	ErrUnknownAction = errors.New("unknown action")
 )
 
 // Protocol constants matching IP protocol numbers.
@@ -28,9 +38,12 @@ const (
 // Direction indicates whether a rule applies to ingress or egress traffic.
 type Direction uint8
 
+// Direction constants for traffic flow.
 const (
+	// DirectionIngress indicates traffic entering the host.
 	DirectionIngress Direction = 0
-	DirectionEgress  Direction = 1
+	// DirectionEgress indicates traffic leaving the host.
+	DirectionEgress Direction = 1
 )
 
 // CompiledHostRule is a fully resolved firewall rule ready for dataplane programming.
@@ -64,7 +77,7 @@ func NewManager(logger *zap.Logger) *Manager {
 // Each combination of rule, CIDR, and port generates a separate compiled rule.
 func (m *Manager) CompilePolicy(policy *v1alpha1.HostEndpointPolicy) ([]*CompiledHostRule, error) {
 	if policy == nil {
-		return nil, errors.New("policy must not be nil")
+		return nil, ErrNilPolicy
 	}
 
 	var compiled []*CompiledHostRule
@@ -241,7 +254,7 @@ func convertAction(action v1alpha1.HostRuleAction) (uint8, error) {
 	case v1alpha1.HostRuleActionDeny:
 		return ActionDeny, nil
 	default:
-		return 0, fmt.Errorf("unknown action %q", action)
+		return 0, fmt.Errorf("%w: %q", ErrUnknownAction, action)
 	}
 }
 
@@ -264,7 +277,7 @@ func convertProtocol(proto *corev1.Protocol) uint8 {
 
 // parseCIDRs parses a slice of CIDR strings into net.IPNet values.
 func parseCIDRs(cidrs []string) ([]net.IPNet, error) {
-	var result []net.IPNet
+	result := make([]net.IPNet, 0, len(cidrs))
 	for _, c := range cidrs {
 		_, ipNet, err := net.ParseCIDR(c)
 		if err != nil {
@@ -277,15 +290,30 @@ func parseCIDRs(cidrs []string) ([]net.IPNet, error) {
 
 // expandPorts converts HostPort entries to portRange values.
 func expandPorts(ports []v1alpha1.HostPort) []portRange {
-	var result []portRange
+	result := make([]portRange, 0, len(ports))
 	for _, p := range ports {
+		if p.Port < 0 || p.Port > math.MaxUint16 {
+			continue
+		}
 		pr := portRange{
-			port: uint16(p.Port),
+			port: int32ToUint16(p.Port),
 		}
 		if p.EndPort != nil {
-			pr.endPort = uint16(*p.EndPort)
+			ep := *p.EndPort
+			if ep >= 0 && ep <= math.MaxUint16 {
+				pr.endPort = int32ToUint16(ep)
+			}
 		}
 		result = append(result, pr)
 	}
 	return result
+}
+
+// int32ToUint16 safely converts an int32 port value to uint16.
+// Values outside [0, 65535] are clamped to 0.
+func int32ToUint16(port int32) uint16 {
+	if port < 0 || port > math.MaxUint16 {
+		return 0
+	}
+	return uint16(port & math.MaxUint16)
 }
