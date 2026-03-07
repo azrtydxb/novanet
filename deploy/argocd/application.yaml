@@ -27,10 +27,10 @@ spec:
         image:
           agent:
             repository: ghcr.io/piwi3910/novanet/novanet-agent
-            tag: v1.8.0
+            tag: v1.8.1
           dataplane:
             repository: ghcr.io/piwi3910/novanet/novanet-dataplane
-            tag: v1.8.0
+            tag: v1.8.1
         l4lb:
           enabled: true
   destination:
