@@ -1,11 +1,17 @@
-//! NovaNet eBPF programs for TC-based packet processing.
+//! NovaNet eBPF programs for packet processing and socket-level load balancing.
 //!
-//! This binary contains five TC classifier programs:
+//! TC classifier programs (attached to network interfaces):
 //!   - `tc_ingress`: pod veth — traffic arriving at pod (K8s ingress)
 //!   - `tc_egress`: pod veth — traffic leaving pod (K8s egress)
 //!   - `tc_tunnel_ingress`: tunnel interface ingress (decap + policy)
 //!   - `tc_tunnel_egress`: tunnel interface egress (encap identity)
 //!   - `tc_host_ingress`: host interface ingress (NodePort/ExternalIP L4 LB)
+//!
+//! Cgroup socket-LB programs (attached to root cgroup):
+//!   - `sock_connect4`: TCP ClusterIP DNAT at connect() time
+//!   - `sock_sendmsg4`: UDP ClusterIP DNAT per sendmsg()
+//!   - `sock_recvmsg4`: reverse-translate UDP reply source to ClusterIP
+//!   - `sock_getpeername4`: return original ClusterIP for getpeername()
 //!
 //! Compiled with `--target bpfel-unknown-none -Z build-std=core` on Linux only.
 
@@ -16,10 +22,10 @@ use aya_ebpf::{
     bindings::TC_ACT_OK as BPF_TC_ACT_OK,
     bindings::TC_ACT_SHOT as BPF_TC_ACT_SHOT,
     bindings::{bpf_tunnel_key, BPF_F_ZERO_CSUM_TX},
-    helpers::{bpf_redirect, bpf_skb_set_tunnel_key},
-    macros::{classifier, map},
+    helpers::{bpf_get_socket_cookie, bpf_redirect, bpf_skb_set_tunnel_key},
+    macros::{cgroup_sock_addr, classifier, map},
     maps::{Array, HashMap, LruHashMap, PerCpuArray, RingBuf},
-    programs::TcContext,
+    programs::{SockAddrContext, TcContext},
 };
 use network_types::{
     eth::{EthHdr, EtherType},
@@ -69,6 +75,10 @@ static MAGLEV: Array<u32> = Array::with_max_entries(MAX_MAGLEV, 0);
 
 #[map]
 static RR_COUNTERS: PerCpuArray<u32> = PerCpuArray::with_max_entries(MAX_SERVICES, 0);
+
+#[map]
+static SOCK_LB_ORIGINS: LruHashMap<u64, SockLbOrigin> =
+    LruHashMap::with_max_entries(MAX_SOCK_LB_ORIGINS, 0);
 
 // ---------------------------------------------------------------------------
 // Helper: read config value
@@ -410,6 +420,90 @@ fn service_lookup(
     let _ = unsafe { CONNTRACK.insert(&rev_ct_key, &rev_ct_val, 0) };
 
     Some((backend_ip, backend_port, dst_ip, dst_port))
+}
+
+// ---------------------------------------------------------------------------
+// Helper: socket-LB service lookup + backend selection
+// Returns (backend_ip, backend_port) if dst is a ClusterIP service.
+// Unlike TC service_lookup, this doesn't create conntrack entries.
+// ---------------------------------------------------------------------------
+
+#[inline(always)]
+fn sock_service_lookup(
+    dst_ip: u32,
+    dst_port: u16,
+    protocol: u8,
+) -> Option<(u32, u16)> {
+    if get_config(CONFIG_KEY_L4LB_ENABLED) == 0 {
+        return None;
+    }
+
+    let svc_key = ServiceKey {
+        ip: dst_ip,
+        port: dst_port,
+        protocol,
+        scope: SVC_SCOPE_CLUSTER_IP,
+    };
+    // SAFETY: eBPF map lookup; safety guaranteed by BPF verifier.
+    let svc = unsafe { SERVICES.get(&svc_key) }?;
+
+    let count = svc.backend_count;
+    if count == 0 {
+        return None;
+    }
+    let offset = svc.backend_offset;
+    let algorithm = svc.algorithm;
+
+    // Select backend. Note: src_port is unknown at connect() time,
+    // so we use a 3-tuple hash (dst_ip, dst_port, protocol) for
+    // Maglev/random, and the same RR counter for round-robin.
+    let idx = match algorithm {
+        LB_ALG_ROUND_ROBIN => {
+            // SAFETY: eBPF per-CPU array access; BPF verifier ensures bounds.
+            if let Some(c) = unsafe { RR_COUNTERS.get_ptr_mut(offset as u32) } {
+                let val = unsafe { *c };
+                unsafe { *c = val.wrapping_add(1) };
+                val % (count as u32)
+            } else {
+                0
+            }
+        }
+        LB_ALG_MAGLEV => {
+            let mut h: u32 = 2166136261;
+            h ^= dst_ip;
+            h = h.wrapping_mul(16777619);
+            h ^= dst_port as u32;
+            h = h.wrapping_mul(16777619);
+            h ^= protocol as u32;
+            h = h.wrapping_mul(16777619);
+
+            let maglev_offset = svc.maglev_offset;
+            let maglev_idx = maglev_offset + (h % MAGLEV_TABLE_SIZE);
+            // SAFETY: eBPF array lookup; safety guaranteed by BPF verifier.
+            if let Some(backend_idx) = unsafe { MAGLEV.get(maglev_idx) } {
+                *backend_idx
+            } else {
+                0
+            }
+        }
+        _ => {
+            // Random: use 3-tuple hash.
+            let mut h: u32 = 2166136261;
+            h ^= dst_ip;
+            h = h.wrapping_mul(16777619);
+            h ^= dst_port as u32;
+            h = h.wrapping_mul(16777619);
+            h ^= protocol as u32;
+            h = h.wrapping_mul(16777619);
+            h % (count as u32)
+        }
+    };
+
+    let backend_array_idx = (offset as u32) + idx;
+    // SAFETY: eBPF array lookup; safety guaranteed by BPF verifier.
+    let backend = unsafe { BACKENDS.get(backend_array_idx) }?;
+
+    Some((backend.ip, backend.port))
 }
 
 // ---------------------------------------------------------------------------
@@ -1444,6 +1538,147 @@ fn try_tc_host_ingress(ctx: &mut TcContext) -> Result<i32, ()> {
     }
 
     Ok(BPF_TC_ACT_OK as i32)
+}
+
+// ===========================================================================
+// Socket-LB: cgroup/connect4 — TCP ClusterIP DNAT at connect() time
+// ===========================================================================
+
+#[cgroup_sock_addr(connect4)]
+pub fn sock_connect4(ctx: SockAddrContext) -> i32 {
+    match try_sock_connect4(&ctx) {
+        Ok(ret) => ret,
+        Err(_) => 1, // 1 = allow (don't block on error)
+    }
+}
+
+#[inline(always)]
+fn try_sock_connect4(ctx: &SockAddrContext) -> Result<i32, i64> {
+    // SAFETY: bpf_sock_addr pointer is valid in cgroup_sock_addr context.
+    let dst_ip = unsafe { (*ctx.sock_addr).user_ip4 };
+    // user_port is __be16 stored in a u32; convert to host order.
+    let dst_port_raw = unsafe { (*ctx.sock_addr).user_port };
+    let dst_port = u16::from_be(dst_port_raw as u16);
+
+    // TCP protocol = 6
+    if let Some((backend_ip, backend_port)) = sock_service_lookup(dst_ip, dst_port, 6) {
+        // Store original destination keyed by socket cookie.
+        let cookie = unsafe { bpf_get_socket_cookie(ctx.sock_addr as *mut _) };
+        let origin = SockLbOrigin {
+            original_ip: dst_ip,
+            original_port: dst_port,
+            protocol: 6,
+            _pad: 0,
+        };
+        // SAFETY: eBPF map insert; safety guaranteed by BPF verifier.
+        let _ = unsafe { SOCK_LB_ORIGINS.insert(&cookie, &origin, 0) };
+
+        // Rewrite destination to backend.
+        unsafe {
+            (*ctx.sock_addr).user_ip4 = backend_ip;
+            (*ctx.sock_addr).user_port = (backend_port.to_be()) as u32;
+        }
+    }
+
+    Ok(1) // 1 = allow connection
+}
+
+// ===========================================================================
+// Socket-LB: cgroup/sendmsg4 — UDP ClusterIP DNAT per sendmsg()
+// ===========================================================================
+
+#[cgroup_sock_addr(sendmsg4)]
+pub fn sock_sendmsg4(ctx: SockAddrContext) -> i32 {
+    match try_sock_sendmsg4(&ctx) {
+        Ok(ret) => ret,
+        Err(_) => 1,
+    }
+}
+
+#[inline(always)]
+fn try_sock_sendmsg4(ctx: &SockAddrContext) -> Result<i32, i64> {
+    // SAFETY: bpf_sock_addr pointer is valid in cgroup_sock_addr context.
+    let dst_ip = unsafe { (*ctx.sock_addr).user_ip4 };
+    let dst_port_raw = unsafe { (*ctx.sock_addr).user_port };
+    let dst_port = u16::from_be(dst_port_raw as u16);
+
+    // UDP protocol = 17
+    if let Some((backend_ip, backend_port)) = sock_service_lookup(dst_ip, dst_port, 17) {
+        let cookie = unsafe { bpf_get_socket_cookie(ctx.sock_addr as *mut _) };
+        let origin = SockLbOrigin {
+            original_ip: dst_ip,
+            original_port: dst_port,
+            protocol: 17,
+            _pad: 0,
+        };
+        let _ = unsafe { SOCK_LB_ORIGINS.insert(&cookie, &origin, 0) };
+
+        unsafe {
+            (*ctx.sock_addr).user_ip4 = backend_ip;
+            (*ctx.sock_addr).user_port = (backend_port.to_be()) as u32;
+        }
+    }
+
+    Ok(1)
+}
+
+// ===========================================================================
+// Socket-LB: cgroup/recvmsg4 — reverse-translate UDP reply source
+// ===========================================================================
+
+#[cgroup_sock_addr(recvmsg4)]
+pub fn sock_recvmsg4(ctx: SockAddrContext) -> i32 {
+    match try_sock_recvmsg4(&ctx) {
+        Ok(ret) => ret,
+        Err(_) => 1,
+    }
+}
+
+#[inline(always)]
+fn try_sock_recvmsg4(ctx: &SockAddrContext) -> Result<i32, i64> {
+    let cookie = unsafe { bpf_get_socket_cookie(ctx.sock_addr as *mut _) };
+
+    // SAFETY: eBPF map lookup; safety guaranteed by BPF verifier.
+    if let Some(origin) = unsafe { SOCK_LB_ORIGINS.get(&cookie) } {
+        let original_ip = origin.original_ip;
+        let original_port = origin.original_port;
+        // Rewrite source address back to original ClusterIP.
+        unsafe {
+            (*ctx.sock_addr).user_ip4 = original_ip;
+            (*ctx.sock_addr).user_port = (original_port.to_be()) as u32;
+        }
+    }
+
+    Ok(1)
+}
+
+// ===========================================================================
+// Socket-LB: cgroup/getpeername4 — return original ClusterIP for getpeername()
+// ===========================================================================
+
+#[cgroup_sock_addr(getpeername4)]
+pub fn sock_getpeername4(ctx: SockAddrContext) -> i32 {
+    match try_sock_getpeername4(&ctx) {
+        Ok(ret) => ret,
+        Err(_) => 1,
+    }
+}
+
+#[inline(always)]
+fn try_sock_getpeername4(ctx: &SockAddrContext) -> Result<i32, i64> {
+    let cookie = unsafe { bpf_get_socket_cookie(ctx.sock_addr as *mut _) };
+
+    // SAFETY: eBPF map lookup; safety guaranteed by BPF verifier.
+    if let Some(origin) = unsafe { SOCK_LB_ORIGINS.get(&cookie) } {
+        let original_ip = origin.original_ip;
+        let original_port = origin.original_port;
+        unsafe {
+            (*ctx.sock_addr).user_ip4 = original_ip;
+            (*ctx.sock_addr).user_port = (original_port.to_be()) as u32;
+        }
+    }
+
+    Ok(1)
 }
 
 // ---------------------------------------------------------------------------
