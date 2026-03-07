@@ -273,6 +273,25 @@ impl MapManager {
         }
     }
 
+    pub fn attach_cgroup_programs(&self) -> anyhow::Result<()> {
+        match &self.inner {
+            MapManagerInner::Mock(_) => {
+                info!("mock: skipping cgroup program attachment");
+                Ok(())
+            }
+            #[cfg(target_os = "linux")]
+            MapManagerInner::Real(m) => m.attach_cgroup_programs(),
+        }
+    }
+
+    pub fn detach_cgroup_programs(&self) {
+        match &self.inner {
+            MapManagerInner::Mock(_) => {}
+            #[cfg(target_os = "linux")]
+            MapManagerInner::Real(m) => m.detach_cgroup_programs(),
+        }
+    }
+
     // -- Mode info --
 
     pub fn mode_string(&self) -> String {
@@ -1280,6 +1299,8 @@ pub struct RealMaps {
     /// Holds TC program links so they stay attached (aya auto-detaches on drop).
     /// Tuples of (interface_name, attach_type, link) for targeted detach.
     _tc_links: std::sync::Mutex<Vec<(String, String, aya::programs::tc::SchedClassifierLink)>>,
+    /// Holds cgroup program links so they stay attached.
+    _cgroup_links: std::sync::Mutex<Vec<aya::programs::cgroup_sock_addr::CgroupSockAddrLink>>,
     /// Holds references to the loaded eBPF object so programs stay loaded.
     _ebpf: std::sync::Mutex<aya::Ebpf>,
 }
@@ -1311,6 +1332,7 @@ impl RealMaps {
             drop_counters: RwLock::new(drop_counters),
             attached: RwLock::new(Vec::new()),
             _tc_links: std::sync::Mutex::new(Vec::new()),
+            _cgroup_links: std::sync::Mutex::new(Vec::new()),
             _ebpf: std::sync::Mutex::new(ebpf),
         }
     }
@@ -1700,5 +1722,43 @@ impl RealMaps {
         }
 
         Ok(())
+    }
+
+    fn attach_cgroup_programs(&self) -> anyhow::Result<()> {
+        use anyhow::Context;
+        use aya::programs::{CgroupAttachMode, CgroupSockAddr};
+
+        let cgroup = std::fs::File::open("/sys/fs/cgroup")
+            .context("Failed to open root cgroup for socket-LB")?;
+
+        let mut ebpf = self._ebpf.lock().expect("ebpf lock poisoned");
+        let mut links = self._cgroup_links.lock().expect("cgroup_links lock poisoned");
+
+        for prog_name in &[
+            "sock_connect4",
+            "sock_sendmsg4",
+            "sock_recvmsg4",
+            "sock_getpeername4",
+        ] {
+            let prog: &mut CgroupSockAddr = ebpf
+                .program_mut(prog_name)
+                .ok_or_else(|| anyhow::anyhow!("Program '{}' not found", prog_name))?
+                .try_into()?;
+
+            let link_id = prog.attach(&cgroup, CgroupAttachMode::Single)?;
+            let link = prog.take_link(link_id)?;
+            links.push(link);
+
+            info!(program = prog_name, "attached cgroup socket-LB program");
+        }
+
+        Ok(())
+    }
+
+    fn detach_cgroup_programs(&self) {
+        let mut links = self._cgroup_links.lock().expect("cgroup_links lock poisoned");
+        let count = links.len();
+        links.clear(); // Dropping links detaches programs.
+        info!(count, "detached cgroup socket-LB programs");
     }
 }

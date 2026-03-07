@@ -53,6 +53,25 @@ pub fn load_ebpf(bpf_object_path: &Path) -> Result<(MapManager, Option<RingBuf<M
         info!(program = prog_name, "Loaded eBPF program");
     }
 
+    // Load cgroup socket-LB programs (but don't attach yet — done after maps are ready).
+    for prog_name in &[
+        "sock_connect4",
+        "sock_sendmsg4",
+        "sock_recvmsg4",
+        "sock_getpeername4",
+    ] {
+        let prog: &mut aya::programs::CgroupSockAddr = ebpf
+            .program_mut(prog_name)
+            .ok_or_else(|| anyhow::anyhow!("Program '{}' not found in eBPF object", prog_name))?
+            .try_into()
+            .context(format!("Program '{}' is not a CgroupSockAddr", prog_name))?;
+
+        prog.load()
+            .context(format!("Failed to load program '{}'", prog_name))?;
+
+        info!(program = prog_name, "Loaded eBPF program");
+    }
+
     // Extract map handles.
     let endpoints: HashMap<MapData, EndpointKey, EndpointValue> = ebpf
         .take_map("ENDPOINTS")
