@@ -102,6 +102,68 @@ pub struct TunnelValue {
 }
 
 // ---------------------------------------------------------------------------
+// IPCache map: IP/CIDR prefix → security identity (LPM trie)
+// ---------------------------------------------------------------------------
+
+/// Key for the IPCache LPM trie map.
+/// Uses 128-bit address to handle both IPv4 and IPv6 in a single map.
+/// IPv4 addresses are stored as IPv4-mapped-IPv6 (::ffff:x.x.x.x).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct IPCacheKey {
+    /// LPM trie prefix length in bits (0-128).
+    /// For IPv4: actual prefix + 96 (e.g., /24 becomes 120).
+    pub prefix_len: u32,
+    /// 128-bit address in network byte order.
+    /// IPv4 uses last 4 bytes: [0,0,0,0, 0,0,0,0, 0,0,0xff,0xff, a,b,c,d]
+    pub addr: [u8; 16],
+}
+
+/// Value stored in the IPCache for each prefix.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct IPCacheValue {
+    /// Security identity assigned to this prefix.
+    pub identity: u32,
+    /// Flags (reserved for future use: tunnel endpoint, encrypted, etc.).
+    pub flags: u32,
+}
+
+// ---------------------------------------------------------------------------
+// Host firewall policy map: (identity, direction, proto, port) → action (LPM trie)
+// ---------------------------------------------------------------------------
+
+/// Key for the host firewall policy LPM trie.
+/// Prefix length controls wildcard matching:
+///   - Full prefix (64 bits) = exact L4 match on identity + direction + protocol + port
+///   - Protocol prefix (48 bits) = identity + direction + protocol, wildcard port
+///   - Identity prefix (40 bits) = identity + direction only, wildcard all L4
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HostPolicyKey {
+    /// LPM trie prefix length in bits.
+    pub prefix_len: u32,
+    /// Security identity of the remote peer.
+    pub identity: u32,
+    /// Direction: HOST_POLICY_INGRESS (0) or HOST_POLICY_EGRESS (1).
+    pub direction: u8,
+    /// IP protocol number (6=TCP, 17=UDP, 0=any).
+    pub protocol: u8,
+    /// Destination port in host byte order.
+    pub dst_port: u16,
+}
+
+/// Value for a host firewall policy entry.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HostPolicyValue {
+    /// Action: ACTION_DENY (0) or ACTION_ALLOW (1).
+    pub action: u8,
+    /// Padding.
+    pub _pad: [u8; 3],
+}
+
+// ---------------------------------------------------------------------------
 // Egress policy map: (src_identity, dst_cidr) → action + optional SNAT
 // ---------------------------------------------------------------------------
 
@@ -478,6 +540,40 @@ pub const MAX_MAGLEV: u32 = 1048576;
 pub const MAGLEV_TABLE_SIZE: u32 = 65537;
 /// Maximum entries in the socket-LB origin tracking map.
 pub const MAX_SOCK_LB_ORIGINS: u32 = 131072;
+/// Maximum entries in the host firewall policy map.
+pub const MAX_HOST_POLICIES: u32 = 16384;
+/// Maximum entries in the IPCache map.
+pub const MAX_IPCACHE_ENTRIES: u32 = 512000;
+
+// ---------------------------------------------------------------------------
+// Host policy direction constants
+// ---------------------------------------------------------------------------
+
+/// Host policy direction: ingress (traffic arriving at the host).
+pub const HOST_POLICY_INGRESS: u8 = 0;
+/// Host policy direction: egress (traffic leaving the host).
+pub const HOST_POLICY_EGRESS: u8 = 1;
+
+// ---------------------------------------------------------------------------
+// Host policy prefix length constants
+// ---------------------------------------------------------------------------
+
+/// Full prefix length for host policy key (covers all fields after prefix_len).
+/// identity(32) + direction(8) + protocol(8) + dst_port(16) = 64 bits.
+pub const HOST_POLICY_FULL_PREFIX: u32 = 64;
+/// Prefix covering identity + direction only (wildcard protocol + port).
+pub const HOST_POLICY_IDENTITY_PREFIX: u32 = 40;
+/// Prefix covering identity + direction + protocol (wildcard port).
+pub const HOST_POLICY_PROTO_PREFIX: u32 = 48;
+
+// ---------------------------------------------------------------------------
+// Reserved identity constants
+// ---------------------------------------------------------------------------
+
+/// Reserved identity for the host node itself.
+pub const IDENTITY_HOST: u32 = 1;
+/// Reserved identity for the world (external traffic, default for unknown CIDRs).
+pub const IDENTITY_WORLD: u32 = 2;
 
 // ---------------------------------------------------------------------------
 // aya::Pod implementations for userspace map access
@@ -499,6 +595,10 @@ impl_pod!(
     CtKey,
     CtValue,
     SockLbOrigin,
+    IPCacheKey,
+    IPCacheValue,
+    HostPolicyKey,
+    HostPolicyValue,
 );
 
 // ---------------------------------------------------------------------------
@@ -933,5 +1033,91 @@ mod tests {
             snat_ip: 0,
         };
         assert_eq!(val.action, EGRESS_DENY);
+    }
+
+    // -- IPCache type tests --
+
+    #[test]
+    fn ipcache_key_size() {
+        // prefix_len(4) + addr(16) = 20
+        assert_eq!(mem::size_of::<IPCacheKey>(), 20);
+    }
+
+    #[test]
+    fn ipcache_value_size() {
+        // identity(4) + flags(4) = 8
+        assert_eq!(mem::size_of::<IPCacheValue>(), 8);
+    }
+
+    #[test]
+    fn ipcache_key_alignment() {
+        assert_eq!(mem::align_of::<IPCacheKey>(), 4);
+    }
+
+    #[test]
+    fn ipcache_key_ipv4_mapped() {
+        let mut addr = [0u8; 16];
+        addr[10] = 0xff;
+        addr[11] = 0xff;
+        addr[12] = 10;
+        addr[13] = 0;
+        addr[14] = 0;
+        addr[15] = 1;
+        let key = IPCacheKey {
+            prefix_len: 128, // /32 + 96
+            addr,
+        };
+        assert_eq!(key.addr[12], 10);
+        assert_eq!(key.prefix_len, 128);
+    }
+
+    // -- Host policy type tests --
+
+    #[test]
+    fn host_policy_key_size() {
+        // prefix_len(4) + identity(4) + direction(1) + protocol(1) + dst_port(2) = 12
+        assert_eq!(mem::size_of::<HostPolicyKey>(), 12);
+    }
+
+    #[test]
+    fn host_policy_value_size() {
+        // action(1) + pad(3) = 4
+        assert_eq!(mem::size_of::<HostPolicyValue>(), 4);
+    }
+
+    #[test]
+    fn host_policy_key_alignment() {
+        assert_eq!(mem::align_of::<HostPolicyKey>(), 4);
+    }
+
+    #[test]
+    fn host_policy_prefix_constants() {
+        // Full prefix covers all 64 bits after prefix_len field.
+        assert_eq!(HOST_POLICY_FULL_PREFIX, 64);
+        // Identity prefix = identity(32) + direction(8) = 40.
+        assert_eq!(HOST_POLICY_IDENTITY_PREFIX, 40);
+        // Proto prefix = identity(32) + direction(8) + protocol(8) = 48.
+        assert_eq!(HOST_POLICY_PROTO_PREFIX, 48);
+    }
+
+    #[test]
+    fn host_policy_direction_constants() {
+        assert_eq!(HOST_POLICY_INGRESS, 0);
+        assert_eq!(HOST_POLICY_EGRESS, 1);
+    }
+
+    #[test]
+    fn zero_host_policy_value_is_deny() {
+        let val = HostPolicyValue {
+            action: 0,
+            _pad: [0; 3],
+        };
+        assert_eq!(val.action, ACTION_DENY);
+    }
+
+    #[test]
+    fn reserved_identity_constants() {
+        assert_eq!(IDENTITY_HOST, 1);
+        assert_eq!(IDENTITY_WORLD, 2);
     }
 }

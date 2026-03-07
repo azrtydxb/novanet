@@ -273,13 +273,13 @@ impl MapManager {
         }
     }
 
+    #[cfg(target_os = "linux")]
     pub fn attach_cgroup_programs(&self) -> anyhow::Result<()> {
         match &self.inner {
             MapManagerInner::Mock(_) => {
                 info!("mock: skipping cgroup program attachment");
                 Ok(())
             }
-            #[cfg(target_os = "linux")]
             MapManagerInner::Real(m) => m.attach_cgroup_programs(),
         }
     }
@@ -305,6 +305,85 @@ impl MapManager {
             TUNNEL_GENEVE => "geneve".to_string(),
             TUNNEL_VXLAN => "vxlan".to_string(),
             _ => "unknown".to_string(),
+        }
+    }
+
+    // -- IPCache operations --
+
+    pub fn upsert_ipcache(&self, key: IPCacheKey, value: IPCacheValue) -> anyhow::Result<()> {
+        match &self.inner {
+            MapManagerInner::Mock(m) => m.upsert_ipcache(key, value),
+            #[cfg(target_os = "linux")]
+            MapManagerInner::Real(m) => m.upsert_ipcache(key, value),
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn delete_ipcache(&self, key: &IPCacheKey) -> anyhow::Result<()> {
+        match &self.inner {
+            MapManagerInner::Mock(m) => m.delete_ipcache(key),
+            #[cfg(target_os = "linux")]
+            MapManagerInner::Real(m) => m.delete_ipcache(key),
+        }
+    }
+
+    // -- Host firewall policy operations --
+
+    pub fn upsert_host_policy(
+        &self,
+        key: HostPolicyKey,
+        value: HostPolicyValue,
+    ) -> anyhow::Result<()> {
+        match &self.inner {
+            MapManagerInner::Mock(m) => m.upsert_host_policy(key, value),
+            #[cfg(target_os = "linux")]
+            MapManagerInner::Real(m) => m.upsert_host_policy(key, value),
+        }
+    }
+
+    pub fn delete_host_policy(&self, key: &HostPolicyKey) -> anyhow::Result<()> {
+        match &self.inner {
+            MapManagerInner::Mock(m) => m.delete_host_policy(key),
+            #[cfg(target_os = "linux")]
+            MapManagerInner::Real(m) => m.delete_host_policy(key),
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn host_policy_count(&self) -> usize {
+        match &self.inner {
+            MapManagerInner::Mock(m) => m.host_policy_count(),
+            #[cfg(target_os = "linux")]
+            MapManagerInner::Real(m) => m.host_policy_count(),
+        }
+    }
+
+    pub fn sync_host_policies(
+        &self,
+        new_policies: Vec<(HostPolicyKey, HostPolicyValue)>,
+    ) -> anyhow::Result<(u32, u32)> {
+        match &self.inner {
+            MapManagerInner::Mock(m) => m.sync_host_policies(new_policies),
+            #[cfg(target_os = "linux")]
+            MapManagerInner::Real(m) => m.sync_host_policies(new_policies),
+        }
+    }
+
+    // -- XDP program attach/detach --
+
+    pub fn attach_xdp(&self, interface: &str, native: bool) -> anyhow::Result<()> {
+        match &self.inner {
+            MapManagerInner::Mock(m) => m.attach_xdp(interface, native),
+            #[cfg(target_os = "linux")]
+            MapManagerInner::Real(m) => m.attach_xdp(interface, native),
+        }
+    }
+
+    pub fn detach_xdp(&self, interface: &str) -> anyhow::Result<()> {
+        match &self.inner {
+            MapManagerInner::Mock(m) => m.detach_xdp(interface),
+            #[cfg(target_os = "linux")]
+            MapManagerInner::Real(m) => m.detach_xdp(interface),
         }
     }
 
@@ -353,6 +432,8 @@ struct MockMaps {
     maglev: RwLock<StdHashMap<u32, u32>>,
     attached: RwLock<Vec<AttachedProgramInfo>>,
     next_prog_id: RwLock<u32>,
+    ipcache: RwLock<StdHashMap<[u8; 16], (u32, IPCacheValue)>>,
+    host_policies: RwLock<StdHashMap<HostPolicyKeyFlat, HostPolicyValue>>,
 }
 
 /// Flattened policy key for use as HashMap key (needs Hash + Eq).
@@ -424,6 +505,28 @@ impl From<&ServiceKey> for ServiceKeyFlat {
     }
 }
 
+/// Flattened host policy key for use as HashMap key (needs Hash + Eq).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct HostPolicyKeyFlat {
+    identity: u32,
+    direction: u8,
+    protocol: u8,
+    dst_port: u16,
+    prefix_len: u32,
+}
+
+impl From<&HostPolicyKey> for HostPolicyKeyFlat {
+    fn from(k: &HostPolicyKey) -> Self {
+        Self {
+            identity: k.identity,
+            direction: k.direction,
+            protocol: k.protocol,
+            dst_port: k.dst_port,
+            prefix_len: k.prefix_len,
+        }
+    }
+}
+
 impl MockMaps {
     fn new() -> Self {
         Self {
@@ -437,6 +540,8 @@ impl MockMaps {
             maglev: RwLock::new(StdHashMap::new()),
             attached: RwLock::new(Vec::new()),
             next_prog_id: RwLock::new(1),
+            ipcache: RwLock::new(StdHashMap::new()),
+            host_policies: RwLock::new(StdHashMap::new()),
         }
     }
 
@@ -760,6 +865,140 @@ impl MockMaps {
             );
         } else {
             info!(interface, attach_type = type_str, "mock: detached program");
+        }
+        Ok(())
+    }
+
+    // -- IPCache operations --
+
+    fn upsert_ipcache(&self, key: IPCacheKey, value: IPCacheValue) -> anyhow::Result<()> {
+        debug!(
+            prefix_len = key.prefix_len,
+            identity = value.identity,
+            "mock: upsert ipcache"
+        );
+        self.ipcache
+            .write()
+            .expect("ipcache lock poisoned")
+            .insert(key.addr, (key.prefix_len, value));
+        Ok(())
+    }
+
+    fn delete_ipcache(&self, key: &IPCacheKey) -> anyhow::Result<()> {
+        debug!(prefix_len = key.prefix_len, "mock: delete ipcache");
+        self.ipcache
+            .write()
+            .expect("ipcache lock poisoned")
+            .remove(&key.addr);
+        Ok(())
+    }
+
+    // -- Host firewall policy operations --
+
+    fn upsert_host_policy(&self, key: HostPolicyKey, value: HostPolicyValue) -> anyhow::Result<()> {
+        debug!(
+            identity = key.identity,
+            direction = key.direction,
+            protocol = key.protocol,
+            port = key.dst_port,
+            action = value.action,
+            "mock: upsert host policy"
+        );
+        let flat: HostPolicyKeyFlat = (&key).into();
+        self.host_policies
+            .write()
+            .expect("host_policies lock poisoned")
+            .insert(flat, value);
+        Ok(())
+    }
+
+    fn delete_host_policy(&self, key: &HostPolicyKey) -> anyhow::Result<()> {
+        debug!(
+            identity = key.identity,
+            direction = key.direction,
+            "mock: delete host policy"
+        );
+        let flat: HostPolicyKeyFlat = key.into();
+        self.host_policies
+            .write()
+            .expect("host_policies lock poisoned")
+            .remove(&flat);
+        Ok(())
+    }
+
+    fn host_policy_count(&self) -> usize {
+        self.host_policies
+            .read()
+            .expect("host_policies lock poisoned")
+            .len()
+    }
+
+    fn sync_host_policies(
+        &self,
+        new_policies: Vec<(HostPolicyKey, HostPolicyValue)>,
+    ) -> anyhow::Result<(u32, u32)> {
+        let mut map = self
+            .host_policies
+            .write()
+            .expect("host_policies lock poisoned");
+        let old_count = map.len() as u32;
+        map.clear();
+        for (key, value) in &new_policies {
+            let flat: HostPolicyKeyFlat = key.into();
+            map.insert(flat, *value);
+        }
+        let new_count = map.len() as u32;
+        let removed = old_count;
+        let added = new_count;
+        info!(added, removed, "mock: synced host policies");
+        Ok((added, removed))
+    }
+
+    // -- XDP operations --
+
+    fn attach_xdp(&self, interface: &str, native: bool) -> anyhow::Result<()> {
+        let mode_str = if native { "native" } else { "skb" };
+        let type_str = format!("xdp_{}", mode_str);
+        let mut attached = self.attached.write().expect("attached lock poisoned");
+        let mut prog_id = self
+            .next_prog_id
+            .write()
+            .expect("next_prog_id lock poisoned");
+
+        // Check if already attached.
+        if attached
+            .iter()
+            .any(|p| p.interface == interface && p.attach_type.starts_with("xdp"))
+        {
+            warn!(interface, mode = mode_str, "mock: XDP already attached");
+            return Ok(());
+        }
+
+        let id = *prog_id;
+        *prog_id += 1;
+        attached.push(AttachedProgramInfo {
+            interface: interface.to_string(),
+            attach_type: type_str.clone(),
+            program_id: id,
+        });
+        info!(
+            interface,
+            mode = mode_str,
+            program_id = id,
+            "mock: attached XDP program"
+        );
+        Ok(())
+    }
+
+    fn detach_xdp(&self, interface: &str) -> anyhow::Result<()> {
+        let mut attached = self.attached.write().expect("attached lock poisoned");
+        let before = attached.len();
+        attached.retain(|p| !(p.interface == interface && p.attach_type.starts_with("xdp")));
+        let after = attached.len();
+        if before == after {
+            warn!(interface, "mock: XDP program not found for detach");
+        } else {
+            info!(interface, "mock: detached XDP program");
         }
         Ok(())
     }
@@ -1283,12 +1522,19 @@ pub struct RealMaps {
     backends: RwLock<aya::maps::Array<aya::maps::MapData, BackendValue>>,
     maglev: RwLock<aya::maps::Array<aya::maps::MapData, u32>>,
     drop_counters: RwLock<aya::maps::PerCpuArray<aya::maps::MapData, u64>>,
+    ipcache:
+        Option<RwLock<aya::maps::lpm_trie::LpmTrie<aya::maps::MapData, IPCacheKey, IPCacheValue>>>,
+    host_policies: Option<
+        RwLock<aya::maps::lpm_trie::LpmTrie<aya::maps::MapData, HostPolicyKey, HostPolicyValue>>,
+    >,
     attached: RwLock<Vec<AttachedProgramInfo>>,
     /// Holds TC program links so they stay attached (aya auto-detaches on drop).
     /// Tuples of (interface_name, attach_type, link) for targeted detach.
     _tc_links: std::sync::Mutex<Vec<(String, String, aya::programs::tc::SchedClassifierLink)>>,
     /// Holds cgroup program links so they stay attached.
     _cgroup_links: std::sync::Mutex<Vec<aya::programs::cgroup_sock_addr::CgroupSockAddrLink>>,
+    /// Holds XDP program links so they stay attached.
+    _xdp_links: std::sync::Mutex<Vec<(String, aya::programs::xdp::XdpLink)>>,
     /// Holds references to the loaded eBPF object so programs stay loaded.
     _ebpf: std::sync::Mutex<aya::Ebpf>,
 }
@@ -1307,6 +1553,10 @@ impl RealMaps {
         backends: aya::maps::Array<aya::maps::MapData, BackendValue>,
         maglev: aya::maps::Array<aya::maps::MapData, u32>,
         drop_counters: aya::maps::PerCpuArray<aya::maps::MapData, u64>,
+        ipcache: Option<aya::maps::lpm_trie::LpmTrie<aya::maps::MapData, IPCacheKey, IPCacheValue>>,
+        host_policies: Option<
+            aya::maps::lpm_trie::LpmTrie<aya::maps::MapData, HostPolicyKey, HostPolicyValue>,
+        >,
         ebpf: aya::Ebpf,
     ) -> Self {
         Self {
@@ -1319,9 +1569,12 @@ impl RealMaps {
             backends: RwLock::new(backends),
             maglev: RwLock::new(maglev),
             drop_counters: RwLock::new(drop_counters),
+            ipcache: ipcache.map(RwLock::new),
+            host_policies: host_policies.map(RwLock::new),
             attached: RwLock::new(Vec::new()),
             _tc_links: std::sync::Mutex::new(Vec::new()),
             _cgroup_links: std::sync::Mutex::new(Vec::new()),
+            _xdp_links: std::sync::Mutex::new(Vec::new()),
             _ebpf: std::sync::Mutex::new(ebpf),
         }
     }
@@ -1710,6 +1963,176 @@ impl RealMaps {
             );
         }
 
+        Ok(())
+    }
+
+    // -- IPCache operations --
+
+    fn upsert_ipcache(&self, key: IPCacheKey, value: IPCacheValue) -> anyhow::Result<()> {
+        let trie = self
+            .ipcache
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("IPCACHE map not available"))?;
+        let mut map = trie.write().expect("ipcache lock poisoned");
+        map.insert(&key, value, 0)?;
+        debug!(
+            prefix_len = key.prefix_len,
+            identity = value.identity,
+            "upsert ipcache"
+        );
+        Ok(())
+    }
+
+    fn delete_ipcache(&self, key: &IPCacheKey) -> anyhow::Result<()> {
+        let trie = self
+            .ipcache
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("IPCACHE map not available"))?;
+        let mut map = trie.write().expect("ipcache lock poisoned");
+        map.remove(key)?;
+        debug!(prefix_len = key.prefix_len, "delete ipcache");
+        Ok(())
+    }
+
+    // -- Host firewall policy operations --
+
+    fn upsert_host_policy(&self, key: HostPolicyKey, value: HostPolicyValue) -> anyhow::Result<()> {
+        let trie = self
+            .host_policies
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("HOST_POLICIES map not available"))?;
+        let mut map = trie.write().expect("host_policies lock poisoned");
+        map.insert(&key, value, 0)?;
+        debug!(
+            identity = key.identity,
+            direction = key.direction,
+            protocol = key.protocol,
+            port = key.dst_port,
+            action = value.action,
+            "upsert host policy"
+        );
+        Ok(())
+    }
+
+    fn delete_host_policy(&self, key: &HostPolicyKey) -> anyhow::Result<()> {
+        let trie = self
+            .host_policies
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("HOST_POLICIES map not available"))?;
+        let mut map = trie.write().expect("host_policies lock poisoned");
+        map.remove(key)?;
+        debug!(
+            identity = key.identity,
+            direction = key.direction,
+            "delete host policy"
+        );
+        Ok(())
+    }
+
+    fn host_policy_count(&self) -> usize {
+        match &self.host_policies {
+            Some(trie) => {
+                let map = trie.read().expect("host_policies lock poisoned");
+                map.iter().count()
+            }
+            None => 0,
+        }
+    }
+
+    fn sync_host_policies(
+        &self,
+        new_policies: Vec<(HostPolicyKey, HostPolicyValue)>,
+    ) -> anyhow::Result<(u32, u32)> {
+        let trie = self
+            .host_policies
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("HOST_POLICIES map not available"))?;
+        let mut map = trie.write().expect("host_policies lock poisoned");
+
+        // Collect existing entries to remove.
+        let existing: Vec<HostPolicyKey> = map
+            .iter()
+            .filter_map(|res| res.ok())
+            .map(|(k, _v)| k)
+            .collect();
+
+        let mut removed = 0u32;
+        for key in &existing {
+            if map.remove(key).is_ok() {
+                removed += 1;
+            }
+        }
+
+        let mut added = 0u32;
+        for (key, value) in &new_policies {
+            map.insert(key, *value, 0)?;
+            added += 1;
+        }
+
+        info!(added, removed, "synced host policies");
+        Ok((added, removed))
+    }
+
+    // -- XDP operations --
+
+    fn attach_xdp(&self, interface: &str, native: bool) -> anyhow::Result<()> {
+        use aya::programs::{Xdp, XdpFlags};
+
+        let flags = if native {
+            XdpFlags::DRV_MODE
+        } else {
+            XdpFlags::SKB_MODE
+        };
+        let mode_str = if native { "native" } else { "skb" };
+
+        let mut ebpf = self._ebpf.lock().expect("ebpf lock poisoned");
+        let prog: &mut Xdp = match ebpf.program_mut("xdp_pass") {
+            Some(p) => p.try_into()?,
+            None => {
+                anyhow::bail!("XDP program 'xdp_pass' not found in eBPF object");
+            }
+        };
+
+        let link_id = prog.attach(interface, flags)?;
+        let prog_id = prog.info()?.id();
+        let link = prog.take_link(link_id)?;
+
+        self._xdp_links
+            .lock()
+            .expect("xdp_links lock poisoned")
+            .push((interface.to_string(), link));
+
+        let mut attached = self.attached.write().expect("attached lock poisoned");
+        attached.push(AttachedProgramInfo {
+            interface: interface.to_string(),
+            attach_type: format!("xdp_{}", mode_str),
+            program_id: prog_id,
+        });
+
+        info!(
+            interface,
+            mode = mode_str,
+            program_id = prog_id,
+            "attached XDP program"
+        );
+        Ok(())
+    }
+
+    fn detach_xdp(&self, interface: &str) -> anyhow::Result<()> {
+        // Remove and drop XDP link, which triggers actual detach.
+        let mut links = self._xdp_links.lock().expect("xdp_links lock poisoned");
+        links.retain(|(iface, _link)| iface != interface);
+
+        let mut attached = self.attached.write().expect("attached lock poisoned");
+        let before = attached.len();
+        attached.retain(|p| !(p.interface == interface && p.attach_type.starts_with("xdp")));
+        let after = attached.len();
+
+        if before == after {
+            warn!(interface, "XDP program not found for detach");
+        } else {
+            info!(interface, "detached XDP program (link dropped)");
+        }
         Ok(())
     }
 

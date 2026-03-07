@@ -7,22 +7,94 @@ use crate::flows;
 use crate::maps::{AttachDirection, MapManager};
 use crate::proto;
 use novanet_common::*;
+use std::collections::HashMap as StdHashMap;
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use tokio_stream::{wrappers::BroadcastStream, Stream, StreamExt};
 use tonic::{Request, Response, Status};
 use tracing::{debug, info, warn};
 
+/// Tracks the eBPF map keys associated with a host firewall rule_id,
+/// enabling deletion by rule_id alone.
+struct HostRuleInfo {
+    /// IPCache key for the CIDR associated with this rule.
+    /// Tracked for potential future cleanup during sync operations.
+    #[allow(dead_code)]
+    ipcache_key: IPCacheKey,
+    policy_keys: Vec<HostPolicyKey>,
+}
+
 /// The DataplaneControl gRPC service implementation.
 pub struct DataplaneService {
     maps: Arc<MapManager>,
+    /// Maps rule_id → key info needed for deletion.
+    host_rules: RwLock<StdHashMap<String, HostRuleInfo>>,
 }
 
 impl DataplaneService {
     pub fn new(maps: MapManager) -> Self {
         Self {
             maps: Arc::new(maps),
+            host_rules: RwLock::new(StdHashMap::new()),
         }
+    }
+}
+
+/// Convert proto cidr_ip bytes (4 or 16) to IPCacheKey.
+/// IPv4 (4 bytes) → mapped to ::ffff:x.x.x.x with prefix += 96.
+/// IPv6 (16 bytes) → used directly.
+#[allow(clippy::result_large_err)]
+fn cidr_to_ipcache_key(cidr_ip: &[u8], prefix_len: u32) -> Result<IPCacheKey, Status> {
+    let mut addr = [0u8; 16];
+    let adjusted_prefix = match cidr_ip.len() {
+        4 => {
+            addr[10] = 0xff;
+            addr[11] = 0xff;
+            addr[12..16].copy_from_slice(cidr_ip);
+            prefix_len + 96
+        }
+        16 => {
+            addr.copy_from_slice(cidr_ip);
+            prefix_len
+        }
+        _ => return Err(Status::invalid_argument("cidr_ip must be 4 or 16 bytes")),
+    };
+    Ok(IPCacheKey {
+        prefix_len: adjusted_prefix,
+        addr,
+    })
+}
+
+/// Derive a deterministic security identity for a CIDR range using FNV-1a hash.
+/// Returns identity >= 1000 (below 1000 is reserved).
+fn identity_for_cidr(cidr_ip: &[u8], prefix_len: u32) -> u32 {
+    let mut h: u32 = 0x811c_9dc5;
+    for byte in cidr_ip {
+        h ^= *byte as u32;
+        h = h.wrapping_mul(0x0100_0193);
+    }
+    for byte in &prefix_len.to_le_bytes() {
+        h ^= *byte as u32;
+        h = h.wrapping_mul(0x0100_0193);
+    }
+    1000 + (h % (u32::MAX - 1000))
+}
+
+/// Build a HostPolicyKey with appropriate prefix_len based on which fields are specified.
+fn build_host_policy_key(identity: u32, direction: u8, protocol: u8, port: u16) -> HostPolicyKey {
+    let prefix_len = if port > 0 {
+        HOST_POLICY_FULL_PREFIX
+    } else if protocol > 0 {
+        HOST_POLICY_PROTO_PREFIX
+    } else {
+        HOST_POLICY_IDENTITY_PREFIX
+    };
+    HostPolicyKey {
+        prefix_len,
+        identity,
+        direction,
+        protocol,
+        dst_port: port,
     }
 }
 
@@ -645,5 +717,280 @@ impl proto::dataplane_control_server::DataplaneControl for DataplaneService {
         };
 
         Ok(Response::new(resp))
+    }
+
+    // -----------------------------------------------------------------------
+    // Host firewall policy management
+    // -----------------------------------------------------------------------
+
+    async fn upsert_host_policy(
+        &self,
+        request: Request<proto::UpsertHostPolicyRequest>,
+    ) -> Result<Response<proto::UpsertHostPolicyResponse>, Status> {
+        let req = request.into_inner();
+
+        if req.cidr_ip.is_empty() {
+            return Err(Status::invalid_argument("cidr_ip is required"));
+        }
+
+        let direction = match proto::HostPolicyDirection::try_from(req.direction) {
+            Ok(proto::HostPolicyDirection::HostPolicyIngress) => HOST_POLICY_INGRESS,
+            Ok(proto::HostPolicyDirection::HostPolicyEgress) => HOST_POLICY_EGRESS,
+            Err(_) => return Err(Status::invalid_argument("Invalid host policy direction")),
+        };
+
+        let action = match proto::PolicyAction::try_from(req.action) {
+            Ok(proto::PolicyAction::Allow) => ACTION_ALLOW,
+            Ok(proto::PolicyAction::Deny) => ACTION_DENY,
+            _ => ACTION_DENY,
+        };
+
+        let protocol = req.protocol as u8;
+        let port = req.port as u16;
+        let end_port = req.end_port as u16;
+
+        // Derive identity for the CIDR.
+        let identity = identity_for_cidr(&req.cidr_ip, req.cidr_prefix_len);
+
+        // Insert CIDR → identity into IPCache.
+        let ipcache_key = cidr_to_ipcache_key(&req.cidr_ip, req.cidr_prefix_len)?;
+        self.maps
+            .upsert_ipcache(ipcache_key, IPCacheValue { identity, flags: 0 })
+            .map_err(|e| Status::internal(format!("Failed to upsert ipcache: {}", e)))?;
+
+        // Build and insert host policy entries.
+        let value = HostPolicyValue {
+            action,
+            _pad: [0; 3],
+        };
+
+        let mut policy_keys = Vec::new();
+
+        if end_port > port && end_port > 0 {
+            // Port range: one entry per port.
+            let range_size = (end_port - port + 1) as u32;
+            if range_size > 1024 {
+                return Err(Status::invalid_argument(
+                    "Port range too large (max 1024 ports per rule to prevent map exhaustion)",
+                ));
+            }
+            for p in port..=end_port {
+                let key = build_host_policy_key(identity, direction, protocol, p);
+                self.maps.upsert_host_policy(key, value).map_err(|e| {
+                    Status::internal(format!("Failed to upsert host policy: {}", e))
+                })?;
+                policy_keys.push(key);
+            }
+        } else {
+            let key = build_host_policy_key(identity, direction, protocol, port);
+            self.maps
+                .upsert_host_policy(key, value)
+                .map_err(|e| Status::internal(format!("Failed to upsert host policy: {}", e)))?;
+            policy_keys.push(key);
+        }
+
+        // Track rule_id → key mapping for deletion.
+        {
+            let mut rules = self.host_rules.write().expect("host_rules lock poisoned");
+            rules.insert(
+                req.rule_id.clone(),
+                HostRuleInfo {
+                    ipcache_key,
+                    policy_keys,
+                },
+            );
+        }
+
+        debug!(
+            rule_id = %req.rule_id,
+            identity = identity,
+            direction = direction,
+            protocol = protocol,
+            port = port,
+            action = action,
+            "Upserted host policy"
+        );
+
+        Ok(Response::new(proto::UpsertHostPolicyResponse {}))
+    }
+
+    async fn delete_host_policy(
+        &self,
+        request: Request<proto::DeleteHostPolicyRequest>,
+    ) -> Result<Response<proto::DeleteHostPolicyResponse>, Status> {
+        let req = request.into_inner();
+
+        let rule_info = {
+            let mut rules = self.host_rules.write().expect("host_rules lock poisoned");
+            rules.remove(&req.rule_id)
+        };
+
+        match rule_info {
+            Some(info) => {
+                // Delete all policy entries for this rule.
+                for key in &info.policy_keys {
+                    if let Err(e) = self.maps.delete_host_policy(key) {
+                        warn!(
+                            rule_id = %req.rule_id,
+                            error = %e,
+                            "Failed to delete host policy entry (may already be removed)"
+                        );
+                    }
+                }
+
+                // Note: We don't delete the IPCache entry because other rules
+                // may reference the same CIDR. IPCache entries are cleaned up
+                // during sync_host_policies.
+
+                debug!(rule_id = %req.rule_id, "Deleted host policy");
+            }
+            None => {
+                warn!(
+                    rule_id = %req.rule_id,
+                    "Host policy rule_id not found for deletion"
+                );
+            }
+        }
+
+        Ok(Response::new(proto::DeleteHostPolicyResponse {}))
+    }
+
+    async fn sync_host_policies(
+        &self,
+        request: Request<proto::SyncHostPoliciesRequest>,
+    ) -> Result<Response<proto::SyncHostPoliciesResponse>, Status> {
+        let req = request.into_inner();
+
+        let mut all_policy_entries = Vec::new();
+        let mut new_rules = StdHashMap::new();
+
+        for entry in &req.policies {
+            if entry.cidr_ip.is_empty() {
+                continue;
+            }
+
+            let direction = match proto::HostPolicyDirection::try_from(entry.direction) {
+                Ok(proto::HostPolicyDirection::HostPolicyIngress) => HOST_POLICY_INGRESS,
+                Ok(proto::HostPolicyDirection::HostPolicyEgress) => HOST_POLICY_EGRESS,
+                Err(_) => continue,
+            };
+
+            let action = match proto::PolicyAction::try_from(entry.action) {
+                Ok(proto::PolicyAction::Allow) => ACTION_ALLOW,
+                _ => ACTION_DENY,
+            };
+
+            let protocol = entry.protocol as u8;
+            let port = entry.port as u16;
+            let end_port = entry.end_port as u16;
+
+            let identity = identity_for_cidr(&entry.cidr_ip, entry.cidr_prefix_len);
+
+            // Insert CIDR → identity into IPCache.
+            let ipcache_key = match cidr_to_ipcache_key(&entry.cidr_ip, entry.cidr_prefix_len) {
+                Ok(k) => k,
+                Err(_) => continue,
+            };
+            self.maps
+                .upsert_ipcache(ipcache_key, IPCacheValue { identity, flags: 0 })
+                .map_err(|e| Status::internal(format!("Failed to upsert ipcache: {}", e)))?;
+
+            let value = HostPolicyValue {
+                action,
+                _pad: [0; 3],
+            };
+
+            let mut policy_keys = Vec::new();
+
+            if end_port > port && end_port > 0 {
+                let range_size = (end_port - port + 1) as u32;
+                if range_size > 1024 {
+                    warn!(
+                        rule_id = %entry.rule_id,
+                        "Port range too large, skipping (max 1024)"
+                    );
+                    continue;
+                }
+                for p in port..=end_port {
+                    let key = build_host_policy_key(identity, direction, protocol, p);
+                    all_policy_entries.push((key, value));
+                    policy_keys.push(key);
+                }
+            } else {
+                let key = build_host_policy_key(identity, direction, protocol, port);
+                all_policy_entries.push((key, value));
+                policy_keys.push(key);
+            }
+
+            new_rules.insert(
+                entry.rule_id.clone(),
+                HostRuleInfo {
+                    ipcache_key,
+                    policy_keys,
+                },
+            );
+        }
+
+        let (added, removed) = self
+            .maps
+            .sync_host_policies(all_policy_entries)
+            .map_err(|e| Status::internal(format!("Failed to sync host policies: {}", e)))?;
+
+        // Replace the rule tracking map.
+        {
+            let mut rules = self.host_rules.write().expect("host_rules lock poisoned");
+            *rules = new_rules;
+        }
+
+        info!(added, removed, "Synced host policies");
+
+        Ok(Response::new(proto::SyncHostPoliciesResponse {
+            added,
+            removed,
+        }))
+    }
+
+    // -----------------------------------------------------------------------
+    // XDP management
+    // -----------------------------------------------------------------------
+
+    async fn attach_xdp(
+        &self,
+        request: Request<proto::AttachXdpRequest>,
+    ) -> Result<Response<proto::AttachXdpResponse>, Status> {
+        let req = request.into_inner();
+
+        let native = match proto::XdpMode::try_from(req.mode) {
+            Ok(proto::XdpMode::Native) => true,
+            Ok(proto::XdpMode::Skb) => false,
+            Err(_) => return Err(Status::invalid_argument("Invalid XDP mode")),
+        };
+
+        self.maps
+            .attach_xdp(&req.interface_name, native)
+            .map_err(|e| Status::internal(format!("Failed to attach XDP: {}", e)))?;
+
+        info!(
+            interface = %req.interface_name,
+            native = native,
+            "Attached XDP program"
+        );
+
+        Ok(Response::new(proto::AttachXdpResponse {}))
+    }
+
+    async fn detach_xdp(
+        &self,
+        request: Request<proto::DetachXdpRequest>,
+    ) -> Result<Response<proto::DetachXdpResponse>, Status> {
+        let req = request.into_inner();
+
+        self.maps
+            .detach_xdp(&req.interface_name)
+            .map_err(|e| Status::internal(format!("Failed to detach XDP: {}", e)))?;
+
+        info!(interface = %req.interface_name, "Detached XDP program");
+
+        Ok(Response::new(proto::DetachXdpResponse {}))
     }
 }

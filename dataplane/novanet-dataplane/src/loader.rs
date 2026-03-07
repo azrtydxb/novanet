@@ -8,7 +8,7 @@ use crate::maps::{MapManager, RealMaps};
 #[cfg(target_os = "linux")]
 use anyhow::{Context, Result};
 #[cfg(target_os = "linux")]
-use aya::maps::{Array, HashMap, MapData, PerCpuArray, RingBuf};
+use aya::maps::{lpm_trie::LpmTrie, Array, HashMap, MapData, PerCpuArray, RingBuf};
 #[cfg(target_os = "linux")]
 use aya::programs::SchedClassifier;
 #[cfg(target_os = "linux")]
@@ -18,7 +18,7 @@ use novanet_common::*;
 #[cfg(target_os = "linux")]
 use std::path::Path;
 #[cfg(target_os = "linux")]
-use tracing::info;
+use tracing::{info, warn};
 
 /// Load eBPF programs from the compiled object file.
 ///
@@ -133,6 +133,72 @@ pub fn load_ebpf(bpf_object_path: &Path) -> Result<(MapManager, Option<RingBuf<M
         .try_into()
         .context("Failed to convert FLOW_EVENTS ring buffer")?;
 
+    // Optional maps — host firewall and IPCache (LPM tries).
+    // These are not required; if the eBPF object doesn't contain them,
+    // host firewall operations will return errors at runtime.
+    let ipcache: Option<
+        LpmTrie<MapData, novanet_common::IPCacheKey, novanet_common::IPCacheValue>,
+    > = match ebpf.take_map("IPCACHE") {
+        Some(map) => match map.try_into() {
+            Ok(trie) => {
+                info!("Loaded IPCACHE LPM trie map");
+                Some(trie)
+            }
+            Err(e) => {
+                warn!(
+                    "Failed to convert IPCACHE map: {} — host firewall disabled",
+                    e
+                );
+                None
+            }
+        },
+        None => {
+            warn!("IPCACHE map not found — identity-based host firewall disabled");
+            None
+        }
+    };
+
+    let host_policies: Option<
+        LpmTrie<MapData, novanet_common::HostPolicyKey, novanet_common::HostPolicyValue>,
+    > = match ebpf.take_map("HOST_POLICIES") {
+        Some(map) => match map.try_into() {
+            Ok(trie) => {
+                info!("Loaded HOST_POLICIES LPM trie map");
+                Some(trie)
+            }
+            Err(e) => {
+                warn!(
+                    "Failed to convert HOST_POLICIES map: {} — host firewall disabled",
+                    e
+                );
+                None
+            }
+        },
+        None => {
+            warn!("HOST_POLICIES map not found — host firewall disabled");
+            None
+        }
+    };
+
+    // Optional XDP program — load but don't attach (attachment is via gRPC).
+    if let Some(prog) = ebpf.program_mut("xdp_pass") {
+        match <&mut aya::programs::Xdp>::try_from(prog) {
+            Ok(xdp) => match xdp.load() {
+                Ok(()) => info!(program = "xdp_pass", "Loaded XDP program"),
+                Err(e) => warn!(
+                    "Failed to load XDP program: {} — XDP acceleration disabled",
+                    e
+                ),
+            },
+            Err(e) => warn!(
+                "xdp_pass is not an XDP program: {} — XDP acceleration disabled",
+                e
+            ),
+        }
+    } else {
+        warn!("XDP program 'xdp_pass' not found — XDP acceleration disabled");
+    }
+
     let real_maps = RealMaps::new(
         endpoints,
         policies,
@@ -143,6 +209,8 @@ pub fn load_ebpf(bpf_object_path: &Path) -> Result<(MapManager, Option<RingBuf<M
         backends,
         maglev,
         drop_counters,
+        ipcache,
+        host_policies,
         ebpf,
     );
 
