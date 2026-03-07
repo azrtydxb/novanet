@@ -744,26 +744,6 @@ fn try_tc_ingress(ctx: &mut TcContext) -> Result<i32, ()> {
 
     let (src_port, dst_port, tcp_flags) = parse_l4_ports(ctx, l4_offset, protocol);
 
-    // --- L4 LB: Reverse SNAT on return traffic ---
-    if get_config(CONFIG_KEY_L4LB_ENABLED) != 0 {
-        let rev_key = CtKey {
-            src_ip,
-            dst_ip,
-            src_port,
-            dst_port,
-            protocol,
-            _pad: [0; 3],
-        };
-        // SAFETY: eBPF map lookup; safety guaranteed by BPF verifier.
-        if let Some(ct) = unsafe { CONNTRACK.get(&rev_key) } {
-            let origin_ip = ct.origin_ip;
-            let origin_port = ct.origin_port;
-            if origin_ip != 0 {
-                let _ = perform_snat(ctx, l4_offset, protocol, src_ip, origin_ip, src_port, origin_port);
-            }
-        }
-    }
-
     let mode = get_config(CONFIG_KEY_MODE);
 
     if mode == MODE_OVERLAY {
@@ -894,29 +874,14 @@ fn try_tc_egress(ctx: &mut TcContext) -> Result<i32, ()> {
     // Parse IPv4 header.
     let ipv4: Ipv4Hdr = ctx.load(ETH_HLEN).map_err(|_| ())?;
     let src_ip = u32::to_be(ipv4.src_addr);
-    let mut dst_ip = u32::to_be(ipv4.dst_addr);
+    let dst_ip = u32::to_be(ipv4.dst_addr);
     let protocol = ipv4.proto as u8;
     let ihl = (ipv4.ihl() as usize) * 4;
     let l4_offset = ETH_HLEN + ihl;
     let tot_len = ipv4.tot_len;
     let total_len = u16::from_be(tot_len) as u64;
 
-    let (src_port, mut dst_port, tcp_flags) = parse_l4_ports(ctx, l4_offset, protocol);
-
-    // --- L4 LB: Service DNAT ---
-    if let Some((backend_ip, backend_port, _origin_ip, _origin_port)) =
-        service_lookup(dst_ip, dst_port, protocol, src_ip, src_port, SVC_SCOPE_CLUSTER_IP)
-    {
-        if perform_dnat(ctx, l4_offset, protocol, dst_ip, backend_ip, dst_port, backend_port)
-            .is_err()
-        {
-            inc_drop_counter(DROP_REASON_NO_ROUTE);
-            return Ok(BPF_TC_ACT_SHOT as i32);
-        }
-        // Update locals so subsequent endpoint lookup uses real backend IP.
-        dst_ip = backend_ip;
-        dst_port = backend_port;
-    }
+    let (src_port, dst_port, tcp_flags) = parse_l4_ports(ctx, l4_offset, protocol);
 
     // Resolve source identity (the pod sending traffic).
     let src_identity = lookup_identity(src_ip).map(|(id, _)| id).unwrap_or(0);
