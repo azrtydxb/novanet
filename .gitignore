@@ -30,3 +30,4 @@ credentials.json
 /novanetctl
 /novanet-operator
 site/
+.worktrees/
