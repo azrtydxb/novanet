@@ -3,8 +3,7 @@
 package policy
 
 import (
-	"maps"
-	"net"
+	"math"
 	"slices"
 
 	"go.uber.org/zap"
@@ -65,17 +64,17 @@ type CompiledRule struct {
 
 // Compiler compiles Kubernetes NetworkPolicy resources into identity-based rules.
 type Compiler struct {
-	identityAllocator *identity.Allocator
-	portResolver      PortResolver
-	namespaceResolver NamespaceResolver
-	logger            *zap.Logger
+	peerResolver
+	portResolver PortResolver
 }
 
 // NewCompiler creates a new policy compiler.
 func NewCompiler(identityAllocator *identity.Allocator, logger *zap.Logger) *Compiler {
 	return &Compiler{
-		identityAllocator: identityAllocator,
-		logger:            logger,
+		peerResolver: peerResolver{
+			identityAllocator: identityAllocator,
+			logger:            logger,
+		},
 	}
 }
 
@@ -297,92 +296,12 @@ func (c *Compiler) resolvePeers(peers []networkingv1.NetworkPolicyPeer, namespac
 		if peer.IPBlock != nil {
 			continue
 		}
-
-		if peer.PodSelector == nil && peer.NamespaceSelector == nil {
-			identities = append(identities, WildcardIdentity)
-			continue
-		}
-
-		// Build the pod selector part.
-		podSelector := metav1.LabelSelector{}
-		if peer.PodSelector != nil {
-			podSelector = *peer.PodSelector.DeepCopy()
-		}
-
-		if peer.NamespaceSelector != nil {
-			nsSel := peer.NamespaceSelector
-			if len(nsSel.MatchLabels) == 0 && len(nsSel.MatchExpressions) == 0 {
-				// Empty namespace selector = all namespaces.
-				if len(podSelector.MatchLabels) == 0 && len(podSelector.MatchExpressions) == 0 {
-					identities = append(identities, WildcardIdentity)
-				} else {
-					identities = append(identities, c.findOrFallback(podSelector)...)
-				}
-			} else {
-				// Non-empty namespace selector. Resolve to namespace names.
-				nsNames := c.resolveNamespaceNames(nsSel)
-				if len(nsNames) > 0 {
-					for _, nsName := range nsNames {
-						scoped := podSelector.DeepCopy()
-						if scoped.MatchLabels == nil {
-							scoped.MatchLabels = make(map[string]string)
-						}
-						scoped.MatchLabels["novanet.io/namespace"] = nsName
-						identities = append(identities, c.findOrFallback(*scoped)...)
-					}
-				} else {
-					// Cannot resolve namespace names. Create a deterministic
-					// fallback hash from combined pod + namespace matchLabels.
-					fallback := make(map[string]string)
-					maps.Copy(fallback, podSelector.MatchLabels)
-					for k, v := range nsSel.MatchLabels {
-						fallback["ns."+k] = v
-					}
-					identities = append(identities, identity.HashLabels(fallback))
-				}
-			}
-		} else {
-			// No namespace selector — scope to the policy's namespace.
-			if podSelector.MatchLabels == nil {
-				podSelector.MatchLabels = make(map[string]string)
-			}
-			podSelector.MatchLabels["novanet.io/namespace"] = namespace
-			identities = append(identities, c.findOrFallback(podSelector)...)
-		}
+		identities = append(identities, c.resolvePodAndNsPeers(
+			peer.PodSelector, peer.NamespaceSelector, namespace,
+		)...)
 	}
 
 	return identities
-}
-
-// findOrFallback finds allocated identities matching the selector, or falls
-// back to hashing the MatchLabels if no matches exist yet.
-func (c *Compiler) findOrFallback(selector metav1.LabelSelector) []uint32 {
-	sel, err := metav1.LabelSelectorAsSelector(&selector)
-	if err != nil {
-		c.logger.Warn("invalid peer label selector, skipping", zap.Error(err))
-		return nil
-	}
-	matches := c.identityAllocator.FindMatchingIdentities(sel)
-	if len(matches) > 0 {
-		return matches
-	}
-	// Fallback: hash MatchLabels as placeholder.
-	fallback := make(map[string]string)
-	maps.Copy(fallback, selector.MatchLabels)
-	return []uint32{identity.HashLabels(fallback)}
-}
-
-// resolveNamespaceNames resolves a namespace label selector to namespace names.
-func (c *Compiler) resolveNamespaceNames(nsSel *metav1.LabelSelector) []string {
-	// Direct resolution: kubernetes.io/metadata.name is the namespace name.
-	if name, ok := nsSel.MatchLabels["kubernetes.io/metadata.name"]; ok {
-		return []string{name}
-	}
-	// Use the NamespaceResolver callback if available.
-	if c.namespaceResolver != nil {
-		return c.namespaceResolver(*nsSel)
-	}
-	return nil
 }
 
 // resolvePeersWithIPBlock returns IPBlock CIDRs from peers (for CIDR-based rules).
@@ -394,30 +313,9 @@ func (c *Compiler) resolvePeersWithIPBlock(peers []networkingv1.NetworkPolicyPee
 		if peer.IPBlock == nil {
 			continue
 		}
-		// Validate primary CIDR.
-		_, _, err := net.ParseCIDR(peer.IPBlock.CIDR)
-		if err != nil {
-			c.logger.Warn("invalid IPBlock CIDR, skipping",
-				zap.String("cidr", peer.IPBlock.CIDR),
-				zap.Error(err),
-			)
-			continue
-		}
-		entries = append(entries, cidrEntry{cidr: peer.IPBlock.CIDR, action: ActionAllow})
-
-		// Generate deny entries for IPBlock.Except CIDRs. These must be
-		// evaluated before the allow rule (more-specific prefix wins in LPM).
-		for _, exceptCIDR := range peer.IPBlock.Except {
-			_, _, err := net.ParseCIDR(exceptCIDR)
-			if err != nil {
-				c.logger.Warn("invalid IPBlock.Except CIDR, skipping",
-					zap.String("except_cidr", exceptCIDR),
-					zap.Error(err),
-				)
-				continue
-			}
-			entries = append(entries, cidrEntry{cidr: exceptCIDR, action: ActionDeny})
-		}
+		entries = append(entries, resolveIPBlockCIDRs(
+			peer.IPBlock.CIDR, peer.IPBlock.Except, c.logger,
+		)...)
 	}
 	return entries
 }
@@ -464,7 +362,10 @@ func (c *Compiler) resolvePorts(npPorts []networkingv1.NetworkPolicyPort, namesp
 
 		var port uint16
 		if p.Port != nil {
-			port = uint16(p.Port.IntValue()) //nolint:gosec // K8s port range 1-65535 fits uint16
+			pv := p.Port.IntValue()
+			if pv > 0 && pv <= math.MaxUint16 {
+				port = uint16(pv & math.MaxUint16)
+			}
 		}
 
 		ports = append(ports, portProto{
@@ -474,35 +375,6 @@ func (c *Compiler) resolvePorts(npPorts []networkingv1.NetworkPolicyPort, namesp
 	}
 
 	return ports
-}
-
-// selectorToIdentities converts a LabelSelector plus namespace into identity IDs.
-// It finds all allocated identities whose labels match the selector (including
-// MatchExpressions), falling back to hashing the MatchLabels if no matches exist yet.
-func (c *Compiler) selectorToIdentities(selector metav1.LabelSelector, namespace string) []uint32 {
-	// Clone and add namespace scoping.
-	scoped := selector.DeepCopy()
-	if scoped.MatchLabels == nil {
-		scoped.MatchLabels = make(map[string]string)
-	}
-	scoped.MatchLabels["novanet.io/namespace"] = namespace
-
-	// Convert to labels.Selector for full MatchLabels + MatchExpressions support.
-	sel, err := metav1.LabelSelectorAsSelector(scoped)
-	if err != nil {
-		c.logger.Warn("invalid pod selector", zap.Error(err))
-		return []uint32{WildcardIdentity}
-	}
-
-	// Find allocated identities that match.
-	matches := c.identityAllocator.FindMatchingIdentities(sel)
-	if len(matches) > 0 {
-		return matches
-	}
-
-	// Fallback: no matching identities yet. Use hash of MatchLabels so
-	// rules exist as placeholders until matching pods are created.
-	return []uint32{identity.HashLabels(scoped.MatchLabels)}
 }
 
 // hasPolicyType checks if a NetworkPolicy specifies a given policy type.

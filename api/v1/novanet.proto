@@ -39,6 +39,15 @@ service DataplaneControl {
   rpc SyncServices(SyncServicesRequest) returns (SyncServicesResponse);
   rpc UpsertMaglevTable(UpsertMaglevTableRequest) returns (UpsertMaglevTableResponse);
 
+  // Host firewall
+  rpc UpsertHostPolicy(UpsertHostPolicyRequest) returns (UpsertHostPolicyResponse);
+  rpc DeleteHostPolicy(DeleteHostPolicyRequest) returns (DeleteHostPolicyResponse);
+  rpc SyncHostPolicies(SyncHostPoliciesRequest) returns (SyncHostPoliciesResponse);
+
+  // XDP management
+  rpc AttachXDP(AttachXDPRequest) returns (AttachXDPResponse);
+  rpc DetachXDP(DetachXDPRequest) returns (DetachXDPResponse);
+
   // Observability
   rpc StreamFlows(StreamFlowsRequest) returns (stream FlowEvent);
   rpc GetDataplaneStatus(GetDataplaneStatusRequest) returns (GetDataplaneStatusResponse);
@@ -75,11 +84,14 @@ message UpsertEndpointRequest {
   string pod_name = 5;      // Logging only — not stored in eBPF maps.
   string namespace = 6;     // Logging only — not stored in eBPF maps.
   uint32 node_ip = 7;
+  bytes ipv6 = 8;            // 16-byte IPv6 address (dual-stack).
+  bytes node_ipv6 = 9;       // 16-byte IPv6 node address (dual-stack).
 }
 message UpsertEndpointResponse {}
 
 message DeleteEndpointRequest {
   uint32 ip = 1;
+  bytes ipv6 = 2;            // 16-byte IPv6 address for dual-stack cleanup.
 }
 message DeleteEndpointResponse {}
 
@@ -228,6 +240,9 @@ message AddPodResponse {
   string gateway = 2;
   string mac = 3;
   int32 prefix_length = 4;
+  string ipv6 = 5;              // IPv6 address (dual-stack).
+  string gateway_v6 = 6;        // IPv6 gateway (dual-stack).
+  int32 prefix_length_v6 = 7;   // IPv6 prefix length (dual-stack).
 }
 
 message DelPodRequest {
@@ -254,6 +269,13 @@ message GetAgentStatusResponse {
   string cluster_cidr = 9;
   bool novaroute_connected = 10;
   DataplaneStatusInfo dataplane = 11;
+  string encryption = 12;           // "disabled" or "wireguard"
+  bool host_firewall = 13;
+  bool bandwidth_enabled = 14;
+  bool ipv6_enabled = 15;
+  bool dsr_enabled = 16;
+  string xdp_mode = 17;
+  bool lb_ipam_enabled = 18;
 }
 
 message DataplaneStatusInfo {
@@ -296,6 +318,14 @@ enum EgressAction {
 
 // --- L4 Load Balancer ---
 
+// Service flags.
+enum ServiceFlag {
+  SERVICE_FLAG_NONE = 0;
+  SERVICE_FLAG_DSR = 1;             // Direct Server Return
+  SERVICE_FLAG_EXTERNAL_LOCAL = 2;  // externalTrafficPolicy: Local
+  SERVICE_FLAG_INTERNAL_LOCAL = 4;  // internalTrafficPolicy: Local
+}
+
 message UpsertServiceRequest {
   uint32 ip = 1;
   uint32 port = 2;
@@ -307,6 +337,7 @@ message UpsertServiceRequest {
   uint32 flags = 8;
   uint32 affinity_timeout = 9;
   uint32 maglev_offset = 10;
+  bytes ipv6 = 11;            // 16-byte IPv6 service address (dual-stack).
 }
 message UpsertServiceResponse {}
 
@@ -326,6 +357,7 @@ message BackendEntry {
   uint32 ip = 2;
   uint32 port = 3;
   uint32 node_ip = 4;
+  bytes ipv6 = 5;              // 16-byte IPv6 backend address (dual-stack).
 }
 message UpsertBackendsResponse {}
 
@@ -419,4 +451,82 @@ message ServiceInfo {
   uint32 backend_count = 5;
   string algorithm = 6;
   repeated string backends = 7;
+  bool dsr = 8;
+}
+
+// --- Host Firewall ---
+
+message UpsertHostPolicyRequest {
+  string rule_id = 1;         // Unique rule identifier.
+  HostPolicyDirection direction = 2;
+  uint32 protocol = 3;
+  bytes cidr_ip = 4;           // 4 or 16 bytes for IPv4/IPv6.
+  uint32 cidr_prefix_len = 5;
+  uint32 port = 6;
+  uint32 end_port = 7;        // 0 = single port.
+  PolicyAction action = 8;
+}
+message UpsertHostPolicyResponse {}
+
+message DeleteHostPolicyRequest {
+  string rule_id = 1;
+}
+message DeleteHostPolicyResponse {}
+
+message SyncHostPoliciesRequest {
+  repeated HostPolicyEntry policies = 1;
+}
+message HostPolicyEntry {
+  string rule_id = 1;
+  HostPolicyDirection direction = 2;
+  uint32 protocol = 3;
+  bytes cidr_ip = 4;
+  uint32 cidr_prefix_len = 5;
+  uint32 port = 6;
+  uint32 end_port = 7;
+  PolicyAction action = 8;
+}
+message SyncHostPoliciesResponse {
+  uint32 added = 1;
+  uint32 removed = 2;
+}
+
+enum HostPolicyDirection {
+  HOST_POLICY_INGRESS = 0;
+  HOST_POLICY_EGRESS = 1;
+}
+
+// --- XDP ---
+
+message AttachXDPRequest {
+  string interface_name = 1;
+  XDPMode mode = 2;
+}
+message AttachXDPResponse {}
+
+message DetachXDPRequest {
+  string interface_name = 1;
+}
+message DetachXDPResponse {}
+
+enum XDPMode {
+  XDP_MODE_NATIVE = 0;
+  XDP_MODE_SKB = 1;       // Generic/SKB fallback.
+}
+
+// --- Tunnel IPv6 ---
+
+message UpsertTunnelV6Request {
+  bytes node_ipv6 = 1;       // 16-byte IPv6 node address.
+  uint32 tunnel_ifindex = 2;
+  uint32 vni = 3;
+}
+message UpsertTunnelV6Response {}
+
+// --- AddPod IPv6 ---
+
+message AddPodV6Response {
+  string ipv6 = 1;
+  string gateway_v6 = 2;
+  int32 prefix_length_v6 = 3;
 }

@@ -22,16 +22,22 @@ import (
 	pb "github.com/azrtydxb/novanet/api/v1"
 	"github.com/azrtydxb/novanet/internal/agent/cpvip"
 	"github.com/azrtydxb/novanet/internal/agentmetrics"
+	"github.com/azrtydxb/novanet/internal/bandwidth"
 	cnisetup "github.com/azrtydxb/novanet/internal/cni"
 	"github.com/azrtydxb/novanet/internal/config"
 	"github.com/azrtydxb/novanet/internal/egress"
+	"github.com/azrtydxb/novanet/internal/encryption"
+	"github.com/azrtydxb/novanet/internal/hostfirewall"
 	"github.com/azrtydxb/novanet/internal/identity"
 	"github.com/azrtydxb/novanet/internal/ipam"
+	"github.com/azrtydxb/novanet/internal/l2announce"
+	"github.com/azrtydxb/novanet/internal/lbipam"
 	"github.com/azrtydxb/novanet/internal/masquerade"
 	"github.com/azrtydxb/novanet/internal/novaroute"
 	"github.com/azrtydxb/novanet/internal/policy"
 	"github.com/azrtydxb/novanet/internal/service"
 	"github.com/azrtydxb/novanet/internal/tunnel"
+	"github.com/azrtydxb/novanet/internal/xdp"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -179,6 +185,24 @@ type agentServer struct {
 
 	// L4 LB service watcher.
 	svcWatcher *service.Watcher
+
+	// WireGuard encryption manager (nil if disabled).
+	wgManager *encryption.WireGuardManager
+
+	// Host firewall manager (nil if disabled).
+	hostFW *hostfirewall.Manager
+
+	// Bandwidth manager (nil if disabled).
+	bwManager *bandwidth.Manager
+
+	// LB-IPAM allocator (nil if disabled).
+	lbIPAM *lbipam.Allocator
+
+	// L2 announcer for GARP (nil if disabled).
+	l2Announcer *l2announce.Announcer
+
+	// XDP manager (nil if disabled).
+	xdpMgr *xdp.Manager
 
 	// Compiled policy rules (updated by the policy watcher callback).
 	policyMu    sync.RWMutex
@@ -420,6 +444,13 @@ func (s *agentServer) GetAgentStatus(ctx context.Context, _ *pb.GetAgentStatusRe
 		Dataplane: &pb.DataplaneStatusInfo{
 			Connected: s.dpConnected.Load(),
 		},
+		Encryption:       s.cfg.Encryption.Type,
+		HostFirewall:     s.cfg.HostFirewall.Enabled,
+		BandwidthEnabled: s.cfg.Bandwidth.Enabled,
+		Ipv6Enabled:      s.cfg.IPv6.Enabled,
+		DsrEnabled:       s.cfg.DSR,
+		XdpMode:          s.cfg.XDPAcceleration,
+		LbIpamEnabled:    s.cfg.LBIPAM.Enabled,
 	}
 
 	// Fetch live dataplane metrics if connected.
@@ -943,6 +974,8 @@ type shutdownState struct {
 	dpConn        *grpc.ClientConn
 	nrClient      *novaroute.Client
 	podCIDR       string
+	xdpMgr        *xdp.Manager
+	wgManager     *encryption.WireGuardManager
 }
 
 func main() {
@@ -992,9 +1025,83 @@ func main() {
 	policyCompiler := createPolicyCompiler(ctx, logger, k8sClient, idAlloc)
 	egressMgr := createEgressManager(logger, cfg, nodeIP)
 
+	// Initialize WireGuard encryption if configured.
+	var wgMgr *encryption.WireGuardManager
+	if cfg.Encryption.Type == "wireguard" {
+		var wgErr error
+		wgMgr, wgErr = encryption.NewWireGuardManager(nodeIP, cfg.Encryption.WireGuardPort, logger)
+		if wgErr != nil {
+			logger.Error("failed to initialize WireGuard", zap.Error(wgErr))
+		} else {
+			logger.Info("WireGuard encryption enabled",
+				zap.Int("port", cfg.Encryption.WireGuardPort),
+				zap.String("public_key", wgMgr.PublicKey()))
+		}
+	}
+
+	// Initialize host firewall manager if enabled.
+	var hostFW *hostfirewall.Manager
+	if cfg.HostFirewall.Enabled {
+		hostFW = hostfirewall.NewManager(logger)
+		logger.Info("host firewall enabled")
+	}
+
+	// Initialize bandwidth manager if enabled.
+	var bwMgr *bandwidth.Manager
+	if cfg.Bandwidth.Enabled {
+		bwMgr = bandwidth.NewManager(logger)
+		logger.Info("bandwidth management enabled")
+	}
+
+	// Initialize LB-IPAM and L2 announcer if enabled.
+	var lbIPAMAlloc *lbipam.Allocator
+	var l2Ann *l2announce.Announcer
+	if cfg.LBIPAM.Enabled {
+		lbIPAMAlloc = lbipam.NewAllocator(logger)
+		logger.Info("LB-IPAM enabled")
+		if cfg.LBIPAM.L2AnnouncementEnabled {
+			hostIface := detectHostInterface(logger)
+			l2Ann = l2announce.NewAnnouncer(hostIface, logger)
+			logger.Info("L2 announcement (GARP) enabled", zap.String("interface", hostIface))
+		}
+	}
+
 	// Connect to dataplane.
 	dpConn, dpClient, dpConnected := connectToDataplane(ctx, logger, cfg.DataplaneSocket)
 	initDataplane(ctx, logger, cfg, dpClient, dpConnected, nodeIP, params.podCIDR, &bgWg)
+
+	// Initialize XDP manager if not disabled.
+	xdpMode := xdp.Mode(cfg.XDPAcceleration)
+	var xdpMgr *xdp.Manager
+	if xdpMode != xdp.ModeDisabled && dpConnected {
+		xdpMgr = xdp.NewManager(xdpMode,
+			func(iface string, native bool) error {
+				mode := pb.XDPMode_XDP_MODE_SKB
+				if native {
+					mode = pb.XDPMode_XDP_MODE_NATIVE
+				}
+				_, xdpErr := dpClient.AttachXDP(ctx, &pb.AttachXDPRequest{
+					InterfaceName: iface,
+					Mode:          mode,
+				})
+				return xdpErr
+			},
+			func(iface string) error {
+				_, xdpErr := dpClient.DetachXDP(ctx, &pb.DetachXDPRequest{
+					InterfaceName: iface,
+				})
+				return xdpErr
+			},
+			logger,
+		)
+		if err := xdpMgr.AttachAll(); err != nil {
+			logger.Warn("XDP attach", zap.Error(err))
+		} else {
+			logger.Info("XDP acceleration enabled",
+				zap.String("mode", cfg.XDPAcceleration),
+				zap.Strings("interfaces", xdpMgr.AttachedInterfaces()))
+		}
+	}
 
 	// Create agent gRPC server.
 	agentSrv := &agentServer{
@@ -1008,6 +1115,12 @@ func main() {
 		podCIDR:        params.podCIDR,
 		policyCompiler: policyCompiler,
 		egressMgr:      egressMgr,
+		wgManager:      wgMgr,
+		hostFW:         hostFW,
+		bwManager:      bwMgr,
+		lbIPAM:         lbIPAMAlloc,
+		l2Announcer:    l2Ann,
+		xdpMgr:         xdpMgr,
 		prevEgressKeys: make(map[egressMapKey]bool),
 		endpoints:      make(map[string]*endpoint),
 	}
@@ -1045,6 +1158,8 @@ func main() {
 		dpConn:        dpConn,
 		nrClient:      nrClient,
 		podCIDR:       params.podCIDR,
+		xdpMgr:        xdpMgr,
+		wgManager:     wgMgr,
 	})
 }
 
@@ -1363,7 +1478,8 @@ func startServiceWatcher(ctx context.Context, logger *zap.Logger, cfg *config.Co
 
 	adapter := &dpServiceAdapter{client: dpClient}
 	allocator := service.NewSlotAllocator(65536)
-	svcWatcher := service.NewWatcher(k8sClient, adapter, allocator, cfg.L4LB.DefaultAlgorithm, logger)
+	svcWatcher := service.NewWatcher(k8sClient, adapter, allocator, cfg.L4LB.DefaultAlgorithm, logger,
+		service.WithDSR(cfg.DSR))
 	agentSrv.svcWatcher = svcWatcher
 
 	if err := svcWatcher.Start(ctx); err != nil {
@@ -1674,6 +1790,21 @@ func gracefulShutdown(s *shutdownState) {
 		s.logger.Error("metrics server shutdown error", zap.Error(err))
 	}
 	s.logger.Info("metrics server stopped")
+
+	// Detach XDP programs.
+	if s.xdpMgr != nil {
+		s.xdpMgr.DetachAll()
+		s.logger.Info("XDP programs detached")
+	}
+
+	// Close WireGuard interface.
+	if s.wgManager != nil {
+		if err := s.wgManager.Close(); err != nil {
+			s.logger.Error("failed to close WireGuard interface", zap.Error(err))
+		} else {
+			s.logger.Info("WireGuard interface removed")
+		}
+	}
 
 	// Close dataplane connection.
 	if s.dpConn != nil {

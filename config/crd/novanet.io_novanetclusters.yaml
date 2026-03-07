@@ -305,6 +305,14 @@ spec:
                         type: object
                     type: object
                 type: object
+              bandwidth:
+                description: Bandwidth enables per-pod bandwidth management.
+                properties:
+                  enabled:
+                    default: false
+                    description: Enabled activates bandwidth enforcement via TC qdisc.
+                    type: boolean
+                type: object
               cni:
                 description: CNI defines the CNI binary installation configuration.
                 properties:
@@ -386,6 +394,36 @@ spec:
                         type: object
                     type: object
                 type: object
+              encryption:
+                description: Encryption configures transparent encryption between
+                  nodes.
+                properties:
+                  nodeAnnotationKey:
+                    default: novanet.io/wireguard-pubkey
+                    description: NodeAnnotationKey is the annotation key for storing
+                      the WireGuard public key.
+                    type: string
+                  type:
+                    default: disabled
+                    description: Type is the encryption method.
+                    enum:
+                    - wireguard
+                    - disabled
+                    type: string
+                  wireGuardPort:
+                    default: 51871
+                    description: WireGuardPort is the UDP port for WireGuard.
+                    format: int32
+                    type: integer
+                type: object
+              hostFirewall:
+                description: HostFirewall enables host-level firewall enforcement.
+                properties:
+                  enabled:
+                    default: false
+                    description: Enabled activates the host firewall feature.
+                    type: boolean
+                type: object
               imagePullPolicy:
                 default: IfNotPresent
                 description: ImagePullPolicy for all containers.
@@ -417,12 +455,44 @@ spec:
                 default: ghcr.io/azrtydxb/novanet
                 description: ImageRepository for NovaNet images.
                 type: string
+              lbIPAM:
+                description: LBIPAM configures LoadBalancer IP Address Management.
+                properties:
+                  enabled:
+                    default: false
+                    description: Enabled activates LB-IPAM and L2 announcements.
+                    type: boolean
+                  l2AnnouncementEnabled:
+                    default: true
+                    description: L2AnnouncementEnabled enables Gratuitous ARP/NDP
+                      for allocated LB IPs.
+                    type: boolean
+                type: object
               networking:
                 description: Networking defines cluster networking configuration.
                 properties:
                   clusterCIDR:
                     description: ClusterCIDR is the pod IP range.
                     type: string
+                  clusterCIDRv6:
+                    description: ClusterCIDRv6 is the IPv6 pod IP range for dual-stack.
+                    type: string
+                  controlPlaneVIP:
+                    description: |-
+                      ControlPlaneVIP is the virtual IP address for the Kubernetes API server.
+                      When set and L4 LB is enabled, the agent registers the VIP as a
+                      load-balanced service with health-checked control-plane backends.
+                      On CP nodes, the VIP is also advertised via BGP and bound on loopback,
+                      but only while the local API server passes health checks.
+                    type: string
+                  dsr:
+                    description: |-
+                      DSR enables Direct Server Return for L4 LB.
+                      When enabled, return traffic bypasses the load balancer node.
+                    type: boolean
+                  ipv6Enabled:
+                    description: IPv6Enabled enables IPv6 and dual-stack support.
+                    type: boolean
                   mtu:
                     default: 0
                     description: MTU for pod interfaces. 0 = auto-detect.
@@ -441,6 +511,15 @@ spec:
                     enum:
                     - geneve
                     - vxlan
+                    type: string
+                  xdpAcceleration:
+                    default: disabled
+                    description: XDPAcceleration enables XDP fast-path for L4 LB on
+                      physical interfaces.
+                    enum:
+                    - disabled
+                    - native
+                    - best-effort
                     type: string
                 required:
                 - clusterCIDR

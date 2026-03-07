@@ -64,6 +64,7 @@ type Watcher struct {
 	dpClient   DataplaneServiceClient
 	allocator  *SlotAllocator
 	defaultAlg string
+	dsrEnabled bool
 	logger     *zap.Logger
 
 	// maglevAllocator tracks Maglev table slots (each service needs MaglevTableSize entries).
@@ -77,6 +78,16 @@ type Watcher struct {
 	epsStore cache.Store
 }
 
+// WatcherOption configures the service Watcher.
+type WatcherOption func(*Watcher)
+
+// WithDSR enables Direct Server Return on all services.
+func WithDSR(enabled bool) WatcherOption {
+	return func(w *Watcher) {
+		w.dsrEnabled = enabled
+	}
+}
+
 // NewWatcher creates a new Service/EndpointSlice watcher.
 func NewWatcher(
 	clientset kubernetes.Interface,
@@ -84,8 +95,9 @@ func NewWatcher(
 	allocator *SlotAllocator,
 	defaultAlg string,
 	logger *zap.Logger,
+	opts ...WatcherOption,
 ) *Watcher {
-	return &Watcher{
+	w := &Watcher{
 		clientset:       clientset,
 		dpClient:        dpClient,
 		allocator:       allocator,
@@ -94,6 +106,10 @@ func NewWatcher(
 		maglevAllocator: NewSlotAllocator(1048576), // MAX_MAGLEV
 		services:        make(map[string]*serviceState),
 	}
+	for _, opt := range opts {
+		opt(w)
+	}
+	return w
 }
 
 // Start begins watching Service and EndpointSlice resources.
@@ -626,6 +642,12 @@ func (w *Watcher) computeFlags(svc *corev1.Service) uint32 {
 	if svc.Spec.ExternalTrafficPolicy == corev1.ServiceExternalTrafficPolicyLocal {
 		flags |= 0x02 // SVC_FLAG_EXT_LOCAL
 	}
+	if w.dsrEnabled {
+		flags |= 0x04 // SVC_FLAG_DSR
+	}
+	if svc.Spec.InternalTrafficPolicy != nil && *svc.Spec.InternalTrafficPolicy == corev1.ServiceInternalTrafficPolicyLocal {
+		flags |= 0x08 // SVC_FLAG_INT_LOCAL
+	}
 	return flags
 }
 
@@ -772,6 +794,7 @@ func (w *Watcher) ListTrackedServices() []*pb.ServiceInfo {
 					BackendCount: intToU32(len(backends)),
 					Algorithm:    algName(state.algorithm),
 					Backends:     backendStrs,
+					Dsr:          w.dsrEnabled,
 				}
 				result = append(result, info)
 			}

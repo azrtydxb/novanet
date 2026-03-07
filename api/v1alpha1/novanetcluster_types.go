@@ -61,6 +61,22 @@ type NovaNetClusterSpec struct {
 	// +optional
 	NovaRouteIntegration *NovaRouteIntegrationSpec `json:"novaRouteIntegration,omitempty"`
 
+	// Encryption configures transparent encryption between nodes.
+	// +optional
+	Encryption *EncryptionSpec `json:"encryption,omitempty"`
+
+	// HostFirewall enables host-level firewall enforcement.
+	// +optional
+	HostFirewall *HostFirewallSpec `json:"hostFirewall,omitempty"`
+
+	// Bandwidth enables per-pod bandwidth management.
+	// +optional
+	Bandwidth *BandwidthSpec `json:"bandwidth,omitempty"`
+
+	// LBIPAM configures LoadBalancer IP Address Management.
+	// +optional
+	LBIPAM *LBIPAMSpec `json:"lbIPAM,omitempty"`
+
 	// NodeSelector for scheduling.
 	// +optional
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
@@ -143,6 +159,14 @@ type NetworkingSpec struct {
 	// +kubebuilder:validation:Required
 	ClusterCIDR string `json:"clusterCIDR"`
 
+	// ClusterCIDRv6 is the IPv6 pod IP range for dual-stack.
+	// +optional
+	ClusterCIDRv6 string `json:"clusterCIDRv6,omitempty"`
+
+	// IPv6Enabled enables IPv6 and dual-stack support.
+	// +optional
+	IPv6Enabled bool `json:"ipv6Enabled,omitempty"`
+
 	// TunnelProtocol for overlay mode.
 	// +kubebuilder:default="geneve"
 	// +kubebuilder:validation:Enum=geneve;vxlan
@@ -160,6 +184,17 @@ type NetworkingSpec struct {
 	// +optional
 	MTU *int32 `json:"mtu,omitempty"`
 
+	// DSR enables Direct Server Return for L4 LB.
+	// When enabled, return traffic bypasses the load balancer node.
+	// +optional
+	DSR bool `json:"dsr,omitempty"`
+
+	// XDPAcceleration enables XDP fast-path for L4 LB on physical interfaces.
+	// +kubebuilder:validation:Enum=disabled;native;best-effort
+	// +kubebuilder:default="disabled"
+	// +optional
+	XDPAcceleration string `json:"xdpAcceleration,omitempty"`
+
 	// ControlPlaneVIP is the virtual IP address for the Kubernetes API server.
 	// When set and L4 LB is enabled, the agent registers the VIP as a
 	// load-balanced service with health-checked control-plane backends.
@@ -167,6 +202,50 @@ type NetworkingSpec struct {
 	// but only while the local API server passes health checks.
 	// +optional
 	ControlPlaneVIP string `json:"controlPlaneVIP,omitempty"`
+}
+
+// EncryptionSpec configures transparent node-to-node encryption.
+type EncryptionSpec struct {
+	// Type is the encryption method.
+	// +kubebuilder:validation:Enum=wireguard;disabled
+	// +kubebuilder:default="disabled"
+	Type string `json:"type,omitempty"`
+
+	// WireGuardPort is the UDP port for WireGuard.
+	// +kubebuilder:default=51871
+	// +optional
+	WireGuardPort *int32 `json:"wireGuardPort,omitempty"`
+
+	// NodeAnnotationKey is the annotation key for storing the WireGuard public key.
+	// +kubebuilder:default="novanet.io/wireguard-pubkey"
+	// +optional
+	NodeAnnotationKey string `json:"nodeAnnotationKey,omitempty"`
+}
+
+// HostFirewallSpec configures host-level firewall enforcement.
+type HostFirewallSpec struct {
+	// Enabled activates the host firewall feature.
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled,omitempty"`
+}
+
+// BandwidthSpec configures per-pod bandwidth management.
+type BandwidthSpec struct {
+	// Enabled activates bandwidth enforcement via TC qdisc.
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled,omitempty"`
+}
+
+// LBIPAMSpec configures LoadBalancer IP Address Management.
+type LBIPAMSpec struct {
+	// Enabled activates LB-IPAM and L2 announcements.
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled,omitempty"`
+
+	// L2AnnouncementEnabled enables Gratuitous ARP/NDP for allocated LB IPs.
+	// +kubebuilder:default=true
+	// +optional
+	L2AnnouncementEnabled *bool `json:"l2AnnouncementEnabled,omitempty"`
 }
 
 // NovaRouteIntegrationSpec configures native routing via NovaRoute.

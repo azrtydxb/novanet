@@ -36,6 +36,11 @@ const (
 	DataplaneControl_UpsertBackends_FullMethodName     = "/novanet.v1.DataplaneControl/UpsertBackends"
 	DataplaneControl_SyncServices_FullMethodName       = "/novanet.v1.DataplaneControl/SyncServices"
 	DataplaneControl_UpsertMaglevTable_FullMethodName  = "/novanet.v1.DataplaneControl/UpsertMaglevTable"
+	DataplaneControl_UpsertHostPolicy_FullMethodName   = "/novanet.v1.DataplaneControl/UpsertHostPolicy"
+	DataplaneControl_DeleteHostPolicy_FullMethodName   = "/novanet.v1.DataplaneControl/DeleteHostPolicy"
+	DataplaneControl_SyncHostPolicies_FullMethodName   = "/novanet.v1.DataplaneControl/SyncHostPolicies"
+	DataplaneControl_AttachXDP_FullMethodName          = "/novanet.v1.DataplaneControl/AttachXDP"
+	DataplaneControl_DetachXDP_FullMethodName          = "/novanet.v1.DataplaneControl/DetachXDP"
 	DataplaneControl_StreamFlows_FullMethodName        = "/novanet.v1.DataplaneControl/StreamFlows"
 	DataplaneControl_GetDataplaneStatus_FullMethodName = "/novanet.v1.DataplaneControl/GetDataplaneStatus"
 )
@@ -72,6 +77,13 @@ type DataplaneControlClient interface {
 	UpsertBackends(ctx context.Context, in *UpsertBackendsRequest, opts ...grpc.CallOption) (*UpsertBackendsResponse, error)
 	SyncServices(ctx context.Context, in *SyncServicesRequest, opts ...grpc.CallOption) (*SyncServicesResponse, error)
 	UpsertMaglevTable(ctx context.Context, in *UpsertMaglevTableRequest, opts ...grpc.CallOption) (*UpsertMaglevTableResponse, error)
+	// Host firewall
+	UpsertHostPolicy(ctx context.Context, in *UpsertHostPolicyRequest, opts ...grpc.CallOption) (*UpsertHostPolicyResponse, error)
+	DeleteHostPolicy(ctx context.Context, in *DeleteHostPolicyRequest, opts ...grpc.CallOption) (*DeleteHostPolicyResponse, error)
+	SyncHostPolicies(ctx context.Context, in *SyncHostPoliciesRequest, opts ...grpc.CallOption) (*SyncHostPoliciesResponse, error)
+	// XDP management
+	AttachXDP(ctx context.Context, in *AttachXDPRequest, opts ...grpc.CallOption) (*AttachXDPResponse, error)
+	DetachXDP(ctx context.Context, in *DetachXDPRequest, opts ...grpc.CallOption) (*DetachXDPResponse, error)
 	// Observability
 	StreamFlows(ctx context.Context, in *StreamFlowsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[FlowEvent], error)
 	GetDataplaneStatus(ctx context.Context, in *GetDataplaneStatusRequest, opts ...grpc.CallOption) (*GetDataplaneStatusResponse, error)
@@ -255,6 +267,56 @@ func (c *dataplaneControlClient) UpsertMaglevTable(ctx context.Context, in *Upse
 	return out, nil
 }
 
+func (c *dataplaneControlClient) UpsertHostPolicy(ctx context.Context, in *UpsertHostPolicyRequest, opts ...grpc.CallOption) (*UpsertHostPolicyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpsertHostPolicyResponse)
+	err := c.cc.Invoke(ctx, DataplaneControl_UpsertHostPolicy_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *dataplaneControlClient) DeleteHostPolicy(ctx context.Context, in *DeleteHostPolicyRequest, opts ...grpc.CallOption) (*DeleteHostPolicyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteHostPolicyResponse)
+	err := c.cc.Invoke(ctx, DataplaneControl_DeleteHostPolicy_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *dataplaneControlClient) SyncHostPolicies(ctx context.Context, in *SyncHostPoliciesRequest, opts ...grpc.CallOption) (*SyncHostPoliciesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SyncHostPoliciesResponse)
+	err := c.cc.Invoke(ctx, DataplaneControl_SyncHostPolicies_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *dataplaneControlClient) AttachXDP(ctx context.Context, in *AttachXDPRequest, opts ...grpc.CallOption) (*AttachXDPResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AttachXDPResponse)
+	err := c.cc.Invoke(ctx, DataplaneControl_AttachXDP_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *dataplaneControlClient) DetachXDP(ctx context.Context, in *DetachXDPRequest, opts ...grpc.CallOption) (*DetachXDPResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DetachXDPResponse)
+	err := c.cc.Invoke(ctx, DataplaneControl_DetachXDP_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *dataplaneControlClient) StreamFlows(ctx context.Context, in *StreamFlowsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[FlowEvent], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &DataplaneControl_ServiceDesc.Streams[0], DataplaneControl_StreamFlows_FullMethodName, cOpts...)
@@ -316,6 +378,13 @@ type DataplaneControlServer interface {
 	UpsertBackends(context.Context, *UpsertBackendsRequest) (*UpsertBackendsResponse, error)
 	SyncServices(context.Context, *SyncServicesRequest) (*SyncServicesResponse, error)
 	UpsertMaglevTable(context.Context, *UpsertMaglevTableRequest) (*UpsertMaglevTableResponse, error)
+	// Host firewall
+	UpsertHostPolicy(context.Context, *UpsertHostPolicyRequest) (*UpsertHostPolicyResponse, error)
+	DeleteHostPolicy(context.Context, *DeleteHostPolicyRequest) (*DeleteHostPolicyResponse, error)
+	SyncHostPolicies(context.Context, *SyncHostPoliciesRequest) (*SyncHostPoliciesResponse, error)
+	// XDP management
+	AttachXDP(context.Context, *AttachXDPRequest) (*AttachXDPResponse, error)
+	DetachXDP(context.Context, *DetachXDPRequest) (*DetachXDPResponse, error)
 	// Observability
 	StreamFlows(*StreamFlowsRequest, grpc.ServerStreamingServer[FlowEvent]) error
 	GetDataplaneStatus(context.Context, *GetDataplaneStatusRequest) (*GetDataplaneStatusResponse, error)
@@ -379,6 +448,21 @@ func (UnimplementedDataplaneControlServer) SyncServices(context.Context, *SyncSe
 }
 func (UnimplementedDataplaneControlServer) UpsertMaglevTable(context.Context, *UpsertMaglevTableRequest) (*UpsertMaglevTableResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpsertMaglevTable not implemented")
+}
+func (UnimplementedDataplaneControlServer) UpsertHostPolicy(context.Context, *UpsertHostPolicyRequest) (*UpsertHostPolicyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpsertHostPolicy not implemented")
+}
+func (UnimplementedDataplaneControlServer) DeleteHostPolicy(context.Context, *DeleteHostPolicyRequest) (*DeleteHostPolicyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteHostPolicy not implemented")
+}
+func (UnimplementedDataplaneControlServer) SyncHostPolicies(context.Context, *SyncHostPoliciesRequest) (*SyncHostPoliciesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SyncHostPolicies not implemented")
+}
+func (UnimplementedDataplaneControlServer) AttachXDP(context.Context, *AttachXDPRequest) (*AttachXDPResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AttachXDP not implemented")
+}
+func (UnimplementedDataplaneControlServer) DetachXDP(context.Context, *DetachXDPRequest) (*DetachXDPResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DetachXDP not implemented")
 }
 func (UnimplementedDataplaneControlServer) StreamFlows(*StreamFlowsRequest, grpc.ServerStreamingServer[FlowEvent]) error {
 	return status.Error(codes.Unimplemented, "method StreamFlows not implemented")
@@ -713,6 +797,96 @@ func _DataplaneControl_UpsertMaglevTable_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DataplaneControl_UpsertHostPolicy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpsertHostPolicyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DataplaneControlServer).UpsertHostPolicy(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DataplaneControl_UpsertHostPolicy_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DataplaneControlServer).UpsertHostPolicy(ctx, req.(*UpsertHostPolicyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DataplaneControl_DeleteHostPolicy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteHostPolicyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DataplaneControlServer).DeleteHostPolicy(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DataplaneControl_DeleteHostPolicy_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DataplaneControlServer).DeleteHostPolicy(ctx, req.(*DeleteHostPolicyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DataplaneControl_SyncHostPolicies_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SyncHostPoliciesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DataplaneControlServer).SyncHostPolicies(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DataplaneControl_SyncHostPolicies_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DataplaneControlServer).SyncHostPolicies(ctx, req.(*SyncHostPoliciesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DataplaneControl_AttachXDP_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AttachXDPRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DataplaneControlServer).AttachXDP(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DataplaneControl_AttachXDP_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DataplaneControlServer).AttachXDP(ctx, req.(*AttachXDPRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DataplaneControl_DetachXDP_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DetachXDPRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DataplaneControlServer).DetachXDP(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DataplaneControl_DetachXDP_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DataplaneControlServer).DetachXDP(ctx, req.(*DetachXDPRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _DataplaneControl_StreamFlows_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(StreamFlowsRequest)
 	if err := stream.RecvMsg(m); err != nil {
@@ -816,6 +990,26 @@ var DataplaneControl_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UpsertMaglevTable",
 			Handler:    _DataplaneControl_UpsertMaglevTable_Handler,
+		},
+		{
+			MethodName: "UpsertHostPolicy",
+			Handler:    _DataplaneControl_UpsertHostPolicy_Handler,
+		},
+		{
+			MethodName: "DeleteHostPolicy",
+			Handler:    _DataplaneControl_DeleteHostPolicy_Handler,
+		},
+		{
+			MethodName: "SyncHostPolicies",
+			Handler:    _DataplaneControl_SyncHostPolicies_Handler,
+		},
+		{
+			MethodName: "AttachXDP",
+			Handler:    _DataplaneControl_AttachXDP_Handler,
+		},
+		{
+			MethodName: "DetachXDP",
+			Handler:    _DataplaneControl_DetachXDP_Handler,
 		},
 		{
 			MethodName: "GetDataplaneStatus",
