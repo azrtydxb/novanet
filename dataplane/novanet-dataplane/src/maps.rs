@@ -284,14 +284,6 @@ impl MapManager {
         }
     }
 
-    pub fn detach_cgroup_programs(&self) {
-        match &self.inner {
-            MapManagerInner::Mock(_) => {}
-            #[cfg(target_os = "linux")]
-            MapManagerInner::Real(m) => m.detach_cgroup_programs(),
-        }
-    }
-
     // -- Mode info --
 
     pub fn mode_string(&self) -> String {
@@ -1304,6 +1296,7 @@ pub struct RealMaps {
 #[cfg(target_os = "linux")]
 impl RealMaps {
     /// Create a new RealMaps from aya map handles and the loaded eBPF object.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         endpoints: aya::maps::HashMap<aya::maps::MapData, EndpointKey, EndpointValue>,
         policies: aya::maps::HashMap<aya::maps::MapData, PolicyKey, PolicyValue>,
@@ -1752,15 +1745,5 @@ impl RealMaps {
         }
 
         Ok(())
-    }
-
-    fn detach_cgroup_programs(&self) {
-        let mut links = self
-            ._cgroup_links
-            .lock()
-            .expect("cgroup_links lock poisoned");
-        let count = links.len();
-        links.clear(); // Dropping links detaches programs.
-        info!(count, "detached cgroup socket-LB programs");
     }
 }
