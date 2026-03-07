@@ -207,13 +207,16 @@ func (m *Manager) checkHealth(ctx context.Context, nodeIP string) bool {
 	}
 	defer resp.Body.Close() //nolint:errcheck // best-effort close
 
-	ok := resp.StatusCode == http.StatusOK
-	if !ok {
+	// Any HTTP response means the API server is alive and accepting TCP
+	// connections. 401/403 is expected when anonymous auth is disabled.
+	// Only connection failures/timeouts indicate an unhealthy API server.
+	if resp.StatusCode >= 500 {
 		m.logger.Warn("API server unhealthy",
 			zap.String("node_ip", nodeIP),
 			zap.Int("status", resp.StatusCode))
+		return false
 	}
-	return ok
+	return true
 }
 
 // updateDataplane pushes the healthy backends and service entry to the
