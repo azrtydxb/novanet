@@ -16,7 +16,7 @@ env:
 jobs:
   build-go-binaries:
     name: Build Go (${{ matrix.goos }}/${{ matrix.goarch }})
-    runs-on: ubuntu-latest
+    runs-on: qnap-nas
     strategy:
       matrix:
         goos: [linux]
@@ -49,13 +49,17 @@ jobs:
           retention-days: 1
 
   docker-agent:
-    name: Docker (agent)
-    runs-on: ubuntu-latest
+    name: Docker agent (${{ matrix.arch.name }})
+    strategy:
+      matrix:
+        arch:
+          - name: amd64
+            runner: qnap-nas
+          - name: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.arch.runner }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -73,17 +77,17 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/piwi3910/novanet/novanet-agent
           tags: |
-            type=semver,pattern=v{{version}}
-            type=semver,pattern=v{{major}}.{{minor}}
-            type=sha,format=short
-            type=raw,value=latest
+            type=semver,pattern=v{{version}},suffix=-${{ matrix.arch.name }}
+            type=semver,pattern=v{{major}}.{{minor}},suffix=-${{ matrix.arch.name }}
+            type=sha,format=short,suffix=-${{ matrix.arch.name }}
+            type=raw,value=latest-${{ matrix.arch.name }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile.agent
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/${{ matrix.arch.name }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -91,13 +95,17 @@ jobs:
           cache-to: type=gha,mode=max
 
   docker-dataplane:
-    name: Docker (dataplane)
-    runs-on: ubuntu-latest
+    name: Docker dataplane (${{ matrix.arch.name }})
+    strategy:
+      matrix:
+        arch:
+          - name: amd64
+            runner: qnap-nas
+          - name: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.arch.runner }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -115,27 +123,64 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/piwi3910/novanet/novanet-dataplane
           tags: |
-            type=semver,pattern=v{{version}}
-            type=semver,pattern=v{{major}}.{{minor}}
-            type=sha,format=short
-            type=raw,value=latest
+            type=semver,pattern=v{{version}},suffix=-${{ matrix.arch.name }}
+            type=semver,pattern=v{{major}}.{{minor}},suffix=-${{ matrix.arch.name }}
+            type=sha,format=short,suffix=-${{ matrix.arch.name }}
+            type=raw,value=latest-${{ matrix.arch.name }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile.dataplane
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/${{ matrix.arch.name }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  docker-manifest:
+    name: Docker Manifest
+    runs-on: qnap-nas
+    needs: [docker-agent, docker-dataplane]
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version tags
+        id: tags
+        run: |
+          REF="${GITHUB_REF#refs/tags/}"
+          # Full semver: v1.2.3
+          echo "semver=${REF}" >> "$GITHUB_OUTPUT"
+          # Major.minor: v1.2
+          MAJOR_MINOR=$(echo "$REF" | sed -E 's/^(v[0-9]+\.[0-9]+).*/\1/')
+          echo "major_minor=${MAJOR_MINOR}" >> "$GITHUB_OUTPUT"
+          # Short SHA
+          echo "sha=sha-$(echo ${GITHUB_SHA} | head -c 7)" >> "$GITHUB_OUTPUT"
+
+      - name: Create and push manifests
+        run: |
+          OWNER="${{ github.repository_owner }}"
+          for IMAGE in novanet-agent novanet-dataplane; do
+            FULL="ghcr.io/${OWNER}/novanet/${IMAGE}"
+            for TAG in "${{ steps.tags.outputs.semver }}" "${{ steps.tags.outputs.major_minor }}" "${{ steps.tags.outputs.sha }}" "latest"; do
+              docker manifest create "${FULL}:${TAG}" \
+                --amend "${FULL}:${TAG}-amd64" \
+                --amend "${FULL}:${TAG}-arm64"
+              docker manifest push "${FULL}:${TAG}"
+            done
+          done
+
   release:
     name: GitHub Release
-    needs: [build-go-binaries, docker-agent, docker-dataplane]
-    runs-on: ubuntu-latest
+    needs: [build-go-binaries, docker-agent, docker-dataplane, docker-manifest]
+    runs-on: qnap-nas
     steps:
       - uses: actions/checkout@v4
 
