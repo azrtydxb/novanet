@@ -664,3 +664,80 @@ func resolveTargetPort(port corev1.ServicePort, be backendInfo) uint32 {
 	}
 	return uint32(port.Port)
 }
+
+// scopeName returns a human-readable name for a scope constant.
+func scopeName(scope uint32) string {
+	switch scope {
+	case scopeClusterIP:
+		return "ClusterIP"
+	case scopeNodePort:
+		return "NodePort"
+	case scopeExternalIP:
+		return "ExternalIP"
+	case scopeLoadBalancer:
+		return "LoadBalancer"
+	default:
+		return fmt.Sprintf("scope-%d", scope)
+	}
+}
+
+// algName returns a human-readable name for an algorithm constant.
+func algName(alg uint32) string {
+	switch alg {
+	case algRandom:
+		return "random"
+	case algRoundRobin:
+		return "round-robin"
+	case algMaglev:
+		return "maglev"
+	default:
+		return fmt.Sprintf("alg-%d", alg)
+	}
+}
+
+// ListTrackedServices returns ServiceInfo for all tracked services.
+func (w *Watcher) ListTrackedServices() []*pb.ServiceInfo {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if w.svcStore == nil {
+		return nil
+	}
+
+	var result []*pb.ServiceInfo
+
+	for _, obj := range w.svcStore.List() {
+		svc, ok := obj.(*corev1.Service)
+		if !ok {
+			continue
+		}
+		key := svc.Namespace + "/" + svc.Name
+		state, exists := w.services[key]
+		if !exists {
+			continue
+		}
+
+		backends := w.collectBackends(svc)
+		backendStrs := make([]string, len(backends))
+		for i, be := range backends {
+			backendStrs[i] = fmt.Sprintf("%s:%d", be.ip, be.port)
+		}
+
+		for _, port := range svc.Spec.Ports {
+			for _, scope := range state.scopes {
+				info := &pb.ServiceInfo{
+					ClusterIp:    svc.Spec.ClusterIP,
+					Port:         uint32(port.Port),
+					Protocol:     string(port.Protocol),
+					Scope:        scopeName(scope),
+					BackendCount: uint32(len(backends)),
+					Algorithm:    algName(state.algorithm),
+					Backends:     backendStrs,
+				}
+				result = append(result, info)
+			}
+		}
+	}
+
+	return result
+}

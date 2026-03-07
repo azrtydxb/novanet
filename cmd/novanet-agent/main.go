@@ -562,8 +562,7 @@ func (s *agentServer) ListServices(_ context.Context, _ *pb.ListServicesRequest)
 	if s.svcWatcher == nil {
 		return resp, nil
 	}
-	// The detailed service list is built from the watcher's state via a future
-	// ServiceList() method. For now return a count-only response.
+	resp.Services = s.svcWatcher.ListTrackedServices()
 	return resp, nil
 }
 
