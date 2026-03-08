@@ -37,10 +37,11 @@ func (c *Client) ConfigureBGPGlobal(ctx context.Context, localAS uint32, routerI
 		zap.String("router_id", routerID),
 	)
 
-	commands := make([]string, 0, 5)
+	commands := make([]string, 0, 6)
 	commands = append(commands,
 		fmt.Sprintf("router bgp %d", localAS),
 		fmt.Sprintf("bgp router-id %s", routerID),
+		"no bgp ebgp-requires-policy",
 	)
 	commands = append(commands, bgpGracefulRestartCommands()...)
 
@@ -65,10 +66,11 @@ func (c *Client) ReconfigureBGPGlobal(ctx context.Context, oldAS, newAS uint32, 
 			zap.Uint32("local_as", newAS),
 			zap.String("router_id", routerID),
 		)
-		commands := make([]string, 0, 5)
+		commands := make([]string, 0, 6)
 		commands = append(commands,
 			fmt.Sprintf("router bgp %d", newAS),
 			fmt.Sprintf("bgp router-id %s", routerID),
+			"no bgp ebgp-requires-policy",
 		)
 		commands = append(commands, bgpGracefulRestartCommands()...)
 		if err := c.runConfig(ctx, commands); err != nil {
