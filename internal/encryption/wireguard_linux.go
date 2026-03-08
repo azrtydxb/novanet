@@ -104,7 +104,7 @@ func (m *WireGuardManager) AddPeer(publicKey string, endpoint net.UDPAddr, allow
 
 	m.peers[publicKey] = PeerInfo{
 		PublicKey:  publicKey,
-		Endpoint:  endpoint,
+		Endpoint:   endpoint,
 		AllowedIPs: allowedIPs,
 	}
 

@@ -47,7 +47,7 @@ func sendGratuitousARP(iface string, ip net.IP) error {
 
 	// ARP payload.
 	arpOffset := 14
-	binary.BigEndian.PutUint16(pkt[arpOffset:], 1)       // Hardware type: Ethernet
+	binary.BigEndian.PutUint16(pkt[arpOffset:], 1)        // Hardware type: Ethernet
 	binary.BigEndian.PutUint16(pkt[arpOffset+2:], 0x0800) // Protocol type: IPv4
 	pkt[arpOffset+4] = 6                                  // Hardware address length
 	pkt[arpOffset+5] = 4                                  // Protocol address length
