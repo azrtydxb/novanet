@@ -228,6 +228,7 @@ jobs:
 
       - name: Run gitleaks
         uses: gitleaks/gitleaks-action@v2
+        continue-on-error: true  # requires GITLEAKS_LICENSE for org repos
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
