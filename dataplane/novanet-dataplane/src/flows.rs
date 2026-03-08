@@ -58,7 +58,7 @@ fn raw_to_proto(raw: &RawFlowEvent) -> crate::proto::FlowEvent {
         (
             src.to_string(),
             dst.to_string(),
-            crate::proto::IpVersion::Ipv4 as i32,
+            crate::proto::IpVersion::IPv4 as i32,
         )
     } else {
         // IPv6: full 16 bytes.
@@ -67,7 +67,7 @@ fn raw_to_proto(raw: &RawFlowEvent) -> crate::proto::FlowEvent {
         (
             src.to_string(),
             dst.to_string(),
-            crate::proto::IpVersion::Ipv6 as i32,
+            crate::proto::IpVersion::IPv6 as i32,
         )
     };
 
