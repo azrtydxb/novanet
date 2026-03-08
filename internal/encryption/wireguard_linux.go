@@ -4,6 +4,8 @@ package encryption
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os/exec"
@@ -12,6 +14,9 @@ import (
 
 	"go.uber.org/zap"
 )
+
+// errPeerNotFound is returned when a peer is not found in the peer map.
+var errPeerNotFound = errors.New("wireguard: peer not found")
 
 const defaultIfaceName = "novanet-wg0"
 
@@ -74,7 +79,7 @@ func (m *WireGuardManager) AddPeer(publicKey string, endpoint net.UDPAddr, allow
 	defer m.mu.Unlock()
 
 	// Build allowed-ips string.
-	var allowedIPStrs []string
+	allowedIPStrs := make([]string, 0, len(allowedIPs))
 	for _, ipNet := range allowedIPs {
 		allowedIPStrs = append(allowedIPStrs, ipNet.String())
 	}
@@ -124,7 +129,7 @@ func (m *WireGuardManager) RemovePeer(publicKey string) error {
 
 	peer, exists := m.peers[publicKey]
 	if !exists {
-		return fmt.Errorf("wireguard: peer %s not found", publicKey)
+		return fmt.Errorf("%w: %s", errPeerNotFound, publicKey)
 	}
 
 	if err := runCmd("wg", "set", m.ifaceName, "peer", publicKey, "remove"); err != nil {
@@ -201,7 +206,7 @@ func (m *WireGuardManager) generateKeys() error {
 	}
 	m.privateKey = strings.TrimSpace(privKey)
 
-	cmd := exec.Command("wg", "pubkey")
+	cmd := exec.CommandContext(context.Background(), "wg", "pubkey") //nolint:gosec // Arguments are static, no user input.
 	cmd.Stdin = strings.NewReader(m.privateKey)
 	var out bytes.Buffer
 	cmd.Stdout = &out
@@ -217,7 +222,8 @@ func (m *WireGuardManager) generateKeys() error {
 
 func (m *WireGuardManager) configureInterface() error {
 	// Write private key to stdin of wg set command.
-	cmd := exec.Command("wg", "set", m.ifaceName,
+	//nolint:gosec // Arguments are constructed from validated internal fields, not user input.
+	cmd := exec.CommandContext(context.Background(), "wg", "set", m.ifaceName,
 		"listen-port", fmt.Sprintf("%d", m.listenPort),
 		"private-key", "/dev/stdin",
 	)
@@ -231,7 +237,8 @@ func (m *WireGuardManager) configureInterface() error {
 }
 
 func runCmd(name string, args ...string) error {
-	cmd := exec.Command(name, args...)
+	//nolint:gosec // Arguments are constructed from validated internal values, not user input.
+	cmd := exec.CommandContext(context.Background(), name, args...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -241,7 +248,8 @@ func runCmd(name string, args ...string) error {
 }
 
 func runCmdOutput(name string, args ...string) (string, error) {
-	cmd := exec.Command(name, args...)
+	//nolint:gosec // Arguments are constructed from validated internal values, not user input.
+	cmd := exec.CommandContext(context.Background(), name, args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

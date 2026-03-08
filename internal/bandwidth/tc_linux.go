@@ -3,6 +3,7 @@
 package bandwidth
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 )
@@ -25,7 +26,7 @@ func applyTCQdisc(ifaceName string, rateBPS uint64) error {
 	burstStr := fmt.Sprintf("%d", burst)
 
 	//nolint:gosec // Arguments are constructed from validated uint64 values, not user input.
-	cmd := exec.Command("tc", "qdisc", "add", "dev", ifaceName, "root", "tbf",
+	cmd := exec.CommandContext(context.Background(), "tc", "qdisc", "add", "dev", ifaceName, "root", "tbf",
 		"rate", rateStr,
 		"burst", burstStr,
 		"latency", "50ms",
@@ -42,7 +43,7 @@ func applyTCQdisc(ifaceName string, rateBPS uint64) error {
 // removeTCQdisc removes TC qdisc from the given interface.
 func removeTCQdisc(ifaceName string) error {
 	//nolint:gosec // Arguments are constructed from validated string values, not user input.
-	cmd := exec.Command("tc", "qdisc", "del", "dev", ifaceName, "root")
+	cmd := exec.CommandContext(context.Background(), "tc", "qdisc", "del", "dev", ifaceName, "root")
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {

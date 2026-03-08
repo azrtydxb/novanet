@@ -4,10 +4,18 @@ package l2announce
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"net"
 	"syscall"
 	"unsafe"
+)
+
+var (
+	// errIPv6NANotImplemented is returned when IPv6 neighbor advertisement is requested.
+	errIPv6NANotImplemented = errors.New("IPv6 neighbor advertisement not yet implemented")
+	// errInvalidHWAddrLen is returned when an interface has a hardware address shorter than 6 bytes.
+	errInvalidHWAddrLen = errors.New("interface has invalid hardware address length")
 )
 
 // sendGratuitousARP sends a Gratuitous ARP (ARP reply) packet on the
@@ -24,12 +32,17 @@ func sendGratuitousARP(iface string, ip net.IP) error {
 		return fmt.Errorf("interface lookup %s: %w", iface, err)
 	}
 
+	if len(ifi.HardwareAddr) < 6 {
+		return fmt.Errorf("%w: %s (got %d bytes)", errInvalidHWAddrLen, iface, len(ifi.HardwareAddr))
+	}
+	hwAddr := ifi.HardwareAddr[:6] //nolint:gosec // G602: length checked above
+
 	// Open raw AF_PACKET socket for sending Ethernet frames.
 	fd, err := syscall.Socket(syscall.AF_PACKET, syscall.SOCK_RAW, int(htons(syscall.ETH_P_ARP)))
 	if err != nil {
 		return fmt.Errorf("open raw socket: %w", err)
 	}
-	defer syscall.Close(fd)
+	defer func() { _ = syscall.Close(fd) }()
 
 	// Build the GARP packet.
 	// Ethernet header (14 bytes) + ARP payload (28 bytes) = 42 bytes.
@@ -41,7 +54,7 @@ func sendGratuitousARP(iface string, ip net.IP) error {
 		pkt[i] = 0xff
 	}
 	// Source: interface MAC.
-	copy(pkt[6:12], ifi.HardwareAddr)
+	copy(pkt[6:12], hwAddr)
 	// EtherType: ARP (0x0806).
 	binary.BigEndian.PutUint16(pkt[12:14], syscall.ETH_P_ARP)
 
@@ -54,12 +67,12 @@ func sendGratuitousARP(iface string, ip net.IP) error {
 	binary.BigEndian.PutUint16(pkt[arpOffset+6:], 2)      // Operation: ARP reply (GARP)
 
 	// Sender hardware address.
-	copy(pkt[arpOffset+8:arpOffset+14], ifi.HardwareAddr)
+	copy(pkt[arpOffset+8:arpOffset+14], hwAddr)
 	// Sender protocol address.
 	copy(pkt[arpOffset+14:arpOffset+18], ip4)
-	// Target hardware address: broadcast.
+	// Target hardware address: broadcast (bytes 32-37 of 42-byte packet).
 	for i := arpOffset + 18; i < arpOffset+24; i++ {
-		pkt[i] = 0xff
+		pkt[i] = 0xff //nolint:gosec // G602: pkt is 42 bytes, max index is arpOffset+23=37
 	}
 	// Target protocol address: same as sender (gratuitous).
 	copy(pkt[arpOffset+24:arpOffset+28], ip4)
@@ -73,14 +86,15 @@ func sendGratuitousARP(iface string, ip net.IP) error {
 }
 
 // sendUnsolicitedNA sends an ICMPv6 Neighbor Advertisement for IPv6 addresses.
-func sendUnsolicitedNA(iface string, ip net.IP) error {
+func sendUnsolicitedNA(_ string, ip net.IP) error {
 	// IPv6 NA implementation is a future enhancement.
-	return fmt.Errorf("IPv6 neighbor advertisement not yet implemented for %s", ip)
+	return fmt.Errorf("%w for %s", errIPv6NANotImplemented, ip)
 }
 
 // htons converts a uint16 from host to network byte order.
 func htons(v uint16) uint16 {
 	b := make([]byte, 2)
 	binary.BigEndian.PutUint16(b, v)
+	//nolint:gosec // G103: unsafe.Pointer is required for byte-order conversion; b is a local 2-byte slice.
 	return *(*uint16)(unsafe.Pointer(&b[0]))
 }
