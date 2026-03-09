@@ -27,6 +27,7 @@ import (
 	"github.com/azrtydxb/novanet/internal/bandwidth"
 	cnisetup "github.com/azrtydxb/novanet/internal/cni"
 	"github.com/azrtydxb/novanet/internal/config"
+	"github.com/azrtydxb/novanet/internal/dataplane"
 	"github.com/azrtydxb/novanet/internal/ebpfservices"
 	"github.com/azrtydxb/novanet/internal/egress"
 	"github.com/azrtydxb/novanet/internal/encryption"
@@ -1126,7 +1127,7 @@ func main() {
 	cniGRPC := startCNIServer(logger, cfg, agentSrv)
 	agentGRPC := startAgentServer(logger, cfg, agentSrv)
 	ipamGRPC := startIPAMServer(logger, ipamMgr)
-	ebpfServicesGRPC := startEBPFServicesServer(logger, cfg)
+	ebpfServicesGRPC := startEBPFServicesServer(logger, cfg, dpConnected)
 	metricsServer := startMetricsServer(logger, cfg, agentSrv)
 
 	// Mode-specific initialization (overlay tunnels or native BGP).
@@ -1552,12 +1553,28 @@ func startIPAMServer(logger *zap.Logger, ipamMgr *ipam.Manager) *grpc.Server {
 }
 
 // startEBPFServicesServer starts the EBPFServices gRPC server if enabled and returns the server handle.
-func startEBPFServicesServer(logger *zap.Logger, cfg *config.Config) *grpc.Server {
+func startEBPFServicesServer(logger *zap.Logger, cfg *config.Config, dpConnected bool) *grpc.Server {
 	if !cfg.EBPFServices.Enabled {
 		logger.Info("EBPFServices gRPC server disabled")
 		return nil
 	}
-	ebpfSrv := ebpfservices.NewServer(logger)
+	// Create a dedicated dataplane client for the EBPFServices server.
+	var dpClient dataplane.ClientInterface
+	if dpConnected {
+		client, err := dataplane.NewClient(cfg.DataplaneSocket, logger.Named("ebpf-dp"))
+		if err == nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if connErr := client.Connect(ctx); connErr != nil {
+				logger.Warn("EBPFServices: failed to connect dataplane client", zap.Error(connErr))
+			} else {
+				dpClient = client
+			}
+		} else {
+			logger.Warn("EBPFServices: failed to create dataplane client", zap.Error(err))
+		}
+	}
+	ebpfSrv := ebpfservices.NewServer(logger, dpClient)
 	ebpfListener, ebpfGRPC, err := startGRPCServer(logger, cfg.EBPFServices.SocketPath, "EBPFServices", func(s *grpc.Server) {
 		pb.RegisterEBPFServicesServer(s, ebpfSrv)
 	})
