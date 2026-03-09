@@ -74,6 +74,9 @@ type Config struct {
 	// LBIPAM holds LoadBalancer IPAM settings.
 	LBIPAM LBIPAMConfig `json:"lb_ipam"`
 
+	// EBPFServices holds eBPF services gRPC server settings.
+	EBPFServices EBPFServicesConfig `json:"ebpf_services"`
+
 	// IPv6 holds IPv6 and dual-stack settings.
 	IPv6 IPv6Config `json:"ipv6"`
 
@@ -206,6 +209,15 @@ type LBIPAMConfig struct {
 	L2AnnouncementEnabled bool `json:"l2_announcement_enabled"`
 }
 
+// EBPFServicesConfig holds eBPF services gRPC server settings.
+type EBPFServicesConfig struct {
+	// Enabled controls whether the EBPFServices gRPC server is started.
+	Enabled bool `json:"enabled"`
+
+	// SocketPath is the Unix socket path for the EBPFServices gRPC server.
+	SocketPath string `json:"socket_path"`
+}
+
 // IPv6Config holds IPv6 and dual-stack settings.
 type IPv6Config struct {
 	// Enabled activates IPv6 and dual-stack support.
@@ -252,6 +264,10 @@ func DefaultConfig() *Config {
 		},
 		Bandwidth: BandwidthConfig{
 			Enabled: false,
+		},
+		EBPFServices: EBPFServicesConfig{
+			Enabled:    true,
+			SocketPath: "/run/novanet/ebpf-services.sock",
 		},
 		LBIPAM: LBIPAMConfig{
 			Enabled:               false,
