@@ -27,6 +27,8 @@ import (
 	"github.com/azrtydxb/novanet/internal/bandwidth"
 	cnisetup "github.com/azrtydxb/novanet/internal/cni"
 	"github.com/azrtydxb/novanet/internal/config"
+	"github.com/azrtydxb/novanet/internal/dataplane"
+	"github.com/azrtydxb/novanet/internal/ebpfservices"
 	"github.com/azrtydxb/novanet/internal/egress"
 	"github.com/azrtydxb/novanet/internal/encryption"
 	"github.com/azrtydxb/novanet/internal/hostfirewall"
@@ -949,18 +951,19 @@ type agentParams struct {
 
 // shutdownState holds references needed for graceful shutdown.
 type shutdownState struct {
-	logger        *zap.Logger
-	cancel        context.CancelFunc
-	bgWg          *sync.WaitGroup
-	cniGRPC       *grpc.Server
-	agentGRPC     *grpc.Server
-	ipamGRPC      *grpc.Server
-	metricsServer *http.Server
-	dpConn        *grpc.ClientConn
-	nrClient      *routing.Manager
-	podCIDR       string
-	xdpMgr        *xdp.Manager
-	wgManager     *encryption.WireGuardManager
+	logger           *zap.Logger
+	cancel           context.CancelFunc
+	bgWg             *sync.WaitGroup
+	cniGRPC          *grpc.Server
+	agentGRPC        *grpc.Server
+	ipamGRPC         *grpc.Server
+	ebpfServicesGRPC *grpc.Server
+	metricsServer    *http.Server
+	dpConn           *grpc.ClientConn
+	nrClient         *routing.Manager
+	podCIDR          string
+	xdpMgr           *xdp.Manager
+	wgManager        *encryption.WireGuardManager
 }
 
 func main() {
@@ -1124,6 +1127,7 @@ func main() {
 	cniGRPC := startCNIServer(logger, cfg, agentSrv)
 	agentGRPC := startAgentServer(logger, cfg, agentSrv)
 	ipamGRPC := startIPAMServer(logger, ipamMgr)
+	ebpfServicesGRPC := startEBPFServicesServer(logger, cfg, dpConnected)
 	metricsServer := startMetricsServer(logger, cfg, agentSrv)
 
 	// Mode-specific initialization (overlay tunnels or native BGP).
@@ -1133,18 +1137,19 @@ func main() {
 	// Wait for termination signal and shut down gracefully.
 	waitForSignal(logger)
 	gracefulShutdown(&shutdownState{
-		logger:        logger,
-		cancel:        cancel,
-		bgWg:          &bgWg,
-		cniGRPC:       cniGRPC,
-		agentGRPC:     agentGRPC,
-		ipamGRPC:      ipamGRPC,
-		metricsServer: metricsServer,
-		dpConn:        dpConn,
-		nrClient:      nrClient,
-		podCIDR:       params.podCIDR,
-		xdpMgr:        xdpMgr,
-		wgManager:     wgMgr,
+		logger:           logger,
+		cancel:           cancel,
+		bgWg:             &bgWg,
+		cniGRPC:          cniGRPC,
+		agentGRPC:        agentGRPC,
+		ipamGRPC:         ipamGRPC,
+		ebpfServicesGRPC: ebpfServicesGRPC,
+		metricsServer:    metricsServer,
+		dpConn:           dpConn,
+		nrClient:         nrClient,
+		podCIDR:          params.podCIDR,
+		xdpMgr:           xdpMgr,
+		wgManager:        wgMgr,
 	})
 }
 
@@ -1547,6 +1552,44 @@ func startIPAMServer(logger *zap.Logger, ipamMgr *ipam.Manager) *grpc.Server {
 	return ipamGRPC
 }
 
+// startEBPFServicesServer starts the EBPFServices gRPC server if enabled and returns the server handle.
+func startEBPFServicesServer(logger *zap.Logger, cfg *config.Config, dpConnected bool) *grpc.Server {
+	if !cfg.EBPFServices.Enabled {
+		logger.Info("EBPFServices gRPC server disabled")
+		return nil
+	}
+	// Create a dedicated dataplane client for the EBPFServices server.
+	var dpClient dataplane.ClientInterface
+	if dpConnected {
+		client, err := dataplane.NewClient(cfg.DataplaneSocket, logger.Named("ebpf-dp"))
+		if err == nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if connErr := client.Connect(ctx); connErr != nil {
+				logger.Warn("EBPFServices: failed to connect dataplane client", zap.Error(connErr))
+			} else {
+				dpClient = client
+			}
+		} else {
+			logger.Warn("EBPFServices: failed to create dataplane client", zap.Error(err))
+		}
+	}
+	ebpfSrv := ebpfservices.NewServer(logger, dpClient)
+	ebpfListener, ebpfGRPC, err := startGRPCServer(logger, cfg.EBPFServices.SocketPath, "EBPFServices", func(s *grpc.Server) {
+		pb.RegisterEBPFServicesServer(s, ebpfSrv)
+	})
+	if err != nil {
+		logger.Fatal("failed to start EBPFServices gRPC server", zap.Error(err))
+	}
+	go func() {
+		logger.Info("EBPFServices gRPC server listening", zap.String("socket", cfg.EBPFServices.SocketPath))
+		if err := ebpfGRPC.Serve(ebpfListener); err != nil {
+			logger.Error("EBPFServices gRPC server error", zap.Error(err))
+		}
+	}()
+	return ebpfGRPC
+}
+
 // startMetricsServer starts the Prometheus metrics and health check HTTP server.
 func startMetricsServer(logger *zap.Logger, cfg *config.Config, agentSrv *agentServer) *http.Server {
 	metricsMux := http.NewServeMux()
@@ -1797,6 +1840,11 @@ func gracefulShutdown(s *shutdownState) {
 	if s.ipamGRPC != nil {
 		s.ipamGRPC.GracefulStop()
 		s.logger.Info("IPAM gRPC server stopped")
+	}
+
+	if s.ebpfServicesGRPC != nil {
+		s.ebpfServicesGRPC.GracefulStop()
+		s.logger.Info("EBPFServices gRPC server stopped")
 	}
 
 	// Stop metrics server.

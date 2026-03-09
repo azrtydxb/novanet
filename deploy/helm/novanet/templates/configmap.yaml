@@ -36,6 +36,10 @@ data:
         "enabled": {{ .Values.l4lb.enabled }},
         "default_algorithm": {{ .Values.l4lb.defaultAlgorithm | quote }}
       },
+      "ebpf_services": {
+        "enabled": {{ .Values.ebpfServices.enabled }},
+        "socket_path": {{ .Values.ebpfServices.socketPath | quote }}
+      },
       "log_level": {{ .Values.config.logLevel | quote }},
       "metrics_address": ":{{ .Values.metrics.port }}"
     }

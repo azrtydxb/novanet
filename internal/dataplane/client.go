@@ -86,6 +86,38 @@ type SyncResult struct {
 	Updated uint32
 }
 
+// SockmapStats contains SOCKMAP redirect statistics.
+type SockmapStats struct {
+	Redirected      uint64
+	Fallback        uint64
+	ActiveEndpoints uint32
+}
+
+// MeshServiceEntry represents a mesh service redirect entry.
+type MeshServiceEntry struct {
+	IP           string
+	Port         uint32
+	RedirectPort uint32
+}
+
+// RateLimitStats contains rate limiting statistics.
+type RateLimitStats struct {
+	Allowed uint64
+	Denied  uint64
+}
+
+// BackendHealthInfo contains health statistics for a backend.
+type BackendHealthInfo struct {
+	IP           string
+	Port         uint32
+	TotalConns   uint64
+	FailedConns  uint64
+	TimeoutConns uint64
+	SuccessConns uint64
+	AvgRTTNs     uint64
+	FailureRate  float64
+}
+
 // ClientInterface defines the interface for the dataplane client.
 // Used for testing with mock implementations.
 type ClientInterface interface {
@@ -102,6 +134,24 @@ type ClientInterface interface {
 	DetachProgram(ctx context.Context, iface string, attachType AttachType) error
 	StreamFlows(ctx context.Context, identityFilter uint32) (<-chan *FlowEvent, error)
 	GetStatus(ctx context.Context) (*Status, error)
+
+	// SOCKMAP endpoints
+	UpsertSockmapEndpoint(ctx context.Context, ip string, port uint32) error
+	DeleteSockmapEndpoint(ctx context.Context, ip string, port uint32) error
+	GetSockmapStats(ctx context.Context) (*SockmapStats, error)
+
+	// Mesh redirect
+	UpsertMeshService(ctx context.Context, ip string, port, redirectPort uint32) error
+	DeleteMeshService(ctx context.Context, ip string, port uint32) error
+	ListMeshServices(ctx context.Context) ([]*MeshServiceEntry, error)
+
+	// Rate limiting
+	UpdateRateLimitConfig(ctx context.Context, rate, burst uint32, windowNs uint64) error
+	GetRateLimitStats(ctx context.Context) (*RateLimitStats, error)
+
+	// Health monitoring
+	GetBackendHealthStats(ctx context.Context, ip string, port uint32) ([]*BackendHealthInfo, error)
+
 	Close() error
 }
 
@@ -480,6 +530,212 @@ func (c *Client) GetStatus(ctx context.Context) (*Status, error) {
 		Mode:           resp.Mode,
 		TunnelProtocol: resp.TunnelProtocol,
 	}, nil
+}
+
+// UpsertSockmapEndpoint registers a SOCKMAP endpoint in the dataplane.
+func (c *Client) UpsertSockmapEndpoint(ctx context.Context, ip string, port uint32) error {
+	c.mu.RLock()
+	client := c.client
+	c.mu.RUnlock()
+
+	if client == nil {
+		return ErrNotConnected
+	}
+
+	_, err := client.UpsertSockmapEndpoint(ctx, &pb.UpsertSockmapEndpointRequest{
+		Ip:   ip,
+		Port: port,
+	})
+	if err != nil {
+		return fmt.Errorf("upserting sockmap endpoint: %w", err)
+	}
+	return nil
+}
+
+// DeleteSockmapEndpoint removes a SOCKMAP endpoint from the dataplane.
+func (c *Client) DeleteSockmapEndpoint(ctx context.Context, ip string, port uint32) error {
+	c.mu.RLock()
+	client := c.client
+	c.mu.RUnlock()
+
+	if client == nil {
+		return ErrNotConnected
+	}
+
+	_, err := client.DeleteSockmapEndpoint(ctx, &pb.DeleteSockmapEndpointRequest{
+		Ip:   ip,
+		Port: port,
+	})
+	if err != nil {
+		return fmt.Errorf("deleting sockmap endpoint: %w", err)
+	}
+	return nil
+}
+
+// GetSockmapStats returns SOCKMAP redirect statistics from the dataplane.
+func (c *Client) GetSockmapStats(ctx context.Context) (*SockmapStats, error) {
+	c.mu.RLock()
+	client := c.client
+	c.mu.RUnlock()
+
+	if client == nil {
+		return nil, ErrNotConnected
+	}
+
+	resp, err := client.GetSockmapStats(ctx, &pb.GetInternalSockmapStatsRequest{})
+	if err != nil {
+		return nil, fmt.Errorf("getting sockmap stats: %w", err)
+	}
+
+	return &SockmapStats{
+		Redirected:      resp.Redirected,
+		Fallback:        resp.Fallback,
+		ActiveEndpoints: resp.ActiveEndpoints,
+	}, nil
+}
+
+// UpsertMeshService registers a mesh service redirect in the dataplane.
+func (c *Client) UpsertMeshService(ctx context.Context, ip string, port, redirectPort uint32) error {
+	c.mu.RLock()
+	client := c.client
+	c.mu.RUnlock()
+
+	if client == nil {
+		return ErrNotConnected
+	}
+
+	_, err := client.UpsertMeshService(ctx, &pb.UpsertMeshServiceRequest{
+		Ip:           ip,
+		Port:         port,
+		RedirectPort: redirectPort,
+	})
+	if err != nil {
+		return fmt.Errorf("upserting mesh service: %w", err)
+	}
+	return nil
+}
+
+// DeleteMeshService removes a mesh service redirect from the dataplane.
+func (c *Client) DeleteMeshService(ctx context.Context, ip string, port uint32) error {
+	c.mu.RLock()
+	client := c.client
+	c.mu.RUnlock()
+
+	if client == nil {
+		return ErrNotConnected
+	}
+
+	_, err := client.DeleteMeshService(ctx, &pb.DeleteMeshServiceRequest{
+		Ip:   ip,
+		Port: port,
+	})
+	if err != nil {
+		return fmt.Errorf("deleting mesh service: %w", err)
+	}
+	return nil
+}
+
+// ListMeshServices returns all mesh service redirect entries from the dataplane.
+func (c *Client) ListMeshServices(ctx context.Context) ([]*MeshServiceEntry, error) {
+	c.mu.RLock()
+	client := c.client
+	c.mu.RUnlock()
+
+	if client == nil {
+		return nil, ErrNotConnected
+	}
+
+	resp, err := client.ListMeshServices(ctx, &pb.ListInternalMeshServicesRequest{})
+	if err != nil {
+		return nil, fmt.Errorf("listing mesh services: %w", err)
+	}
+
+	entries := make([]*MeshServiceEntry, len(resp.Entries))
+	for i, e := range resp.Entries {
+		entries[i] = &MeshServiceEntry{
+			IP:           e.Ip,
+			Port:         e.Port,
+			RedirectPort: e.RedirectPort,
+		}
+	}
+	return entries, nil
+}
+
+// UpdateRateLimitConfig updates the global rate limit configuration in the dataplane.
+func (c *Client) UpdateRateLimitConfig(ctx context.Context, rate, burst uint32, windowNs uint64) error {
+	c.mu.RLock()
+	client := c.client
+	c.mu.RUnlock()
+
+	if client == nil {
+		return ErrNotConnected
+	}
+
+	_, err := client.UpdateRateLimitConfig(ctx, &pb.UpdateRateLimitConfigRequest{
+		Rate:     rate,
+		Burst:    burst,
+		WindowNs: windowNs,
+	})
+	if err != nil {
+		return fmt.Errorf("updating rate limit config: %w", err)
+	}
+	return nil
+}
+
+// GetRateLimitStats returns rate limiting statistics from the dataplane.
+func (c *Client) GetRateLimitStats(ctx context.Context) (*RateLimitStats, error) {
+	c.mu.RLock()
+	client := c.client
+	c.mu.RUnlock()
+
+	if client == nil {
+		return nil, ErrNotConnected
+	}
+
+	resp, err := client.GetInternalRateLimitStats(ctx, &pb.GetInternalRateLimitStatsRequest{})
+	if err != nil {
+		return nil, fmt.Errorf("getting rate limit stats: %w", err)
+	}
+
+	return &RateLimitStats{
+		Allowed: resp.Allowed,
+		Denied:  resp.Denied,
+	}, nil
+}
+
+// GetBackendHealthStats returns backend health statistics from the dataplane.
+// If ip is empty, returns stats for all backends.
+func (c *Client) GetBackendHealthStats(ctx context.Context, ip string, port uint32) ([]*BackendHealthInfo, error) {
+	c.mu.RLock()
+	client := c.client
+	c.mu.RUnlock()
+
+	if client == nil {
+		return nil, ErrNotConnected
+	}
+
+	resp, err := client.GetBackendHealthStats(ctx, &pb.GetBackendHealthStatsRequest{
+		Ip:   ip,
+		Port: port,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("getting backend health stats: %w", err)
+	}
+
+	backends := make([]*BackendHealthInfo, len(resp.Backends))
+	for i, b := range resp.Backends {
+		backends[i] = &BackendHealthInfo{
+			IP:           b.Ip,
+			Port:         b.Port,
+			TotalConns:   b.TotalConns,
+			FailedConns:  b.FailedConns,
+			TimeoutConns: b.TimeoutConns,
+			SuccessConns: b.SuccessConns,
+			AvgRTTNs:     b.AvgRttNs,
+			FailureRate:  b.FailureRate,
+		}
+	}
+	return backends, nil
 }
 
 // Close closes the gRPC connection to the dataplane.

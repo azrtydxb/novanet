@@ -66,6 +66,33 @@ func (m *mockDPClient) GetStatus(ctx context.Context) (*dataplane.Status, error)
 	return &dataplane.Status{}, nil
 }
 func (m *mockDPClient) Close() error { return nil }
+func (m *mockDPClient) UpsertSockmapEndpoint(_ context.Context, _ string, _ uint32) error {
+	return nil
+}
+func (m *mockDPClient) DeleteSockmapEndpoint(_ context.Context, _ string, _ uint32) error {
+	return nil
+}
+func (m *mockDPClient) GetSockmapStats(_ context.Context) (*dataplane.SockmapStats, error) {
+	return &dataplane.SockmapStats{}, nil
+}
+func (m *mockDPClient) UpsertMeshService(_ context.Context, _ string, _, _ uint32) error {
+	return nil
+}
+func (m *mockDPClient) DeleteMeshService(_ context.Context, _ string, _ uint32) error {
+	return nil
+}
+func (m *mockDPClient) ListMeshServices(_ context.Context) ([]*dataplane.MeshServiceEntry, error) {
+	return nil, nil
+}
+func (m *mockDPClient) UpdateRateLimitConfig(_ context.Context, _, _ uint32, _ uint64) error {
+	return nil
+}
+func (m *mockDPClient) GetRateLimitStats(_ context.Context) (*dataplane.RateLimitStats, error) {
+	return &dataplane.RateLimitStats{}, nil
+}
+func (m *mockDPClient) GetBackendHealthStats(_ context.Context, _ string, _ uint32) ([]*dataplane.BackendHealthInfo, error) {
+	return nil, nil
+}
 
 func (m *mockDPClient) UpsertTunnel(ctx context.Context, nodeIP string, ifindex, vni uint32) error {
 	m.mu.Lock()

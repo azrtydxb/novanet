@@ -62,6 +62,10 @@ l4lb:
   enabled: false
   defaultAlgorithm: random  # random, round-robin, maglev
 
+ebpfServices:
+  enabled: true
+  socketPath: "/run/novanet/ebpf-services.sock"
+
 metrics:
   enabled: true
   port: 9103
