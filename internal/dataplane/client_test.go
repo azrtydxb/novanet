@@ -100,6 +100,57 @@ func TestClientNotConnected(t *testing.T) {
 	}
 }
 
+func TestClientNotConnectedEBPFServices(t *testing.T) {
+	c, _ := NewClient("/run/novanet/dataplane.sock", testLogger())
+
+	ctx := context.Background()
+
+	err := c.UpsertSockmapEndpoint(ctx, "10.0.0.1", 80)
+	if err == nil {
+		t.Fatal("expected error when not connected")
+	}
+
+	err = c.DeleteSockmapEndpoint(ctx, "10.0.0.1", 80)
+	if err == nil {
+		t.Fatal("expected error when not connected")
+	}
+
+	_, err = c.GetSockmapStats(ctx)
+	if err == nil {
+		t.Fatal("expected error when not connected")
+	}
+
+	err = c.UpsertMeshService(ctx, "10.0.0.1", 80, 15001)
+	if err == nil {
+		t.Fatal("expected error when not connected")
+	}
+
+	err = c.DeleteMeshService(ctx, "10.0.0.1", 80)
+	if err == nil {
+		t.Fatal("expected error when not connected")
+	}
+
+	_, err = c.ListMeshServices(ctx)
+	if err == nil {
+		t.Fatal("expected error when not connected")
+	}
+
+	err = c.UpdateRateLimitConfig(ctx, 100, 200, 1000000000)
+	if err == nil {
+		t.Fatal("expected error when not connected")
+	}
+
+	_, err = c.GetRateLimitStats(ctx)
+	if err == nil {
+		t.Fatal("expected error when not connected")
+	}
+
+	_, err = c.GetBackendHealthStats(ctx, "", 0)
+	if err == nil {
+		t.Fatal("expected error when not connected")
+	}
+}
+
 func TestCloseNotConnected(t *testing.T) {
 	c, _ := NewClient("/run/novanet/dataplane.sock", testLogger())
 
@@ -113,17 +164,26 @@ func TestCloseNotConnected(t *testing.T) {
 type mockDataplaneServer struct {
 	pb.UnimplementedDataplaneControlServer
 
-	upsertEndpointCalled int
-	deleteEndpointCalled int
-	upsertPolicyCalled   int
-	deletePolicyCalled   int
-	syncPoliciesCalled   int
-	upsertTunnelCalled   int
-	deleteTunnelCalled   int
-	updateConfigCalled   int
-	attachCalled         int
-	detachCalled         int
-	getStatusCalled      int
+	upsertEndpointCalled        int
+	deleteEndpointCalled        int
+	upsertPolicyCalled          int
+	deletePolicyCalled          int
+	syncPoliciesCalled          int
+	upsertTunnelCalled          int
+	deleteTunnelCalled          int
+	updateConfigCalled          int
+	attachCalled                int
+	detachCalled                int
+	getStatusCalled             int
+	upsertSockmapCalled         int
+	deleteSockmapCalled         int
+	getSockmapStatsCalled       int
+	upsertMeshCalled            int
+	deleteMeshCalled            int
+	listMeshCalled              int
+	updateRateLimitCalled       int
+	getRateLimitStatsCalled     int
+	getBackendHealthStatsCalled int
 }
 
 func (m *mockDataplaneServer) UpsertEndpoint(_ context.Context, _ *pb.UpsertEndpointRequest) (*pb.UpsertEndpointResponse, error) {
@@ -188,6 +248,76 @@ func (m *mockDataplaneServer) GetDataplaneStatus(_ context.Context, _ *pb.GetDat
 		TunnelCount:    3,
 		Mode:           "overlay",
 		TunnelProtocol: "geneve",
+	}, nil
+}
+
+func (m *mockDataplaneServer) UpsertSockmapEndpoint(_ context.Context, _ *pb.UpsertSockmapEndpointRequest) (*pb.UpsertSockmapEndpointResponse, error) {
+	m.upsertSockmapCalled++
+	return &pb.UpsertSockmapEndpointResponse{}, nil
+}
+
+func (m *mockDataplaneServer) DeleteSockmapEndpoint(_ context.Context, _ *pb.DeleteSockmapEndpointRequest) (*pb.DeleteSockmapEndpointResponse, error) {
+	m.deleteSockmapCalled++
+	return &pb.DeleteSockmapEndpointResponse{}, nil
+}
+
+func (m *mockDataplaneServer) GetSockmapStats(_ context.Context, _ *pb.GetInternalSockmapStatsRequest) (*pb.GetInternalSockmapStatsResponse, error) {
+	m.getSockmapStatsCalled++
+	return &pb.GetInternalSockmapStatsResponse{
+		Redirected:      100,
+		Fallback:        5,
+		ActiveEndpoints: 3,
+	}, nil
+}
+
+func (m *mockDataplaneServer) UpsertMeshService(_ context.Context, _ *pb.UpsertMeshServiceRequest) (*pb.UpsertMeshServiceResponse, error) {
+	m.upsertMeshCalled++
+	return &pb.UpsertMeshServiceResponse{}, nil
+}
+
+func (m *mockDataplaneServer) DeleteMeshService(_ context.Context, _ *pb.DeleteMeshServiceRequest) (*pb.DeleteMeshServiceResponse, error) {
+	m.deleteMeshCalled++
+	return &pb.DeleteMeshServiceResponse{}, nil
+}
+
+func (m *mockDataplaneServer) ListMeshServices(_ context.Context, _ *pb.ListInternalMeshServicesRequest) (*pb.ListInternalMeshServicesResponse, error) {
+	m.listMeshCalled++
+	return &pb.ListInternalMeshServicesResponse{
+		Entries: []*pb.InternalMeshServiceEntry{
+			{Ip: "10.0.0.1", Port: 80, RedirectPort: 15001},
+			{Ip: "10.0.0.2", Port: 443, RedirectPort: 15001},
+		},
+	}, nil
+}
+
+func (m *mockDataplaneServer) UpdateRateLimitConfig(_ context.Context, _ *pb.UpdateRateLimitConfigRequest) (*pb.UpdateRateLimitConfigResponse, error) {
+	m.updateRateLimitCalled++
+	return &pb.UpdateRateLimitConfigResponse{}, nil
+}
+
+func (m *mockDataplaneServer) GetInternalRateLimitStats(_ context.Context, _ *pb.GetInternalRateLimitStatsRequest) (*pb.GetInternalRateLimitStatsResponse, error) {
+	m.getRateLimitStatsCalled++
+	return &pb.GetInternalRateLimitStatsResponse{
+		Allowed: 1000,
+		Denied:  50,
+	}, nil
+}
+
+func (m *mockDataplaneServer) GetBackendHealthStats(_ context.Context, _ *pb.GetBackendHealthStatsRequest) (*pb.GetBackendHealthStatsResponse, error) {
+	m.getBackendHealthStatsCalled++
+	return &pb.GetBackendHealthStatsResponse{
+		Backends: []*pb.InternalBackendHealthInfo{
+			{
+				Ip:           "10.0.0.1",
+				Port:         8080,
+				TotalConns:   100,
+				FailedConns:  5,
+				TimeoutConns: 2,
+				SuccessConns: 93,
+				AvgRttNs:     1500000,
+				FailureRate:  0.05,
+			},
+		},
 	}, nil
 }
 
@@ -444,6 +574,180 @@ func TestGetStatus(t *testing.T) {
 	}
 	if status.TunnelProtocol != "geneve" {
 		t.Fatalf("expected protocol geneve, got %s", status.TunnelProtocol)
+	}
+}
+
+func TestUpsertSockmapEndpoint(t *testing.T) {
+	mock, addr := startMockServer(t)
+	c := connectTestClient(t, addr)
+	defer func() { _ = c.Close() }()
+
+	err := c.UpsertSockmapEndpoint(context.Background(), "10.0.0.1", 80)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if mock.upsertSockmapCalled != 1 {
+		t.Fatalf("expected 1 call, got %d", mock.upsertSockmapCalled)
+	}
+}
+
+func TestDeleteSockmapEndpoint(t *testing.T) {
+	mock, addr := startMockServer(t)
+	c := connectTestClient(t, addr)
+	defer func() { _ = c.Close() }()
+
+	err := c.DeleteSockmapEndpoint(context.Background(), "10.0.0.1", 80)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if mock.deleteSockmapCalled != 1 {
+		t.Fatalf("expected 1 call, got %d", mock.deleteSockmapCalled)
+	}
+}
+
+func TestGetSockmapStats(t *testing.T) {
+	mock, addr := startMockServer(t)
+	c := connectTestClient(t, addr)
+	defer func() { _ = c.Close() }()
+
+	stats, err := c.GetSockmapStats(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if mock.getSockmapStatsCalled != 1 {
+		t.Fatalf("expected 1 call, got %d", mock.getSockmapStatsCalled)
+	}
+
+	if stats.Redirected != 100 {
+		t.Fatalf("expected 100 redirected, got %d", stats.Redirected)
+	}
+	if stats.Fallback != 5 {
+		t.Fatalf("expected 5 fallback, got %d", stats.Fallback)
+	}
+	if stats.ActiveEndpoints != 3 {
+		t.Fatalf("expected 3 active endpoints, got %d", stats.ActiveEndpoints)
+	}
+}
+
+func TestUpsertMeshService(t *testing.T) {
+	mock, addr := startMockServer(t)
+	c := connectTestClient(t, addr)
+	defer func() { _ = c.Close() }()
+
+	err := c.UpsertMeshService(context.Background(), "10.0.0.1", 80, 15001)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if mock.upsertMeshCalled != 1 {
+		t.Fatalf("expected 1 call, got %d", mock.upsertMeshCalled)
+	}
+}
+
+func TestDeleteMeshService(t *testing.T) {
+	mock, addr := startMockServer(t)
+	c := connectTestClient(t, addr)
+	defer func() { _ = c.Close() }()
+
+	err := c.DeleteMeshService(context.Background(), "10.0.0.1", 80)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if mock.deleteMeshCalled != 1 {
+		t.Fatalf("expected 1 call, got %d", mock.deleteMeshCalled)
+	}
+}
+
+func TestListMeshServices(t *testing.T) {
+	mock, addr := startMockServer(t)
+	c := connectTestClient(t, addr)
+	defer func() { _ = c.Close() }()
+
+	entries, err := c.ListMeshServices(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if mock.listMeshCalled != 1 {
+		t.Fatalf("expected 1 call, got %d", mock.listMeshCalled)
+	}
+
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(entries))
+	}
+	if entries[0].IP != "10.0.0.1" || entries[0].Port != 80 || entries[0].RedirectPort != 15001 {
+		t.Fatalf("unexpected first entry: %+v", entries[0])
+	}
+}
+
+func TestUpdateRateLimitConfig(t *testing.T) {
+	mock, addr := startMockServer(t)
+	c := connectTestClient(t, addr)
+	defer func() { _ = c.Close() }()
+
+	err := c.UpdateRateLimitConfig(context.Background(), 100, 200, 1000000000)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if mock.updateRateLimitCalled != 1 {
+		t.Fatalf("expected 1 call, got %d", mock.updateRateLimitCalled)
+	}
+}
+
+func TestGetRateLimitStats(t *testing.T) {
+	mock, addr := startMockServer(t)
+	c := connectTestClient(t, addr)
+	defer func() { _ = c.Close() }()
+
+	stats, err := c.GetRateLimitStats(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if mock.getRateLimitStatsCalled != 1 {
+		t.Fatalf("expected 1 call, got %d", mock.getRateLimitStatsCalled)
+	}
+
+	if stats.Allowed != 1000 {
+		t.Fatalf("expected 1000 allowed, got %d", stats.Allowed)
+	}
+	if stats.Denied != 50 {
+		t.Fatalf("expected 50 denied, got %d", stats.Denied)
+	}
+}
+
+func TestGetBackendHealthStats(t *testing.T) {
+	mock, addr := startMockServer(t)
+	c := connectTestClient(t, addr)
+	defer func() { _ = c.Close() }()
+
+	backends, err := c.GetBackendHealthStats(context.Background(), "10.0.0.1", 8080)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if mock.getBackendHealthStatsCalled != 1 {
+		t.Fatalf("expected 1 call, got %d", mock.getBackendHealthStatsCalled)
+	}
+
+	if len(backends) != 1 {
+		t.Fatalf("expected 1 backend, got %d", len(backends))
+	}
+
+	b := backends[0]
+	if b.IP != "10.0.0.1" || b.Port != 8080 {
+		t.Fatalf("unexpected backend: %+v", b)
+	}
+	if b.TotalConns != 100 {
+		t.Fatalf("expected 100 total conns, got %d", b.TotalConns)
+	}
+	if b.FailedConns != 5 {
+		t.Fatalf("expected 5 failed conns, got %d", b.FailedConns)
 	}
 }
 
