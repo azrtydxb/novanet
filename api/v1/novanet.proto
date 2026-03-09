@@ -72,6 +72,13 @@ service AgentControl {
   rpc ListTunnels(ListTunnelsRequest) returns (ListTunnelsResponse);
   rpc ListEgressPolicies(ListEgressPoliciesRequest) returns (ListEgressPoliciesResponse);
   rpc ListServices(ListServicesRequest) returns (ListServicesResponse);
+
+  // Routing RPCs (native mode — queries FRR state via routing manager)
+  rpc GetRoutingPeers(GetRoutingPeersRequest) returns (GetRoutingPeersResponse);
+  rpc GetRoutingPrefixes(GetRoutingPrefixesRequest) returns (GetRoutingPrefixesResponse);
+  rpc GetRoutingBFDSessions(GetRoutingBFDSessionsRequest) returns (GetRoutingBFDSessionsResponse);
+  rpc GetRoutingOSPFNeighbors(GetRoutingOSPFNeighborsRequest) returns (GetRoutingOSPFNeighborsResponse);
+  rpc StreamRoutingEvents(StreamRoutingEventsRequest) returns (stream RoutingEvent);
 }
 
 // IPVersion identifies the address family.
@@ -518,4 +525,74 @@ message DetachXDPResponse {}
 enum XDPMode {
   XDP_MODE_NATIVE = 0;
   XDP_MODE_SKB = 1;       // Generic/SKB fallback.
+}
+
+// --- Routing (BGP/BFD/OSPF via FRR) ---
+
+message GetRoutingPeersRequest {}
+message GetRoutingPeersResponse {
+  repeated RoutingPeerInfo peers = 1;
+}
+message RoutingPeerInfo {
+  string neighbor_address = 1;
+  uint32 remote_as = 2;
+  string state = 3;            // "Established", "Idle", "Connect", etc.
+  string uptime = 4;
+  uint32 prefixes_received = 5;
+  uint32 prefixes_sent = 6;
+  string description = 7;
+  uint32 msg_received = 8;
+  uint32 msg_sent = 9;
+  string bfd_status = 10;     // "up", "down", "" (not enabled)
+  string owner = 11;          // Intent owner (e.g., "novanet", "_config")
+}
+
+message GetRoutingPrefixesRequest {}
+message GetRoutingPrefixesResponse {
+  repeated RoutingPrefixInfo prefixes = 1;
+}
+message RoutingPrefixInfo {
+  string prefix = 1;          // e.g., "10.42.0.0/24"
+  string protocol = 2;        // "bgp" or "ospf"
+  string state = 3;           // "advertised", "received"
+  string owner = 4;           // Intent owner
+}
+
+message GetRoutingBFDSessionsRequest {}
+message GetRoutingBFDSessionsResponse {
+  repeated RoutingBFDSessionInfo sessions = 1;
+}
+message RoutingBFDSessionInfo {
+  string peer_address = 1;
+  string status = 2;          // "up", "down", "init"
+  string uptime = 3;
+  uint32 min_rx_ms = 4;
+  uint32 min_tx_ms = 5;
+  uint32 detect_multiplier = 6;
+  string interface_name = 7;
+  string owner = 8;
+}
+
+message GetRoutingOSPFNeighborsRequest {}
+message GetRoutingOSPFNeighborsResponse {
+  repeated RoutingOSPFNeighborInfo neighbors = 1;
+}
+message RoutingOSPFNeighborInfo {
+  string neighbor_id = 1;
+  string address = 2;
+  string interface_name = 3;
+  string state = 4;           // "Full", "2-Way", "Init", etc.
+  string owner = 5;
+}
+
+message StreamRoutingEventsRequest {
+  string owner_filter = 1;       // Optional: filter by owner name.
+  repeated string event_types = 2; // Optional: filter by event type names.
+}
+message RoutingEvent {
+  int64 timestamp_ns = 1;
+  string event_type = 2;      // "peer_up", "peer_down", "bfd_up", etc.
+  string owner = 3;
+  string detail = 4;
+  map<string, string> metadata = 5;
 }

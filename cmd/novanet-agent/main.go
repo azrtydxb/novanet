@@ -206,6 +206,9 @@ type agentServer struct {
 	// XDP manager (nil if disabled).
 	xdpMgr *xdp.Manager
 
+	// Routing manager for native mode (nil in overlay mode).
+	routingMgr *routing.Manager
+
 	// Compiled policy rules (updated by the policy watcher callback).
 	policyMu    sync.RWMutex
 	policyRules []*policy.CompiledRule
@@ -1672,6 +1675,7 @@ func initNativeMode(ctx context.Context, logger *zap.Logger, cfg *config.Config,
 	}
 	logger.Info("advertised PodCIDR via BGP", zap.String("pod_cidr", podCIDR))
 	agentSrv.routingConnected = true
+	agentSrv.routingMgr = routingMgr
 
 	// Control-plane VIP: register as L4 LB service with health-checked backends.
 	if vip := cfg.Routing.ControlPlaneVIP; vip != "" && cfg.L4LB.Enabled {

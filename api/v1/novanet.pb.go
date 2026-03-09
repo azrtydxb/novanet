@@ -4799,6 +4799,822 @@ func (*DetachXDPResponse) Descriptor() ([]byte, []int) {
 	return file_api_v1_novanet_proto_rawDescGZIP(), []int{75}
 }
 
+type GetRoutingPeersRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetRoutingPeersRequest) Reset() {
+	*x = GetRoutingPeersRequest{}
+	mi := &file_api_v1_novanet_proto_msgTypes[76]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetRoutingPeersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetRoutingPeersRequest) ProtoMessage() {}
+
+func (x *GetRoutingPeersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_novanet_proto_msgTypes[76]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetRoutingPeersRequest.ProtoReflect.Descriptor instead.
+func (*GetRoutingPeersRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_novanet_proto_rawDescGZIP(), []int{76}
+}
+
+type GetRoutingPeersResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Peers         []*RoutingPeerInfo     `protobuf:"bytes,1,rep,name=peers,proto3" json:"peers,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetRoutingPeersResponse) Reset() {
+	*x = GetRoutingPeersResponse{}
+	mi := &file_api_v1_novanet_proto_msgTypes[77]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetRoutingPeersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetRoutingPeersResponse) ProtoMessage() {}
+
+func (x *GetRoutingPeersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_novanet_proto_msgTypes[77]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetRoutingPeersResponse.ProtoReflect.Descriptor instead.
+func (*GetRoutingPeersResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_novanet_proto_rawDescGZIP(), []int{77}
+}
+
+func (x *GetRoutingPeersResponse) GetPeers() []*RoutingPeerInfo {
+	if x != nil {
+		return x.Peers
+	}
+	return nil
+}
+
+type RoutingPeerInfo struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	NeighborAddress  string                 `protobuf:"bytes,1,opt,name=neighbor_address,json=neighborAddress,proto3" json:"neighbor_address,omitempty"`
+	RemoteAs         uint32                 `protobuf:"varint,2,opt,name=remote_as,json=remoteAs,proto3" json:"remote_as,omitempty"`
+	State            string                 `protobuf:"bytes,3,opt,name=state,proto3" json:"state,omitempty"` // "Established", "Idle", "Connect", etc.
+	Uptime           string                 `protobuf:"bytes,4,opt,name=uptime,proto3" json:"uptime,omitempty"`
+	PrefixesReceived uint32                 `protobuf:"varint,5,opt,name=prefixes_received,json=prefixesReceived,proto3" json:"prefixes_received,omitempty"`
+	PrefixesSent     uint32                 `protobuf:"varint,6,opt,name=prefixes_sent,json=prefixesSent,proto3" json:"prefixes_sent,omitempty"`
+	Description      string                 `protobuf:"bytes,7,opt,name=description,proto3" json:"description,omitempty"`
+	MsgReceived      uint32                 `protobuf:"varint,8,opt,name=msg_received,json=msgReceived,proto3" json:"msg_received,omitempty"`
+	MsgSent          uint32                 `protobuf:"varint,9,opt,name=msg_sent,json=msgSent,proto3" json:"msg_sent,omitempty"`
+	BfdStatus        string                 `protobuf:"bytes,10,opt,name=bfd_status,json=bfdStatus,proto3" json:"bfd_status,omitempty"` // "up", "down", "" (not enabled)
+	Owner            string                 `protobuf:"bytes,11,opt,name=owner,proto3" json:"owner,omitempty"`                          // Intent owner (e.g., "novanet", "_config")
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *RoutingPeerInfo) Reset() {
+	*x = RoutingPeerInfo{}
+	mi := &file_api_v1_novanet_proto_msgTypes[78]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RoutingPeerInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RoutingPeerInfo) ProtoMessage() {}
+
+func (x *RoutingPeerInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_novanet_proto_msgTypes[78]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RoutingPeerInfo.ProtoReflect.Descriptor instead.
+func (*RoutingPeerInfo) Descriptor() ([]byte, []int) {
+	return file_api_v1_novanet_proto_rawDescGZIP(), []int{78}
+}
+
+func (x *RoutingPeerInfo) GetNeighborAddress() string {
+	if x != nil {
+		return x.NeighborAddress
+	}
+	return ""
+}
+
+func (x *RoutingPeerInfo) GetRemoteAs() uint32 {
+	if x != nil {
+		return x.RemoteAs
+	}
+	return 0
+}
+
+func (x *RoutingPeerInfo) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *RoutingPeerInfo) GetUptime() string {
+	if x != nil {
+		return x.Uptime
+	}
+	return ""
+}
+
+func (x *RoutingPeerInfo) GetPrefixesReceived() uint32 {
+	if x != nil {
+		return x.PrefixesReceived
+	}
+	return 0
+}
+
+func (x *RoutingPeerInfo) GetPrefixesSent() uint32 {
+	if x != nil {
+		return x.PrefixesSent
+	}
+	return 0
+}
+
+func (x *RoutingPeerInfo) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *RoutingPeerInfo) GetMsgReceived() uint32 {
+	if x != nil {
+		return x.MsgReceived
+	}
+	return 0
+}
+
+func (x *RoutingPeerInfo) GetMsgSent() uint32 {
+	if x != nil {
+		return x.MsgSent
+	}
+	return 0
+}
+
+func (x *RoutingPeerInfo) GetBfdStatus() string {
+	if x != nil {
+		return x.BfdStatus
+	}
+	return ""
+}
+
+func (x *RoutingPeerInfo) GetOwner() string {
+	if x != nil {
+		return x.Owner
+	}
+	return ""
+}
+
+type GetRoutingPrefixesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetRoutingPrefixesRequest) Reset() {
+	*x = GetRoutingPrefixesRequest{}
+	mi := &file_api_v1_novanet_proto_msgTypes[79]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetRoutingPrefixesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetRoutingPrefixesRequest) ProtoMessage() {}
+
+func (x *GetRoutingPrefixesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_novanet_proto_msgTypes[79]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetRoutingPrefixesRequest.ProtoReflect.Descriptor instead.
+func (*GetRoutingPrefixesRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_novanet_proto_rawDescGZIP(), []int{79}
+}
+
+type GetRoutingPrefixesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Prefixes      []*RoutingPrefixInfo   `protobuf:"bytes,1,rep,name=prefixes,proto3" json:"prefixes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetRoutingPrefixesResponse) Reset() {
+	*x = GetRoutingPrefixesResponse{}
+	mi := &file_api_v1_novanet_proto_msgTypes[80]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetRoutingPrefixesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetRoutingPrefixesResponse) ProtoMessage() {}
+
+func (x *GetRoutingPrefixesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_novanet_proto_msgTypes[80]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetRoutingPrefixesResponse.ProtoReflect.Descriptor instead.
+func (*GetRoutingPrefixesResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_novanet_proto_rawDescGZIP(), []int{80}
+}
+
+func (x *GetRoutingPrefixesResponse) GetPrefixes() []*RoutingPrefixInfo {
+	if x != nil {
+		return x.Prefixes
+	}
+	return nil
+}
+
+type RoutingPrefixInfo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Prefix        string                 `protobuf:"bytes,1,opt,name=prefix,proto3" json:"prefix,omitempty"`     // e.g., "10.42.0.0/24"
+	Protocol      string                 `protobuf:"bytes,2,opt,name=protocol,proto3" json:"protocol,omitempty"` // "bgp" or "ospf"
+	State         string                 `protobuf:"bytes,3,opt,name=state,proto3" json:"state,omitempty"`       // "advertised", "received"
+	Owner         string                 `protobuf:"bytes,4,opt,name=owner,proto3" json:"owner,omitempty"`       // Intent owner
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RoutingPrefixInfo) Reset() {
+	*x = RoutingPrefixInfo{}
+	mi := &file_api_v1_novanet_proto_msgTypes[81]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RoutingPrefixInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RoutingPrefixInfo) ProtoMessage() {}
+
+func (x *RoutingPrefixInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_novanet_proto_msgTypes[81]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RoutingPrefixInfo.ProtoReflect.Descriptor instead.
+func (*RoutingPrefixInfo) Descriptor() ([]byte, []int) {
+	return file_api_v1_novanet_proto_rawDescGZIP(), []int{81}
+}
+
+func (x *RoutingPrefixInfo) GetPrefix() string {
+	if x != nil {
+		return x.Prefix
+	}
+	return ""
+}
+
+func (x *RoutingPrefixInfo) GetProtocol() string {
+	if x != nil {
+		return x.Protocol
+	}
+	return ""
+}
+
+func (x *RoutingPrefixInfo) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *RoutingPrefixInfo) GetOwner() string {
+	if x != nil {
+		return x.Owner
+	}
+	return ""
+}
+
+type GetRoutingBFDSessionsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetRoutingBFDSessionsRequest) Reset() {
+	*x = GetRoutingBFDSessionsRequest{}
+	mi := &file_api_v1_novanet_proto_msgTypes[82]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetRoutingBFDSessionsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetRoutingBFDSessionsRequest) ProtoMessage() {}
+
+func (x *GetRoutingBFDSessionsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_novanet_proto_msgTypes[82]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetRoutingBFDSessionsRequest.ProtoReflect.Descriptor instead.
+func (*GetRoutingBFDSessionsRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_novanet_proto_rawDescGZIP(), []int{82}
+}
+
+type GetRoutingBFDSessionsResponse struct {
+	state         protoimpl.MessageState   `protogen:"open.v1"`
+	Sessions      []*RoutingBFDSessionInfo `protobuf:"bytes,1,rep,name=sessions,proto3" json:"sessions,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetRoutingBFDSessionsResponse) Reset() {
+	*x = GetRoutingBFDSessionsResponse{}
+	mi := &file_api_v1_novanet_proto_msgTypes[83]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetRoutingBFDSessionsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetRoutingBFDSessionsResponse) ProtoMessage() {}
+
+func (x *GetRoutingBFDSessionsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_novanet_proto_msgTypes[83]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetRoutingBFDSessionsResponse.ProtoReflect.Descriptor instead.
+func (*GetRoutingBFDSessionsResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_novanet_proto_rawDescGZIP(), []int{83}
+}
+
+func (x *GetRoutingBFDSessionsResponse) GetSessions() []*RoutingBFDSessionInfo {
+	if x != nil {
+		return x.Sessions
+	}
+	return nil
+}
+
+type RoutingBFDSessionInfo struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	PeerAddress      string                 `protobuf:"bytes,1,opt,name=peer_address,json=peerAddress,proto3" json:"peer_address,omitempty"`
+	Status           string                 `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"` // "up", "down", "init"
+	Uptime           string                 `protobuf:"bytes,3,opt,name=uptime,proto3" json:"uptime,omitempty"`
+	MinRxMs          uint32                 `protobuf:"varint,4,opt,name=min_rx_ms,json=minRxMs,proto3" json:"min_rx_ms,omitempty"`
+	MinTxMs          uint32                 `protobuf:"varint,5,opt,name=min_tx_ms,json=minTxMs,proto3" json:"min_tx_ms,omitempty"`
+	DetectMultiplier uint32                 `protobuf:"varint,6,opt,name=detect_multiplier,json=detectMultiplier,proto3" json:"detect_multiplier,omitempty"`
+	InterfaceName    string                 `protobuf:"bytes,7,opt,name=interface_name,json=interfaceName,proto3" json:"interface_name,omitempty"`
+	Owner            string                 `protobuf:"bytes,8,opt,name=owner,proto3" json:"owner,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *RoutingBFDSessionInfo) Reset() {
+	*x = RoutingBFDSessionInfo{}
+	mi := &file_api_v1_novanet_proto_msgTypes[84]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RoutingBFDSessionInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RoutingBFDSessionInfo) ProtoMessage() {}
+
+func (x *RoutingBFDSessionInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_novanet_proto_msgTypes[84]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RoutingBFDSessionInfo.ProtoReflect.Descriptor instead.
+func (*RoutingBFDSessionInfo) Descriptor() ([]byte, []int) {
+	return file_api_v1_novanet_proto_rawDescGZIP(), []int{84}
+}
+
+func (x *RoutingBFDSessionInfo) GetPeerAddress() string {
+	if x != nil {
+		return x.PeerAddress
+	}
+	return ""
+}
+
+func (x *RoutingBFDSessionInfo) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *RoutingBFDSessionInfo) GetUptime() string {
+	if x != nil {
+		return x.Uptime
+	}
+	return ""
+}
+
+func (x *RoutingBFDSessionInfo) GetMinRxMs() uint32 {
+	if x != nil {
+		return x.MinRxMs
+	}
+	return 0
+}
+
+func (x *RoutingBFDSessionInfo) GetMinTxMs() uint32 {
+	if x != nil {
+		return x.MinTxMs
+	}
+	return 0
+}
+
+func (x *RoutingBFDSessionInfo) GetDetectMultiplier() uint32 {
+	if x != nil {
+		return x.DetectMultiplier
+	}
+	return 0
+}
+
+func (x *RoutingBFDSessionInfo) GetInterfaceName() string {
+	if x != nil {
+		return x.InterfaceName
+	}
+	return ""
+}
+
+func (x *RoutingBFDSessionInfo) GetOwner() string {
+	if x != nil {
+		return x.Owner
+	}
+	return ""
+}
+
+type GetRoutingOSPFNeighborsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetRoutingOSPFNeighborsRequest) Reset() {
+	*x = GetRoutingOSPFNeighborsRequest{}
+	mi := &file_api_v1_novanet_proto_msgTypes[85]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetRoutingOSPFNeighborsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetRoutingOSPFNeighborsRequest) ProtoMessage() {}
+
+func (x *GetRoutingOSPFNeighborsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_novanet_proto_msgTypes[85]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetRoutingOSPFNeighborsRequest.ProtoReflect.Descriptor instead.
+func (*GetRoutingOSPFNeighborsRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_novanet_proto_rawDescGZIP(), []int{85}
+}
+
+type GetRoutingOSPFNeighborsResponse struct {
+	state         protoimpl.MessageState     `protogen:"open.v1"`
+	Neighbors     []*RoutingOSPFNeighborInfo `protobuf:"bytes,1,rep,name=neighbors,proto3" json:"neighbors,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetRoutingOSPFNeighborsResponse) Reset() {
+	*x = GetRoutingOSPFNeighborsResponse{}
+	mi := &file_api_v1_novanet_proto_msgTypes[86]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetRoutingOSPFNeighborsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetRoutingOSPFNeighborsResponse) ProtoMessage() {}
+
+func (x *GetRoutingOSPFNeighborsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_novanet_proto_msgTypes[86]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetRoutingOSPFNeighborsResponse.ProtoReflect.Descriptor instead.
+func (*GetRoutingOSPFNeighborsResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_novanet_proto_rawDescGZIP(), []int{86}
+}
+
+func (x *GetRoutingOSPFNeighborsResponse) GetNeighbors() []*RoutingOSPFNeighborInfo {
+	if x != nil {
+		return x.Neighbors
+	}
+	return nil
+}
+
+type RoutingOSPFNeighborInfo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NeighborId    string                 `protobuf:"bytes,1,opt,name=neighbor_id,json=neighborId,proto3" json:"neighbor_id,omitempty"`
+	Address       string                 `protobuf:"bytes,2,opt,name=address,proto3" json:"address,omitempty"`
+	InterfaceName string                 `protobuf:"bytes,3,opt,name=interface_name,json=interfaceName,proto3" json:"interface_name,omitempty"`
+	State         string                 `protobuf:"bytes,4,opt,name=state,proto3" json:"state,omitempty"` // "Full", "2-Way", "Init", etc.
+	Owner         string                 `protobuf:"bytes,5,opt,name=owner,proto3" json:"owner,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RoutingOSPFNeighborInfo) Reset() {
+	*x = RoutingOSPFNeighborInfo{}
+	mi := &file_api_v1_novanet_proto_msgTypes[87]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RoutingOSPFNeighborInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RoutingOSPFNeighborInfo) ProtoMessage() {}
+
+func (x *RoutingOSPFNeighborInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_novanet_proto_msgTypes[87]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RoutingOSPFNeighborInfo.ProtoReflect.Descriptor instead.
+func (*RoutingOSPFNeighborInfo) Descriptor() ([]byte, []int) {
+	return file_api_v1_novanet_proto_rawDescGZIP(), []int{87}
+}
+
+func (x *RoutingOSPFNeighborInfo) GetNeighborId() string {
+	if x != nil {
+		return x.NeighborId
+	}
+	return ""
+}
+
+func (x *RoutingOSPFNeighborInfo) GetAddress() string {
+	if x != nil {
+		return x.Address
+	}
+	return ""
+}
+
+func (x *RoutingOSPFNeighborInfo) GetInterfaceName() string {
+	if x != nil {
+		return x.InterfaceName
+	}
+	return ""
+}
+
+func (x *RoutingOSPFNeighborInfo) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *RoutingOSPFNeighborInfo) GetOwner() string {
+	if x != nil {
+		return x.Owner
+	}
+	return ""
+}
+
+type StreamRoutingEventsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	OwnerFilter   string                 `protobuf:"bytes,1,opt,name=owner_filter,json=ownerFilter,proto3" json:"owner_filter,omitempty"` // Optional: filter by owner name.
+	EventTypes    []string               `protobuf:"bytes,2,rep,name=event_types,json=eventTypes,proto3" json:"event_types,omitempty"`    // Optional: filter by event type names.
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StreamRoutingEventsRequest) Reset() {
+	*x = StreamRoutingEventsRequest{}
+	mi := &file_api_v1_novanet_proto_msgTypes[88]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StreamRoutingEventsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StreamRoutingEventsRequest) ProtoMessage() {}
+
+func (x *StreamRoutingEventsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_novanet_proto_msgTypes[88]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StreamRoutingEventsRequest.ProtoReflect.Descriptor instead.
+func (*StreamRoutingEventsRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_novanet_proto_rawDescGZIP(), []int{88}
+}
+
+func (x *StreamRoutingEventsRequest) GetOwnerFilter() string {
+	if x != nil {
+		return x.OwnerFilter
+	}
+	return ""
+}
+
+func (x *StreamRoutingEventsRequest) GetEventTypes() []string {
+	if x != nil {
+		return x.EventTypes
+	}
+	return nil
+}
+
+type RoutingEvent struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TimestampNs   int64                  `protobuf:"varint,1,opt,name=timestamp_ns,json=timestampNs,proto3" json:"timestamp_ns,omitempty"`
+	EventType     string                 `protobuf:"bytes,2,opt,name=event_type,json=eventType,proto3" json:"event_type,omitempty"` // "peer_up", "peer_down", "bfd_up", etc.
+	Owner         string                 `protobuf:"bytes,3,opt,name=owner,proto3" json:"owner,omitempty"`
+	Detail        string                 `protobuf:"bytes,4,opt,name=detail,proto3" json:"detail,omitempty"`
+	Metadata      map[string]string      `protobuf:"bytes,5,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RoutingEvent) Reset() {
+	*x = RoutingEvent{}
+	mi := &file_api_v1_novanet_proto_msgTypes[89]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RoutingEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RoutingEvent) ProtoMessage() {}
+
+func (x *RoutingEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_novanet_proto_msgTypes[89]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RoutingEvent.ProtoReflect.Descriptor instead.
+func (*RoutingEvent) Descriptor() ([]byte, []int) {
+	return file_api_v1_novanet_proto_rawDescGZIP(), []int{89}
+}
+
+func (x *RoutingEvent) GetTimestampNs() int64 {
+	if x != nil {
+		return x.TimestampNs
+	}
+	return 0
+}
+
+func (x *RoutingEvent) GetEventType() string {
+	if x != nil {
+		return x.EventType
+	}
+	return ""
+}
+
+func (x *RoutingEvent) GetOwner() string {
+	if x != nil {
+		return x.Owner
+	}
+	return ""
+}
+
+func (x *RoutingEvent) GetDetail() string {
+	if x != nil {
+		return x.Detail
+	}
+	return ""
+}
+
+func (x *RoutingEvent) GetMetadata() map[string]string {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
 var File_api_v1_novanet_proto protoreflect.FileDescriptor
 
 const file_api_v1_novanet_proto_rawDesc = "" +
@@ -5118,7 +5934,68 @@ const file_api_v1_novanet_proto_rawDesc = "" +
 	"\x11AttachXDPResponse\"9\n" +
 	"\x10DetachXDPRequest\x12%\n" +
 	"\x0einterface_name\x18\x01 \x01(\tR\rinterfaceName\"\x13\n" +
-	"\x11DetachXDPResponse*;\n" +
+	"\x11DetachXDPResponse\"\x18\n" +
+	"\x16GetRoutingPeersRequest\"L\n" +
+	"\x17GetRoutingPeersResponse\x121\n" +
+	"\x05peers\x18\x01 \x03(\v2\x1b.novanet.v1.RoutingPeerInfoR\x05peers\"\xee\x02\n" +
+	"\x0fRoutingPeerInfo\x12)\n" +
+	"\x10neighbor_address\x18\x01 \x01(\tR\x0fneighborAddress\x12\x1b\n" +
+	"\tremote_as\x18\x02 \x01(\rR\bremoteAs\x12\x14\n" +
+	"\x05state\x18\x03 \x01(\tR\x05state\x12\x16\n" +
+	"\x06uptime\x18\x04 \x01(\tR\x06uptime\x12+\n" +
+	"\x11prefixes_received\x18\x05 \x01(\rR\x10prefixesReceived\x12#\n" +
+	"\rprefixes_sent\x18\x06 \x01(\rR\fprefixesSent\x12 \n" +
+	"\vdescription\x18\a \x01(\tR\vdescription\x12!\n" +
+	"\fmsg_received\x18\b \x01(\rR\vmsgReceived\x12\x19\n" +
+	"\bmsg_sent\x18\t \x01(\rR\amsgSent\x12\x1d\n" +
+	"\n" +
+	"bfd_status\x18\n" +
+	" \x01(\tR\tbfdStatus\x12\x14\n" +
+	"\x05owner\x18\v \x01(\tR\x05owner\"\x1b\n" +
+	"\x19GetRoutingPrefixesRequest\"W\n" +
+	"\x1aGetRoutingPrefixesResponse\x129\n" +
+	"\bprefixes\x18\x01 \x03(\v2\x1d.novanet.v1.RoutingPrefixInfoR\bprefixes\"s\n" +
+	"\x11RoutingPrefixInfo\x12\x16\n" +
+	"\x06prefix\x18\x01 \x01(\tR\x06prefix\x12\x1a\n" +
+	"\bprotocol\x18\x02 \x01(\tR\bprotocol\x12\x14\n" +
+	"\x05state\x18\x03 \x01(\tR\x05state\x12\x14\n" +
+	"\x05owner\x18\x04 \x01(\tR\x05owner\"\x1e\n" +
+	"\x1cGetRoutingBFDSessionsRequest\"^\n" +
+	"\x1dGetRoutingBFDSessionsResponse\x12=\n" +
+	"\bsessions\x18\x01 \x03(\v2!.novanet.v1.RoutingBFDSessionInfoR\bsessions\"\x8c\x02\n" +
+	"\x15RoutingBFDSessionInfo\x12!\n" +
+	"\fpeer_address\x18\x01 \x01(\tR\vpeerAddress\x12\x16\n" +
+	"\x06status\x18\x02 \x01(\tR\x06status\x12\x16\n" +
+	"\x06uptime\x18\x03 \x01(\tR\x06uptime\x12\x1a\n" +
+	"\tmin_rx_ms\x18\x04 \x01(\rR\aminRxMs\x12\x1a\n" +
+	"\tmin_tx_ms\x18\x05 \x01(\rR\aminTxMs\x12+\n" +
+	"\x11detect_multiplier\x18\x06 \x01(\rR\x10detectMultiplier\x12%\n" +
+	"\x0einterface_name\x18\a \x01(\tR\rinterfaceName\x12\x14\n" +
+	"\x05owner\x18\b \x01(\tR\x05owner\" \n" +
+	"\x1eGetRoutingOSPFNeighborsRequest\"d\n" +
+	"\x1fGetRoutingOSPFNeighborsResponse\x12A\n" +
+	"\tneighbors\x18\x01 \x03(\v2#.novanet.v1.RoutingOSPFNeighborInfoR\tneighbors\"\xa7\x01\n" +
+	"\x17RoutingOSPFNeighborInfo\x12\x1f\n" +
+	"\vneighbor_id\x18\x01 \x01(\tR\n" +
+	"neighborId\x12\x18\n" +
+	"\aaddress\x18\x02 \x01(\tR\aaddress\x12%\n" +
+	"\x0einterface_name\x18\x03 \x01(\tR\rinterfaceName\x12\x14\n" +
+	"\x05state\x18\x04 \x01(\tR\x05state\x12\x14\n" +
+	"\x05owner\x18\x05 \x01(\tR\x05owner\"`\n" +
+	"\x1aStreamRoutingEventsRequest\x12!\n" +
+	"\fowner_filter\x18\x01 \x01(\tR\vownerFilter\x12\x1f\n" +
+	"\vevent_types\x18\x02 \x03(\tR\n" +
+	"eventTypes\"\xff\x01\n" +
+	"\fRoutingEvent\x12!\n" +
+	"\ftimestamp_ns\x18\x01 \x01(\x03R\vtimestampNs\x12\x1d\n" +
+	"\n" +
+	"event_type\x18\x02 \x01(\tR\teventType\x12\x14\n" +
+	"\x05owner\x18\x03 \x01(\tR\x05owner\x12\x16\n" +
+	"\x06detail\x18\x04 \x01(\tR\x06detail\x12B\n" +
+	"\bmetadata\x18\x05 \x03(\v2&.novanet.v1.RoutingEvent.MetadataEntryR\bmetadata\x1a;\n" +
+	"\rMetadataEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01*;\n" +
 	"\tIPVersion\x12\x1a\n" +
 	"\x16IP_VERSION_UNSPECIFIED\x10\x00\x12\b\n" +
 	"\x04IPv4\x10\x01\x12\b\n" +
@@ -5177,7 +6054,7 @@ const file_api_v1_novanet_proto_rawDesc = "" +
 	"\tAttachXDP\x12\x1c.novanet.v1.AttachXDPRequest\x1a\x1d.novanet.v1.AttachXDPResponse\x12H\n" +
 	"\tDetachXDP\x12\x1c.novanet.v1.DetachXDPRequest\x1a\x1d.novanet.v1.DetachXDPResponse\x12F\n" +
 	"\vStreamFlows\x12\x1e.novanet.v1.StreamFlowsRequest\x1a\x15.novanet.v1.FlowEvent0\x01\x12c\n" +
-	"\x12GetDataplaneStatus\x12%.novanet.v1.GetDataplaneStatusRequest\x1a&.novanet.v1.GetDataplaneStatusResponse2\xef\x05\n" +
+	"\x12GetDataplaneStatus\x12%.novanet.v1.GetDataplaneStatusRequest\x1a&.novanet.v1.GetDataplaneStatusResponse2\xed\t\n" +
 	"\fAgentControl\x12?\n" +
 	"\x06AddPod\x12\x19.novanet.v1.AddPodRequest\x1a\x1a.novanet.v1.AddPodResponse\x12?\n" +
 	"\x06DelPod\x12\x19.novanet.v1.DelPodRequest\x1a\x1a.novanet.v1.DelPodResponse\x12W\n" +
@@ -5187,7 +6064,12 @@ const file_api_v1_novanet_proto_rawDesc = "" +
 	"\x0eListIdentities\x12!.novanet.v1.ListIdentitiesRequest\x1a\".novanet.v1.ListIdentitiesResponse\x12N\n" +
 	"\vListTunnels\x12\x1e.novanet.v1.ListTunnelsRequest\x1a\x1f.novanet.v1.ListTunnelsResponse\x12c\n" +
 	"\x12ListEgressPolicies\x12%.novanet.v1.ListEgressPoliciesRequest\x1a&.novanet.v1.ListEgressPoliciesResponse\x12Q\n" +
-	"\fListServices\x12\x1f.novanet.v1.ListServicesRequest\x1a .novanet.v1.ListServicesResponseB$Z\"github.com/azrtydxb/novanet/api/v1b\x06proto3"
+	"\fListServices\x12\x1f.novanet.v1.ListServicesRequest\x1a .novanet.v1.ListServicesResponse\x12Z\n" +
+	"\x0fGetRoutingPeers\x12\".novanet.v1.GetRoutingPeersRequest\x1a#.novanet.v1.GetRoutingPeersResponse\x12c\n" +
+	"\x12GetRoutingPrefixes\x12%.novanet.v1.GetRoutingPrefixesRequest\x1a&.novanet.v1.GetRoutingPrefixesResponse\x12l\n" +
+	"\x15GetRoutingBFDSessions\x12(.novanet.v1.GetRoutingBFDSessionsRequest\x1a).novanet.v1.GetRoutingBFDSessionsResponse\x12r\n" +
+	"\x17GetRoutingOSPFNeighbors\x12*.novanet.v1.GetRoutingOSPFNeighborsRequest\x1a+.novanet.v1.GetRoutingOSPFNeighborsResponse\x12Y\n" +
+	"\x13StreamRoutingEvents\x12&.novanet.v1.StreamRoutingEventsRequest\x1a\x18.novanet.v1.RoutingEvent0\x01B$Z\"github.com/azrtydxb/novanet/api/v1b\x06proto3"
 
 var (
 	file_api_v1_novanet_proto_rawDescOnce sync.Once
@@ -5202,200 +6084,230 @@ func file_api_v1_novanet_proto_rawDescGZIP() []byte {
 }
 
 var file_api_v1_novanet_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
-var file_api_v1_novanet_proto_msgTypes = make([]protoimpl.MessageInfo, 80)
+var file_api_v1_novanet_proto_msgTypes = make([]protoimpl.MessageInfo, 95)
 var file_api_v1_novanet_proto_goTypes = []any{
-	(IPVersion)(0),                     // 0: novanet.v1.IPVersion
-	(PolicyAction)(0),                  // 1: novanet.v1.PolicyAction
-	(AttachType)(0),                    // 2: novanet.v1.AttachType
-	(DropReason)(0),                    // 3: novanet.v1.DropReason
-	(EgressAction)(0),                  // 4: novanet.v1.EgressAction
-	(ServiceFlag)(0),                   // 5: novanet.v1.ServiceFlag
-	(HostPolicyDirection)(0),           // 6: novanet.v1.HostPolicyDirection
-	(XDPMode)(0),                       // 7: novanet.v1.XDPMode
-	(*UpsertEndpointRequest)(nil),      // 8: novanet.v1.UpsertEndpointRequest
-	(*UpsertEndpointResponse)(nil),     // 9: novanet.v1.UpsertEndpointResponse
-	(*DeleteEndpointRequest)(nil),      // 10: novanet.v1.DeleteEndpointRequest
-	(*DeleteEndpointResponse)(nil),     // 11: novanet.v1.DeleteEndpointResponse
-	(*UpsertPolicyRequest)(nil),        // 12: novanet.v1.UpsertPolicyRequest
-	(*UpsertPolicyResponse)(nil),       // 13: novanet.v1.UpsertPolicyResponse
-	(*DeletePolicyRequest)(nil),        // 14: novanet.v1.DeletePolicyRequest
-	(*DeletePolicyResponse)(nil),       // 15: novanet.v1.DeletePolicyResponse
-	(*SyncPoliciesRequest)(nil),        // 16: novanet.v1.SyncPoliciesRequest
-	(*PolicyEntry)(nil),                // 17: novanet.v1.PolicyEntry
-	(*SyncPoliciesResponse)(nil),       // 18: novanet.v1.SyncPoliciesResponse
-	(*UpsertTunnelRequest)(nil),        // 19: novanet.v1.UpsertTunnelRequest
-	(*UpsertTunnelResponse)(nil),       // 20: novanet.v1.UpsertTunnelResponse
-	(*DeleteTunnelRequest)(nil),        // 21: novanet.v1.DeleteTunnelRequest
-	(*DeleteTunnelResponse)(nil),       // 22: novanet.v1.DeleteTunnelResponse
-	(*UpdateConfigRequest)(nil),        // 23: novanet.v1.UpdateConfigRequest
-	(*UpdateConfigResponse)(nil),       // 24: novanet.v1.UpdateConfigResponse
-	(*AttachProgramRequest)(nil),       // 25: novanet.v1.AttachProgramRequest
-	(*AttachProgramResponse)(nil),      // 26: novanet.v1.AttachProgramResponse
-	(*DetachProgramRequest)(nil),       // 27: novanet.v1.DetachProgramRequest
-	(*DetachProgramResponse)(nil),      // 28: novanet.v1.DetachProgramResponse
-	(*StreamFlowsRequest)(nil),         // 29: novanet.v1.StreamFlowsRequest
-	(*FlowEvent)(nil),                  // 30: novanet.v1.FlowEvent
-	(*GetDataplaneStatusRequest)(nil),  // 31: novanet.v1.GetDataplaneStatusRequest
-	(*GetDataplaneStatusResponse)(nil), // 32: novanet.v1.GetDataplaneStatusResponse
-	(*AttachedProgram)(nil),            // 33: novanet.v1.AttachedProgram
-	(*AddPodRequest)(nil),              // 34: novanet.v1.AddPodRequest
-	(*AddPodResponse)(nil),             // 35: novanet.v1.AddPodResponse
-	(*DelPodRequest)(nil),              // 36: novanet.v1.DelPodRequest
-	(*DelPodResponse)(nil),             // 37: novanet.v1.DelPodResponse
-	(*GetAgentStatusRequest)(nil),      // 38: novanet.v1.GetAgentStatusRequest
-	(*GetAgentStatusResponse)(nil),     // 39: novanet.v1.GetAgentStatusResponse
-	(*DataplaneStatusInfo)(nil),        // 40: novanet.v1.DataplaneStatusInfo
-	(*StreamAgentFlowsRequest)(nil),    // 41: novanet.v1.StreamAgentFlowsRequest
-	(*UpsertEgressPolicyRequest)(nil),  // 42: novanet.v1.UpsertEgressPolicyRequest
-	(*UpsertEgressPolicyResponse)(nil), // 43: novanet.v1.UpsertEgressPolicyResponse
-	(*DeleteEgressPolicyRequest)(nil),  // 44: novanet.v1.DeleteEgressPolicyRequest
-	(*DeleteEgressPolicyResponse)(nil), // 45: novanet.v1.DeleteEgressPolicyResponse
-	(*UpsertServiceRequest)(nil),       // 46: novanet.v1.UpsertServiceRequest
-	(*UpsertServiceResponse)(nil),      // 47: novanet.v1.UpsertServiceResponse
-	(*DeleteServiceRequest)(nil),       // 48: novanet.v1.DeleteServiceRequest
-	(*DeleteServiceResponse)(nil),      // 49: novanet.v1.DeleteServiceResponse
-	(*UpsertBackendsRequest)(nil),      // 50: novanet.v1.UpsertBackendsRequest
-	(*BackendEntry)(nil),               // 51: novanet.v1.BackendEntry
-	(*UpsertBackendsResponse)(nil),     // 52: novanet.v1.UpsertBackendsResponse
-	(*SyncServicesRequest)(nil),        // 53: novanet.v1.SyncServicesRequest
-	(*ServiceEntry)(nil),               // 54: novanet.v1.ServiceEntry
-	(*SyncServicesResponse)(nil),       // 55: novanet.v1.SyncServicesResponse
-	(*UpsertMaglevTableRequest)(nil),   // 56: novanet.v1.UpsertMaglevTableRequest
-	(*UpsertMaglevTableResponse)(nil),  // 57: novanet.v1.UpsertMaglevTableResponse
-	(*ListPoliciesRequest)(nil),        // 58: novanet.v1.ListPoliciesRequest
-	(*ListPoliciesResponse)(nil),       // 59: novanet.v1.ListPoliciesResponse
-	(*PolicyRuleInfo)(nil),             // 60: novanet.v1.PolicyRuleInfo
-	(*ListIdentitiesRequest)(nil),      // 61: novanet.v1.ListIdentitiesRequest
-	(*ListIdentitiesResponse)(nil),     // 62: novanet.v1.ListIdentitiesResponse
-	(*IdentityInfo)(nil),               // 63: novanet.v1.IdentityInfo
-	(*ListTunnelsRequest)(nil),         // 64: novanet.v1.ListTunnelsRequest
-	(*ListTunnelsResponse)(nil),        // 65: novanet.v1.ListTunnelsResponse
-	(*TunnelInfoMsg)(nil),              // 66: novanet.v1.TunnelInfoMsg
-	(*ListEgressPoliciesRequest)(nil),  // 67: novanet.v1.ListEgressPoliciesRequest
-	(*ListEgressPoliciesResponse)(nil), // 68: novanet.v1.ListEgressPoliciesResponse
-	(*EgressPolicyInfo)(nil),           // 69: novanet.v1.EgressPolicyInfo
-	(*ListServicesRequest)(nil),        // 70: novanet.v1.ListServicesRequest
-	(*ListServicesResponse)(nil),       // 71: novanet.v1.ListServicesResponse
-	(*ServiceInfo)(nil),                // 72: novanet.v1.ServiceInfo
-	(*UpsertHostPolicyRequest)(nil),    // 73: novanet.v1.UpsertHostPolicyRequest
-	(*UpsertHostPolicyResponse)(nil),   // 74: novanet.v1.UpsertHostPolicyResponse
-	(*DeleteHostPolicyRequest)(nil),    // 75: novanet.v1.DeleteHostPolicyRequest
-	(*DeleteHostPolicyResponse)(nil),   // 76: novanet.v1.DeleteHostPolicyResponse
-	(*SyncHostPoliciesRequest)(nil),    // 77: novanet.v1.SyncHostPoliciesRequest
-	(*HostPolicyEntry)(nil),            // 78: novanet.v1.HostPolicyEntry
-	(*SyncHostPoliciesResponse)(nil),   // 79: novanet.v1.SyncHostPoliciesResponse
-	(*AttachXDPRequest)(nil),           // 80: novanet.v1.AttachXDPRequest
-	(*AttachXDPResponse)(nil),          // 81: novanet.v1.AttachXDPResponse
-	(*DetachXDPRequest)(nil),           // 82: novanet.v1.DetachXDPRequest
-	(*DetachXDPResponse)(nil),          // 83: novanet.v1.DetachXDPResponse
-	nil,                                // 84: novanet.v1.UpdateConfigRequest.EntriesEntry
-	nil,                                // 85: novanet.v1.GetDataplaneStatusResponse.DropCountersEntry
-	nil,                                // 86: novanet.v1.AddPodRequest.LabelsEntry
-	nil,                                // 87: novanet.v1.IdentityInfo.LabelsEntry
+	(IPVersion)(0),                          // 0: novanet.v1.IPVersion
+	(PolicyAction)(0),                       // 1: novanet.v1.PolicyAction
+	(AttachType)(0),                         // 2: novanet.v1.AttachType
+	(DropReason)(0),                         // 3: novanet.v1.DropReason
+	(EgressAction)(0),                       // 4: novanet.v1.EgressAction
+	(ServiceFlag)(0),                        // 5: novanet.v1.ServiceFlag
+	(HostPolicyDirection)(0),                // 6: novanet.v1.HostPolicyDirection
+	(XDPMode)(0),                            // 7: novanet.v1.XDPMode
+	(*UpsertEndpointRequest)(nil),           // 8: novanet.v1.UpsertEndpointRequest
+	(*UpsertEndpointResponse)(nil),          // 9: novanet.v1.UpsertEndpointResponse
+	(*DeleteEndpointRequest)(nil),           // 10: novanet.v1.DeleteEndpointRequest
+	(*DeleteEndpointResponse)(nil),          // 11: novanet.v1.DeleteEndpointResponse
+	(*UpsertPolicyRequest)(nil),             // 12: novanet.v1.UpsertPolicyRequest
+	(*UpsertPolicyResponse)(nil),            // 13: novanet.v1.UpsertPolicyResponse
+	(*DeletePolicyRequest)(nil),             // 14: novanet.v1.DeletePolicyRequest
+	(*DeletePolicyResponse)(nil),            // 15: novanet.v1.DeletePolicyResponse
+	(*SyncPoliciesRequest)(nil),             // 16: novanet.v1.SyncPoliciesRequest
+	(*PolicyEntry)(nil),                     // 17: novanet.v1.PolicyEntry
+	(*SyncPoliciesResponse)(nil),            // 18: novanet.v1.SyncPoliciesResponse
+	(*UpsertTunnelRequest)(nil),             // 19: novanet.v1.UpsertTunnelRequest
+	(*UpsertTunnelResponse)(nil),            // 20: novanet.v1.UpsertTunnelResponse
+	(*DeleteTunnelRequest)(nil),             // 21: novanet.v1.DeleteTunnelRequest
+	(*DeleteTunnelResponse)(nil),            // 22: novanet.v1.DeleteTunnelResponse
+	(*UpdateConfigRequest)(nil),             // 23: novanet.v1.UpdateConfigRequest
+	(*UpdateConfigResponse)(nil),            // 24: novanet.v1.UpdateConfigResponse
+	(*AttachProgramRequest)(nil),            // 25: novanet.v1.AttachProgramRequest
+	(*AttachProgramResponse)(nil),           // 26: novanet.v1.AttachProgramResponse
+	(*DetachProgramRequest)(nil),            // 27: novanet.v1.DetachProgramRequest
+	(*DetachProgramResponse)(nil),           // 28: novanet.v1.DetachProgramResponse
+	(*StreamFlowsRequest)(nil),              // 29: novanet.v1.StreamFlowsRequest
+	(*FlowEvent)(nil),                       // 30: novanet.v1.FlowEvent
+	(*GetDataplaneStatusRequest)(nil),       // 31: novanet.v1.GetDataplaneStatusRequest
+	(*GetDataplaneStatusResponse)(nil),      // 32: novanet.v1.GetDataplaneStatusResponse
+	(*AttachedProgram)(nil),                 // 33: novanet.v1.AttachedProgram
+	(*AddPodRequest)(nil),                   // 34: novanet.v1.AddPodRequest
+	(*AddPodResponse)(nil),                  // 35: novanet.v1.AddPodResponse
+	(*DelPodRequest)(nil),                   // 36: novanet.v1.DelPodRequest
+	(*DelPodResponse)(nil),                  // 37: novanet.v1.DelPodResponse
+	(*GetAgentStatusRequest)(nil),           // 38: novanet.v1.GetAgentStatusRequest
+	(*GetAgentStatusResponse)(nil),          // 39: novanet.v1.GetAgentStatusResponse
+	(*DataplaneStatusInfo)(nil),             // 40: novanet.v1.DataplaneStatusInfo
+	(*StreamAgentFlowsRequest)(nil),         // 41: novanet.v1.StreamAgentFlowsRequest
+	(*UpsertEgressPolicyRequest)(nil),       // 42: novanet.v1.UpsertEgressPolicyRequest
+	(*UpsertEgressPolicyResponse)(nil),      // 43: novanet.v1.UpsertEgressPolicyResponse
+	(*DeleteEgressPolicyRequest)(nil),       // 44: novanet.v1.DeleteEgressPolicyRequest
+	(*DeleteEgressPolicyResponse)(nil),      // 45: novanet.v1.DeleteEgressPolicyResponse
+	(*UpsertServiceRequest)(nil),            // 46: novanet.v1.UpsertServiceRequest
+	(*UpsertServiceResponse)(nil),           // 47: novanet.v1.UpsertServiceResponse
+	(*DeleteServiceRequest)(nil),            // 48: novanet.v1.DeleteServiceRequest
+	(*DeleteServiceResponse)(nil),           // 49: novanet.v1.DeleteServiceResponse
+	(*UpsertBackendsRequest)(nil),           // 50: novanet.v1.UpsertBackendsRequest
+	(*BackendEntry)(nil),                    // 51: novanet.v1.BackendEntry
+	(*UpsertBackendsResponse)(nil),          // 52: novanet.v1.UpsertBackendsResponse
+	(*SyncServicesRequest)(nil),             // 53: novanet.v1.SyncServicesRequest
+	(*ServiceEntry)(nil),                    // 54: novanet.v1.ServiceEntry
+	(*SyncServicesResponse)(nil),            // 55: novanet.v1.SyncServicesResponse
+	(*UpsertMaglevTableRequest)(nil),        // 56: novanet.v1.UpsertMaglevTableRequest
+	(*UpsertMaglevTableResponse)(nil),       // 57: novanet.v1.UpsertMaglevTableResponse
+	(*ListPoliciesRequest)(nil),             // 58: novanet.v1.ListPoliciesRequest
+	(*ListPoliciesResponse)(nil),            // 59: novanet.v1.ListPoliciesResponse
+	(*PolicyRuleInfo)(nil),                  // 60: novanet.v1.PolicyRuleInfo
+	(*ListIdentitiesRequest)(nil),           // 61: novanet.v1.ListIdentitiesRequest
+	(*ListIdentitiesResponse)(nil),          // 62: novanet.v1.ListIdentitiesResponse
+	(*IdentityInfo)(nil),                    // 63: novanet.v1.IdentityInfo
+	(*ListTunnelsRequest)(nil),              // 64: novanet.v1.ListTunnelsRequest
+	(*ListTunnelsResponse)(nil),             // 65: novanet.v1.ListTunnelsResponse
+	(*TunnelInfoMsg)(nil),                   // 66: novanet.v1.TunnelInfoMsg
+	(*ListEgressPoliciesRequest)(nil),       // 67: novanet.v1.ListEgressPoliciesRequest
+	(*ListEgressPoliciesResponse)(nil),      // 68: novanet.v1.ListEgressPoliciesResponse
+	(*EgressPolicyInfo)(nil),                // 69: novanet.v1.EgressPolicyInfo
+	(*ListServicesRequest)(nil),             // 70: novanet.v1.ListServicesRequest
+	(*ListServicesResponse)(nil),            // 71: novanet.v1.ListServicesResponse
+	(*ServiceInfo)(nil),                     // 72: novanet.v1.ServiceInfo
+	(*UpsertHostPolicyRequest)(nil),         // 73: novanet.v1.UpsertHostPolicyRequest
+	(*UpsertHostPolicyResponse)(nil),        // 74: novanet.v1.UpsertHostPolicyResponse
+	(*DeleteHostPolicyRequest)(nil),         // 75: novanet.v1.DeleteHostPolicyRequest
+	(*DeleteHostPolicyResponse)(nil),        // 76: novanet.v1.DeleteHostPolicyResponse
+	(*SyncHostPoliciesRequest)(nil),         // 77: novanet.v1.SyncHostPoliciesRequest
+	(*HostPolicyEntry)(nil),                 // 78: novanet.v1.HostPolicyEntry
+	(*SyncHostPoliciesResponse)(nil),        // 79: novanet.v1.SyncHostPoliciesResponse
+	(*AttachXDPRequest)(nil),                // 80: novanet.v1.AttachXDPRequest
+	(*AttachXDPResponse)(nil),               // 81: novanet.v1.AttachXDPResponse
+	(*DetachXDPRequest)(nil),                // 82: novanet.v1.DetachXDPRequest
+	(*DetachXDPResponse)(nil),               // 83: novanet.v1.DetachXDPResponse
+	(*GetRoutingPeersRequest)(nil),          // 84: novanet.v1.GetRoutingPeersRequest
+	(*GetRoutingPeersResponse)(nil),         // 85: novanet.v1.GetRoutingPeersResponse
+	(*RoutingPeerInfo)(nil),                 // 86: novanet.v1.RoutingPeerInfo
+	(*GetRoutingPrefixesRequest)(nil),       // 87: novanet.v1.GetRoutingPrefixesRequest
+	(*GetRoutingPrefixesResponse)(nil),      // 88: novanet.v1.GetRoutingPrefixesResponse
+	(*RoutingPrefixInfo)(nil),               // 89: novanet.v1.RoutingPrefixInfo
+	(*GetRoutingBFDSessionsRequest)(nil),    // 90: novanet.v1.GetRoutingBFDSessionsRequest
+	(*GetRoutingBFDSessionsResponse)(nil),   // 91: novanet.v1.GetRoutingBFDSessionsResponse
+	(*RoutingBFDSessionInfo)(nil),           // 92: novanet.v1.RoutingBFDSessionInfo
+	(*GetRoutingOSPFNeighborsRequest)(nil),  // 93: novanet.v1.GetRoutingOSPFNeighborsRequest
+	(*GetRoutingOSPFNeighborsResponse)(nil), // 94: novanet.v1.GetRoutingOSPFNeighborsResponse
+	(*RoutingOSPFNeighborInfo)(nil),         // 95: novanet.v1.RoutingOSPFNeighborInfo
+	(*StreamRoutingEventsRequest)(nil),      // 96: novanet.v1.StreamRoutingEventsRequest
+	(*RoutingEvent)(nil),                    // 97: novanet.v1.RoutingEvent
+	nil,                                     // 98: novanet.v1.UpdateConfigRequest.EntriesEntry
+	nil,                                     // 99: novanet.v1.GetDataplaneStatusResponse.DropCountersEntry
+	nil,                                     // 100: novanet.v1.AddPodRequest.LabelsEntry
+	nil,                                     // 101: novanet.v1.IdentityInfo.LabelsEntry
+	nil,                                     // 102: novanet.v1.RoutingEvent.MetadataEntry
 }
 var file_api_v1_novanet_proto_depIdxs = []int32{
-	1,  // 0: novanet.v1.UpsertPolicyRequest.action:type_name -> novanet.v1.PolicyAction
-	17, // 1: novanet.v1.SyncPoliciesRequest.policies:type_name -> novanet.v1.PolicyEntry
-	1,  // 2: novanet.v1.PolicyEntry.action:type_name -> novanet.v1.PolicyAction
-	84, // 3: novanet.v1.UpdateConfigRequest.entries:type_name -> novanet.v1.UpdateConfigRequest.EntriesEntry
-	2,  // 4: novanet.v1.AttachProgramRequest.attach_type:type_name -> novanet.v1.AttachType
-	2,  // 5: novanet.v1.DetachProgramRequest.attach_type:type_name -> novanet.v1.AttachType
-	1,  // 6: novanet.v1.FlowEvent.verdict:type_name -> novanet.v1.PolicyAction
-	3,  // 7: novanet.v1.FlowEvent.drop_reason:type_name -> novanet.v1.DropReason
-	0,  // 8: novanet.v1.FlowEvent.ip_version:type_name -> novanet.v1.IPVersion
-	33, // 9: novanet.v1.GetDataplaneStatusResponse.programs:type_name -> novanet.v1.AttachedProgram
-	85, // 10: novanet.v1.GetDataplaneStatusResponse.drop_counters:type_name -> novanet.v1.GetDataplaneStatusResponse.DropCountersEntry
-	86, // 11: novanet.v1.AddPodRequest.labels:type_name -> novanet.v1.AddPodRequest.LabelsEntry
-	40, // 12: novanet.v1.GetAgentStatusResponse.dataplane:type_name -> novanet.v1.DataplaneStatusInfo
-	4,  // 13: novanet.v1.UpsertEgressPolicyRequest.action:type_name -> novanet.v1.EgressAction
-	51, // 14: novanet.v1.UpsertBackendsRequest.backends:type_name -> novanet.v1.BackendEntry
-	54, // 15: novanet.v1.SyncServicesRequest.services:type_name -> novanet.v1.ServiceEntry
-	51, // 16: novanet.v1.SyncServicesRequest.backends:type_name -> novanet.v1.BackendEntry
-	60, // 17: novanet.v1.ListPoliciesResponse.rules:type_name -> novanet.v1.PolicyRuleInfo
-	1,  // 18: novanet.v1.PolicyRuleInfo.action:type_name -> novanet.v1.PolicyAction
-	63, // 19: novanet.v1.ListIdentitiesResponse.identities:type_name -> novanet.v1.IdentityInfo
-	87, // 20: novanet.v1.IdentityInfo.labels:type_name -> novanet.v1.IdentityInfo.LabelsEntry
-	66, // 21: novanet.v1.ListTunnelsResponse.tunnels:type_name -> novanet.v1.TunnelInfoMsg
-	69, // 22: novanet.v1.ListEgressPoliciesResponse.rules:type_name -> novanet.v1.EgressPolicyInfo
-	4,  // 23: novanet.v1.EgressPolicyInfo.action:type_name -> novanet.v1.EgressAction
-	72, // 24: novanet.v1.ListServicesResponse.services:type_name -> novanet.v1.ServiceInfo
-	6,  // 25: novanet.v1.UpsertHostPolicyRequest.direction:type_name -> novanet.v1.HostPolicyDirection
-	1,  // 26: novanet.v1.UpsertHostPolicyRequest.action:type_name -> novanet.v1.PolicyAction
-	78, // 27: novanet.v1.SyncHostPoliciesRequest.policies:type_name -> novanet.v1.HostPolicyEntry
-	6,  // 28: novanet.v1.HostPolicyEntry.direction:type_name -> novanet.v1.HostPolicyDirection
-	1,  // 29: novanet.v1.HostPolicyEntry.action:type_name -> novanet.v1.PolicyAction
-	7,  // 30: novanet.v1.AttachXDPRequest.mode:type_name -> novanet.v1.XDPMode
-	8,  // 31: novanet.v1.DataplaneControl.UpsertEndpoint:input_type -> novanet.v1.UpsertEndpointRequest
-	10, // 32: novanet.v1.DataplaneControl.DeleteEndpoint:input_type -> novanet.v1.DeleteEndpointRequest
-	12, // 33: novanet.v1.DataplaneControl.UpsertPolicy:input_type -> novanet.v1.UpsertPolicyRequest
-	14, // 34: novanet.v1.DataplaneControl.DeletePolicy:input_type -> novanet.v1.DeletePolicyRequest
-	16, // 35: novanet.v1.DataplaneControl.SyncPolicies:input_type -> novanet.v1.SyncPoliciesRequest
-	19, // 36: novanet.v1.DataplaneControl.UpsertTunnel:input_type -> novanet.v1.UpsertTunnelRequest
-	21, // 37: novanet.v1.DataplaneControl.DeleteTunnel:input_type -> novanet.v1.DeleteTunnelRequest
-	23, // 38: novanet.v1.DataplaneControl.UpdateConfig:input_type -> novanet.v1.UpdateConfigRequest
-	25, // 39: novanet.v1.DataplaneControl.AttachProgram:input_type -> novanet.v1.AttachProgramRequest
-	27, // 40: novanet.v1.DataplaneControl.DetachProgram:input_type -> novanet.v1.DetachProgramRequest
-	42, // 41: novanet.v1.DataplaneControl.UpsertEgressPolicy:input_type -> novanet.v1.UpsertEgressPolicyRequest
-	44, // 42: novanet.v1.DataplaneControl.DeleteEgressPolicy:input_type -> novanet.v1.DeleteEgressPolicyRequest
-	46, // 43: novanet.v1.DataplaneControl.UpsertService:input_type -> novanet.v1.UpsertServiceRequest
-	48, // 44: novanet.v1.DataplaneControl.DeleteService:input_type -> novanet.v1.DeleteServiceRequest
-	50, // 45: novanet.v1.DataplaneControl.UpsertBackends:input_type -> novanet.v1.UpsertBackendsRequest
-	53, // 46: novanet.v1.DataplaneControl.SyncServices:input_type -> novanet.v1.SyncServicesRequest
-	56, // 47: novanet.v1.DataplaneControl.UpsertMaglevTable:input_type -> novanet.v1.UpsertMaglevTableRequest
-	73, // 48: novanet.v1.DataplaneControl.UpsertHostPolicy:input_type -> novanet.v1.UpsertHostPolicyRequest
-	75, // 49: novanet.v1.DataplaneControl.DeleteHostPolicy:input_type -> novanet.v1.DeleteHostPolicyRequest
-	77, // 50: novanet.v1.DataplaneControl.SyncHostPolicies:input_type -> novanet.v1.SyncHostPoliciesRequest
-	80, // 51: novanet.v1.DataplaneControl.AttachXDP:input_type -> novanet.v1.AttachXDPRequest
-	82, // 52: novanet.v1.DataplaneControl.DetachXDP:input_type -> novanet.v1.DetachXDPRequest
-	29, // 53: novanet.v1.DataplaneControl.StreamFlows:input_type -> novanet.v1.StreamFlowsRequest
-	31, // 54: novanet.v1.DataplaneControl.GetDataplaneStatus:input_type -> novanet.v1.GetDataplaneStatusRequest
-	34, // 55: novanet.v1.AgentControl.AddPod:input_type -> novanet.v1.AddPodRequest
-	36, // 56: novanet.v1.AgentControl.DelPod:input_type -> novanet.v1.DelPodRequest
-	38, // 57: novanet.v1.AgentControl.GetAgentStatus:input_type -> novanet.v1.GetAgentStatusRequest
-	41, // 58: novanet.v1.AgentControl.StreamAgentFlows:input_type -> novanet.v1.StreamAgentFlowsRequest
-	58, // 59: novanet.v1.AgentControl.ListPolicies:input_type -> novanet.v1.ListPoliciesRequest
-	61, // 60: novanet.v1.AgentControl.ListIdentities:input_type -> novanet.v1.ListIdentitiesRequest
-	64, // 61: novanet.v1.AgentControl.ListTunnels:input_type -> novanet.v1.ListTunnelsRequest
-	67, // 62: novanet.v1.AgentControl.ListEgressPolicies:input_type -> novanet.v1.ListEgressPoliciesRequest
-	70, // 63: novanet.v1.AgentControl.ListServices:input_type -> novanet.v1.ListServicesRequest
-	9,  // 64: novanet.v1.DataplaneControl.UpsertEndpoint:output_type -> novanet.v1.UpsertEndpointResponse
-	11, // 65: novanet.v1.DataplaneControl.DeleteEndpoint:output_type -> novanet.v1.DeleteEndpointResponse
-	13, // 66: novanet.v1.DataplaneControl.UpsertPolicy:output_type -> novanet.v1.UpsertPolicyResponse
-	15, // 67: novanet.v1.DataplaneControl.DeletePolicy:output_type -> novanet.v1.DeletePolicyResponse
-	18, // 68: novanet.v1.DataplaneControl.SyncPolicies:output_type -> novanet.v1.SyncPoliciesResponse
-	20, // 69: novanet.v1.DataplaneControl.UpsertTunnel:output_type -> novanet.v1.UpsertTunnelResponse
-	22, // 70: novanet.v1.DataplaneControl.DeleteTunnel:output_type -> novanet.v1.DeleteTunnelResponse
-	24, // 71: novanet.v1.DataplaneControl.UpdateConfig:output_type -> novanet.v1.UpdateConfigResponse
-	26, // 72: novanet.v1.DataplaneControl.AttachProgram:output_type -> novanet.v1.AttachProgramResponse
-	28, // 73: novanet.v1.DataplaneControl.DetachProgram:output_type -> novanet.v1.DetachProgramResponse
-	43, // 74: novanet.v1.DataplaneControl.UpsertEgressPolicy:output_type -> novanet.v1.UpsertEgressPolicyResponse
-	45, // 75: novanet.v1.DataplaneControl.DeleteEgressPolicy:output_type -> novanet.v1.DeleteEgressPolicyResponse
-	47, // 76: novanet.v1.DataplaneControl.UpsertService:output_type -> novanet.v1.UpsertServiceResponse
-	49, // 77: novanet.v1.DataplaneControl.DeleteService:output_type -> novanet.v1.DeleteServiceResponse
-	52, // 78: novanet.v1.DataplaneControl.UpsertBackends:output_type -> novanet.v1.UpsertBackendsResponse
-	55, // 79: novanet.v1.DataplaneControl.SyncServices:output_type -> novanet.v1.SyncServicesResponse
-	57, // 80: novanet.v1.DataplaneControl.UpsertMaglevTable:output_type -> novanet.v1.UpsertMaglevTableResponse
-	74, // 81: novanet.v1.DataplaneControl.UpsertHostPolicy:output_type -> novanet.v1.UpsertHostPolicyResponse
-	76, // 82: novanet.v1.DataplaneControl.DeleteHostPolicy:output_type -> novanet.v1.DeleteHostPolicyResponse
-	79, // 83: novanet.v1.DataplaneControl.SyncHostPolicies:output_type -> novanet.v1.SyncHostPoliciesResponse
-	81, // 84: novanet.v1.DataplaneControl.AttachXDP:output_type -> novanet.v1.AttachXDPResponse
-	83, // 85: novanet.v1.DataplaneControl.DetachXDP:output_type -> novanet.v1.DetachXDPResponse
-	30, // 86: novanet.v1.DataplaneControl.StreamFlows:output_type -> novanet.v1.FlowEvent
-	32, // 87: novanet.v1.DataplaneControl.GetDataplaneStatus:output_type -> novanet.v1.GetDataplaneStatusResponse
-	35, // 88: novanet.v1.AgentControl.AddPod:output_type -> novanet.v1.AddPodResponse
-	37, // 89: novanet.v1.AgentControl.DelPod:output_type -> novanet.v1.DelPodResponse
-	39, // 90: novanet.v1.AgentControl.GetAgentStatus:output_type -> novanet.v1.GetAgentStatusResponse
-	30, // 91: novanet.v1.AgentControl.StreamAgentFlows:output_type -> novanet.v1.FlowEvent
-	59, // 92: novanet.v1.AgentControl.ListPolicies:output_type -> novanet.v1.ListPoliciesResponse
-	62, // 93: novanet.v1.AgentControl.ListIdentities:output_type -> novanet.v1.ListIdentitiesResponse
-	65, // 94: novanet.v1.AgentControl.ListTunnels:output_type -> novanet.v1.ListTunnelsResponse
-	68, // 95: novanet.v1.AgentControl.ListEgressPolicies:output_type -> novanet.v1.ListEgressPoliciesResponse
-	71, // 96: novanet.v1.AgentControl.ListServices:output_type -> novanet.v1.ListServicesResponse
-	64, // [64:97] is the sub-list for method output_type
-	31, // [31:64] is the sub-list for method input_type
-	31, // [31:31] is the sub-list for extension type_name
-	31, // [31:31] is the sub-list for extension extendee
-	0,  // [0:31] is the sub-list for field type_name
+	1,   // 0: novanet.v1.UpsertPolicyRequest.action:type_name -> novanet.v1.PolicyAction
+	17,  // 1: novanet.v1.SyncPoliciesRequest.policies:type_name -> novanet.v1.PolicyEntry
+	1,   // 2: novanet.v1.PolicyEntry.action:type_name -> novanet.v1.PolicyAction
+	98,  // 3: novanet.v1.UpdateConfigRequest.entries:type_name -> novanet.v1.UpdateConfigRequest.EntriesEntry
+	2,   // 4: novanet.v1.AttachProgramRequest.attach_type:type_name -> novanet.v1.AttachType
+	2,   // 5: novanet.v1.DetachProgramRequest.attach_type:type_name -> novanet.v1.AttachType
+	1,   // 6: novanet.v1.FlowEvent.verdict:type_name -> novanet.v1.PolicyAction
+	3,   // 7: novanet.v1.FlowEvent.drop_reason:type_name -> novanet.v1.DropReason
+	0,   // 8: novanet.v1.FlowEvent.ip_version:type_name -> novanet.v1.IPVersion
+	33,  // 9: novanet.v1.GetDataplaneStatusResponse.programs:type_name -> novanet.v1.AttachedProgram
+	99,  // 10: novanet.v1.GetDataplaneStatusResponse.drop_counters:type_name -> novanet.v1.GetDataplaneStatusResponse.DropCountersEntry
+	100, // 11: novanet.v1.AddPodRequest.labels:type_name -> novanet.v1.AddPodRequest.LabelsEntry
+	40,  // 12: novanet.v1.GetAgentStatusResponse.dataplane:type_name -> novanet.v1.DataplaneStatusInfo
+	4,   // 13: novanet.v1.UpsertEgressPolicyRequest.action:type_name -> novanet.v1.EgressAction
+	51,  // 14: novanet.v1.UpsertBackendsRequest.backends:type_name -> novanet.v1.BackendEntry
+	54,  // 15: novanet.v1.SyncServicesRequest.services:type_name -> novanet.v1.ServiceEntry
+	51,  // 16: novanet.v1.SyncServicesRequest.backends:type_name -> novanet.v1.BackendEntry
+	60,  // 17: novanet.v1.ListPoliciesResponse.rules:type_name -> novanet.v1.PolicyRuleInfo
+	1,   // 18: novanet.v1.PolicyRuleInfo.action:type_name -> novanet.v1.PolicyAction
+	63,  // 19: novanet.v1.ListIdentitiesResponse.identities:type_name -> novanet.v1.IdentityInfo
+	101, // 20: novanet.v1.IdentityInfo.labels:type_name -> novanet.v1.IdentityInfo.LabelsEntry
+	66,  // 21: novanet.v1.ListTunnelsResponse.tunnels:type_name -> novanet.v1.TunnelInfoMsg
+	69,  // 22: novanet.v1.ListEgressPoliciesResponse.rules:type_name -> novanet.v1.EgressPolicyInfo
+	4,   // 23: novanet.v1.EgressPolicyInfo.action:type_name -> novanet.v1.EgressAction
+	72,  // 24: novanet.v1.ListServicesResponse.services:type_name -> novanet.v1.ServiceInfo
+	6,   // 25: novanet.v1.UpsertHostPolicyRequest.direction:type_name -> novanet.v1.HostPolicyDirection
+	1,   // 26: novanet.v1.UpsertHostPolicyRequest.action:type_name -> novanet.v1.PolicyAction
+	78,  // 27: novanet.v1.SyncHostPoliciesRequest.policies:type_name -> novanet.v1.HostPolicyEntry
+	6,   // 28: novanet.v1.HostPolicyEntry.direction:type_name -> novanet.v1.HostPolicyDirection
+	1,   // 29: novanet.v1.HostPolicyEntry.action:type_name -> novanet.v1.PolicyAction
+	7,   // 30: novanet.v1.AttachXDPRequest.mode:type_name -> novanet.v1.XDPMode
+	86,  // 31: novanet.v1.GetRoutingPeersResponse.peers:type_name -> novanet.v1.RoutingPeerInfo
+	89,  // 32: novanet.v1.GetRoutingPrefixesResponse.prefixes:type_name -> novanet.v1.RoutingPrefixInfo
+	92,  // 33: novanet.v1.GetRoutingBFDSessionsResponse.sessions:type_name -> novanet.v1.RoutingBFDSessionInfo
+	95,  // 34: novanet.v1.GetRoutingOSPFNeighborsResponse.neighbors:type_name -> novanet.v1.RoutingOSPFNeighborInfo
+	102, // 35: novanet.v1.RoutingEvent.metadata:type_name -> novanet.v1.RoutingEvent.MetadataEntry
+	8,   // 36: novanet.v1.DataplaneControl.UpsertEndpoint:input_type -> novanet.v1.UpsertEndpointRequest
+	10,  // 37: novanet.v1.DataplaneControl.DeleteEndpoint:input_type -> novanet.v1.DeleteEndpointRequest
+	12,  // 38: novanet.v1.DataplaneControl.UpsertPolicy:input_type -> novanet.v1.UpsertPolicyRequest
+	14,  // 39: novanet.v1.DataplaneControl.DeletePolicy:input_type -> novanet.v1.DeletePolicyRequest
+	16,  // 40: novanet.v1.DataplaneControl.SyncPolicies:input_type -> novanet.v1.SyncPoliciesRequest
+	19,  // 41: novanet.v1.DataplaneControl.UpsertTunnel:input_type -> novanet.v1.UpsertTunnelRequest
+	21,  // 42: novanet.v1.DataplaneControl.DeleteTunnel:input_type -> novanet.v1.DeleteTunnelRequest
+	23,  // 43: novanet.v1.DataplaneControl.UpdateConfig:input_type -> novanet.v1.UpdateConfigRequest
+	25,  // 44: novanet.v1.DataplaneControl.AttachProgram:input_type -> novanet.v1.AttachProgramRequest
+	27,  // 45: novanet.v1.DataplaneControl.DetachProgram:input_type -> novanet.v1.DetachProgramRequest
+	42,  // 46: novanet.v1.DataplaneControl.UpsertEgressPolicy:input_type -> novanet.v1.UpsertEgressPolicyRequest
+	44,  // 47: novanet.v1.DataplaneControl.DeleteEgressPolicy:input_type -> novanet.v1.DeleteEgressPolicyRequest
+	46,  // 48: novanet.v1.DataplaneControl.UpsertService:input_type -> novanet.v1.UpsertServiceRequest
+	48,  // 49: novanet.v1.DataplaneControl.DeleteService:input_type -> novanet.v1.DeleteServiceRequest
+	50,  // 50: novanet.v1.DataplaneControl.UpsertBackends:input_type -> novanet.v1.UpsertBackendsRequest
+	53,  // 51: novanet.v1.DataplaneControl.SyncServices:input_type -> novanet.v1.SyncServicesRequest
+	56,  // 52: novanet.v1.DataplaneControl.UpsertMaglevTable:input_type -> novanet.v1.UpsertMaglevTableRequest
+	73,  // 53: novanet.v1.DataplaneControl.UpsertHostPolicy:input_type -> novanet.v1.UpsertHostPolicyRequest
+	75,  // 54: novanet.v1.DataplaneControl.DeleteHostPolicy:input_type -> novanet.v1.DeleteHostPolicyRequest
+	77,  // 55: novanet.v1.DataplaneControl.SyncHostPolicies:input_type -> novanet.v1.SyncHostPoliciesRequest
+	80,  // 56: novanet.v1.DataplaneControl.AttachXDP:input_type -> novanet.v1.AttachXDPRequest
+	82,  // 57: novanet.v1.DataplaneControl.DetachXDP:input_type -> novanet.v1.DetachXDPRequest
+	29,  // 58: novanet.v1.DataplaneControl.StreamFlows:input_type -> novanet.v1.StreamFlowsRequest
+	31,  // 59: novanet.v1.DataplaneControl.GetDataplaneStatus:input_type -> novanet.v1.GetDataplaneStatusRequest
+	34,  // 60: novanet.v1.AgentControl.AddPod:input_type -> novanet.v1.AddPodRequest
+	36,  // 61: novanet.v1.AgentControl.DelPod:input_type -> novanet.v1.DelPodRequest
+	38,  // 62: novanet.v1.AgentControl.GetAgentStatus:input_type -> novanet.v1.GetAgentStatusRequest
+	41,  // 63: novanet.v1.AgentControl.StreamAgentFlows:input_type -> novanet.v1.StreamAgentFlowsRequest
+	58,  // 64: novanet.v1.AgentControl.ListPolicies:input_type -> novanet.v1.ListPoliciesRequest
+	61,  // 65: novanet.v1.AgentControl.ListIdentities:input_type -> novanet.v1.ListIdentitiesRequest
+	64,  // 66: novanet.v1.AgentControl.ListTunnels:input_type -> novanet.v1.ListTunnelsRequest
+	67,  // 67: novanet.v1.AgentControl.ListEgressPolicies:input_type -> novanet.v1.ListEgressPoliciesRequest
+	70,  // 68: novanet.v1.AgentControl.ListServices:input_type -> novanet.v1.ListServicesRequest
+	84,  // 69: novanet.v1.AgentControl.GetRoutingPeers:input_type -> novanet.v1.GetRoutingPeersRequest
+	87,  // 70: novanet.v1.AgentControl.GetRoutingPrefixes:input_type -> novanet.v1.GetRoutingPrefixesRequest
+	90,  // 71: novanet.v1.AgentControl.GetRoutingBFDSessions:input_type -> novanet.v1.GetRoutingBFDSessionsRequest
+	93,  // 72: novanet.v1.AgentControl.GetRoutingOSPFNeighbors:input_type -> novanet.v1.GetRoutingOSPFNeighborsRequest
+	96,  // 73: novanet.v1.AgentControl.StreamRoutingEvents:input_type -> novanet.v1.StreamRoutingEventsRequest
+	9,   // 74: novanet.v1.DataplaneControl.UpsertEndpoint:output_type -> novanet.v1.UpsertEndpointResponse
+	11,  // 75: novanet.v1.DataplaneControl.DeleteEndpoint:output_type -> novanet.v1.DeleteEndpointResponse
+	13,  // 76: novanet.v1.DataplaneControl.UpsertPolicy:output_type -> novanet.v1.UpsertPolicyResponse
+	15,  // 77: novanet.v1.DataplaneControl.DeletePolicy:output_type -> novanet.v1.DeletePolicyResponse
+	18,  // 78: novanet.v1.DataplaneControl.SyncPolicies:output_type -> novanet.v1.SyncPoliciesResponse
+	20,  // 79: novanet.v1.DataplaneControl.UpsertTunnel:output_type -> novanet.v1.UpsertTunnelResponse
+	22,  // 80: novanet.v1.DataplaneControl.DeleteTunnel:output_type -> novanet.v1.DeleteTunnelResponse
+	24,  // 81: novanet.v1.DataplaneControl.UpdateConfig:output_type -> novanet.v1.UpdateConfigResponse
+	26,  // 82: novanet.v1.DataplaneControl.AttachProgram:output_type -> novanet.v1.AttachProgramResponse
+	28,  // 83: novanet.v1.DataplaneControl.DetachProgram:output_type -> novanet.v1.DetachProgramResponse
+	43,  // 84: novanet.v1.DataplaneControl.UpsertEgressPolicy:output_type -> novanet.v1.UpsertEgressPolicyResponse
+	45,  // 85: novanet.v1.DataplaneControl.DeleteEgressPolicy:output_type -> novanet.v1.DeleteEgressPolicyResponse
+	47,  // 86: novanet.v1.DataplaneControl.UpsertService:output_type -> novanet.v1.UpsertServiceResponse
+	49,  // 87: novanet.v1.DataplaneControl.DeleteService:output_type -> novanet.v1.DeleteServiceResponse
+	52,  // 88: novanet.v1.DataplaneControl.UpsertBackends:output_type -> novanet.v1.UpsertBackendsResponse
+	55,  // 89: novanet.v1.DataplaneControl.SyncServices:output_type -> novanet.v1.SyncServicesResponse
+	57,  // 90: novanet.v1.DataplaneControl.UpsertMaglevTable:output_type -> novanet.v1.UpsertMaglevTableResponse
+	74,  // 91: novanet.v1.DataplaneControl.UpsertHostPolicy:output_type -> novanet.v1.UpsertHostPolicyResponse
+	76,  // 92: novanet.v1.DataplaneControl.DeleteHostPolicy:output_type -> novanet.v1.DeleteHostPolicyResponse
+	79,  // 93: novanet.v1.DataplaneControl.SyncHostPolicies:output_type -> novanet.v1.SyncHostPoliciesResponse
+	81,  // 94: novanet.v1.DataplaneControl.AttachXDP:output_type -> novanet.v1.AttachXDPResponse
+	83,  // 95: novanet.v1.DataplaneControl.DetachXDP:output_type -> novanet.v1.DetachXDPResponse
+	30,  // 96: novanet.v1.DataplaneControl.StreamFlows:output_type -> novanet.v1.FlowEvent
+	32,  // 97: novanet.v1.DataplaneControl.GetDataplaneStatus:output_type -> novanet.v1.GetDataplaneStatusResponse
+	35,  // 98: novanet.v1.AgentControl.AddPod:output_type -> novanet.v1.AddPodResponse
+	37,  // 99: novanet.v1.AgentControl.DelPod:output_type -> novanet.v1.DelPodResponse
+	39,  // 100: novanet.v1.AgentControl.GetAgentStatus:output_type -> novanet.v1.GetAgentStatusResponse
+	30,  // 101: novanet.v1.AgentControl.StreamAgentFlows:output_type -> novanet.v1.FlowEvent
+	59,  // 102: novanet.v1.AgentControl.ListPolicies:output_type -> novanet.v1.ListPoliciesResponse
+	62,  // 103: novanet.v1.AgentControl.ListIdentities:output_type -> novanet.v1.ListIdentitiesResponse
+	65,  // 104: novanet.v1.AgentControl.ListTunnels:output_type -> novanet.v1.ListTunnelsResponse
+	68,  // 105: novanet.v1.AgentControl.ListEgressPolicies:output_type -> novanet.v1.ListEgressPoliciesResponse
+	71,  // 106: novanet.v1.AgentControl.ListServices:output_type -> novanet.v1.ListServicesResponse
+	85,  // 107: novanet.v1.AgentControl.GetRoutingPeers:output_type -> novanet.v1.GetRoutingPeersResponse
+	88,  // 108: novanet.v1.AgentControl.GetRoutingPrefixes:output_type -> novanet.v1.GetRoutingPrefixesResponse
+	91,  // 109: novanet.v1.AgentControl.GetRoutingBFDSessions:output_type -> novanet.v1.GetRoutingBFDSessionsResponse
+	94,  // 110: novanet.v1.AgentControl.GetRoutingOSPFNeighbors:output_type -> novanet.v1.GetRoutingOSPFNeighborsResponse
+	97,  // 111: novanet.v1.AgentControl.StreamRoutingEvents:output_type -> novanet.v1.RoutingEvent
+	74,  // [74:112] is the sub-list for method output_type
+	36,  // [36:74] is the sub-list for method input_type
+	36,  // [36:36] is the sub-list for extension type_name
+	36,  // [36:36] is the sub-list for extension extendee
+	0,   // [0:36] is the sub-list for field type_name
 }
 
 func init() { file_api_v1_novanet_proto_init() }
@@ -5409,7 +6321,7 @@ func file_api_v1_novanet_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_v1_novanet_proto_rawDesc), len(file_api_v1_novanet_proto_rawDesc)),
 			NumEnums:      8,
-			NumMessages:   80,
+			NumMessages:   95,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

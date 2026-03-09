@@ -1027,15 +1027,20 @@ var DataplaneControl_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
-	AgentControl_AddPod_FullMethodName             = "/novanet.v1.AgentControl/AddPod"
-	AgentControl_DelPod_FullMethodName             = "/novanet.v1.AgentControl/DelPod"
-	AgentControl_GetAgentStatus_FullMethodName     = "/novanet.v1.AgentControl/GetAgentStatus"
-	AgentControl_StreamAgentFlows_FullMethodName   = "/novanet.v1.AgentControl/StreamAgentFlows"
-	AgentControl_ListPolicies_FullMethodName       = "/novanet.v1.AgentControl/ListPolicies"
-	AgentControl_ListIdentities_FullMethodName     = "/novanet.v1.AgentControl/ListIdentities"
-	AgentControl_ListTunnels_FullMethodName        = "/novanet.v1.AgentControl/ListTunnels"
-	AgentControl_ListEgressPolicies_FullMethodName = "/novanet.v1.AgentControl/ListEgressPolicies"
-	AgentControl_ListServices_FullMethodName       = "/novanet.v1.AgentControl/ListServices"
+	AgentControl_AddPod_FullMethodName                  = "/novanet.v1.AgentControl/AddPod"
+	AgentControl_DelPod_FullMethodName                  = "/novanet.v1.AgentControl/DelPod"
+	AgentControl_GetAgentStatus_FullMethodName          = "/novanet.v1.AgentControl/GetAgentStatus"
+	AgentControl_StreamAgentFlows_FullMethodName        = "/novanet.v1.AgentControl/StreamAgentFlows"
+	AgentControl_ListPolicies_FullMethodName            = "/novanet.v1.AgentControl/ListPolicies"
+	AgentControl_ListIdentities_FullMethodName          = "/novanet.v1.AgentControl/ListIdentities"
+	AgentControl_ListTunnels_FullMethodName             = "/novanet.v1.AgentControl/ListTunnels"
+	AgentControl_ListEgressPolicies_FullMethodName      = "/novanet.v1.AgentControl/ListEgressPolicies"
+	AgentControl_ListServices_FullMethodName            = "/novanet.v1.AgentControl/ListServices"
+	AgentControl_GetRoutingPeers_FullMethodName         = "/novanet.v1.AgentControl/GetRoutingPeers"
+	AgentControl_GetRoutingPrefixes_FullMethodName      = "/novanet.v1.AgentControl/GetRoutingPrefixes"
+	AgentControl_GetRoutingBFDSessions_FullMethodName   = "/novanet.v1.AgentControl/GetRoutingBFDSessions"
+	AgentControl_GetRoutingOSPFNeighbors_FullMethodName = "/novanet.v1.AgentControl/GetRoutingOSPFNeighbors"
+	AgentControl_StreamRoutingEvents_FullMethodName     = "/novanet.v1.AgentControl/StreamRoutingEvents"
 )
 
 // AgentControlClient is the client API for AgentControl service.
@@ -1058,6 +1063,12 @@ type AgentControlClient interface {
 	ListTunnels(ctx context.Context, in *ListTunnelsRequest, opts ...grpc.CallOption) (*ListTunnelsResponse, error)
 	ListEgressPolicies(ctx context.Context, in *ListEgressPoliciesRequest, opts ...grpc.CallOption) (*ListEgressPoliciesResponse, error)
 	ListServices(ctx context.Context, in *ListServicesRequest, opts ...grpc.CallOption) (*ListServicesResponse, error)
+	// Routing RPCs (native mode — queries FRR state via routing manager)
+	GetRoutingPeers(ctx context.Context, in *GetRoutingPeersRequest, opts ...grpc.CallOption) (*GetRoutingPeersResponse, error)
+	GetRoutingPrefixes(ctx context.Context, in *GetRoutingPrefixesRequest, opts ...grpc.CallOption) (*GetRoutingPrefixesResponse, error)
+	GetRoutingBFDSessions(ctx context.Context, in *GetRoutingBFDSessionsRequest, opts ...grpc.CallOption) (*GetRoutingBFDSessionsResponse, error)
+	GetRoutingOSPFNeighbors(ctx context.Context, in *GetRoutingOSPFNeighborsRequest, opts ...grpc.CallOption) (*GetRoutingOSPFNeighborsResponse, error)
+	StreamRoutingEvents(ctx context.Context, in *StreamRoutingEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[RoutingEvent], error)
 }
 
 type agentControlClient struct {
@@ -1167,6 +1178,65 @@ func (c *agentControlClient) ListServices(ctx context.Context, in *ListServicesR
 	return out, nil
 }
 
+func (c *agentControlClient) GetRoutingPeers(ctx context.Context, in *GetRoutingPeersRequest, opts ...grpc.CallOption) (*GetRoutingPeersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetRoutingPeersResponse)
+	err := c.cc.Invoke(ctx, AgentControl_GetRoutingPeers_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentControlClient) GetRoutingPrefixes(ctx context.Context, in *GetRoutingPrefixesRequest, opts ...grpc.CallOption) (*GetRoutingPrefixesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetRoutingPrefixesResponse)
+	err := c.cc.Invoke(ctx, AgentControl_GetRoutingPrefixes_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentControlClient) GetRoutingBFDSessions(ctx context.Context, in *GetRoutingBFDSessionsRequest, opts ...grpc.CallOption) (*GetRoutingBFDSessionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetRoutingBFDSessionsResponse)
+	err := c.cc.Invoke(ctx, AgentControl_GetRoutingBFDSessions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentControlClient) GetRoutingOSPFNeighbors(ctx context.Context, in *GetRoutingOSPFNeighborsRequest, opts ...grpc.CallOption) (*GetRoutingOSPFNeighborsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetRoutingOSPFNeighborsResponse)
+	err := c.cc.Invoke(ctx, AgentControl_GetRoutingOSPFNeighbors_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentControlClient) StreamRoutingEvents(ctx context.Context, in *StreamRoutingEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[RoutingEvent], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &AgentControl_ServiceDesc.Streams[1], AgentControl_StreamRoutingEvents_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[StreamRoutingEventsRequest, RoutingEvent]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AgentControl_StreamRoutingEventsClient = grpc.ServerStreamingClient[RoutingEvent]
+
 // AgentControlServer is the server API for AgentControl service.
 // All implementations must embed UnimplementedAgentControlServer
 // for forward compatibility.
@@ -1187,6 +1257,12 @@ type AgentControlServer interface {
 	ListTunnels(context.Context, *ListTunnelsRequest) (*ListTunnelsResponse, error)
 	ListEgressPolicies(context.Context, *ListEgressPoliciesRequest) (*ListEgressPoliciesResponse, error)
 	ListServices(context.Context, *ListServicesRequest) (*ListServicesResponse, error)
+	// Routing RPCs (native mode — queries FRR state via routing manager)
+	GetRoutingPeers(context.Context, *GetRoutingPeersRequest) (*GetRoutingPeersResponse, error)
+	GetRoutingPrefixes(context.Context, *GetRoutingPrefixesRequest) (*GetRoutingPrefixesResponse, error)
+	GetRoutingBFDSessions(context.Context, *GetRoutingBFDSessionsRequest) (*GetRoutingBFDSessionsResponse, error)
+	GetRoutingOSPFNeighbors(context.Context, *GetRoutingOSPFNeighborsRequest) (*GetRoutingOSPFNeighborsResponse, error)
+	StreamRoutingEvents(*StreamRoutingEventsRequest, grpc.ServerStreamingServer[RoutingEvent]) error
 	mustEmbedUnimplementedAgentControlServer()
 }
 
@@ -1223,6 +1299,21 @@ func (UnimplementedAgentControlServer) ListEgressPolicies(context.Context, *List
 }
 func (UnimplementedAgentControlServer) ListServices(context.Context, *ListServicesRequest) (*ListServicesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListServices not implemented")
+}
+func (UnimplementedAgentControlServer) GetRoutingPeers(context.Context, *GetRoutingPeersRequest) (*GetRoutingPeersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetRoutingPeers not implemented")
+}
+func (UnimplementedAgentControlServer) GetRoutingPrefixes(context.Context, *GetRoutingPrefixesRequest) (*GetRoutingPrefixesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetRoutingPrefixes not implemented")
+}
+func (UnimplementedAgentControlServer) GetRoutingBFDSessions(context.Context, *GetRoutingBFDSessionsRequest) (*GetRoutingBFDSessionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetRoutingBFDSessions not implemented")
+}
+func (UnimplementedAgentControlServer) GetRoutingOSPFNeighbors(context.Context, *GetRoutingOSPFNeighborsRequest) (*GetRoutingOSPFNeighborsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetRoutingOSPFNeighbors not implemented")
+}
+func (UnimplementedAgentControlServer) StreamRoutingEvents(*StreamRoutingEventsRequest, grpc.ServerStreamingServer[RoutingEvent]) error {
+	return status.Error(codes.Unimplemented, "method StreamRoutingEvents not implemented")
 }
 func (UnimplementedAgentControlServer) mustEmbedUnimplementedAgentControlServer() {}
 func (UnimplementedAgentControlServer) testEmbeddedByValue()                      {}
@@ -1400,6 +1491,89 @@ func _AgentControl_ListServices_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AgentControl_GetRoutingPeers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetRoutingPeersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentControlServer).GetRoutingPeers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentControl_GetRoutingPeers_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentControlServer).GetRoutingPeers(ctx, req.(*GetRoutingPeersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentControl_GetRoutingPrefixes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetRoutingPrefixesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentControlServer).GetRoutingPrefixes(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentControl_GetRoutingPrefixes_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentControlServer).GetRoutingPrefixes(ctx, req.(*GetRoutingPrefixesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentControl_GetRoutingBFDSessions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetRoutingBFDSessionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentControlServer).GetRoutingBFDSessions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentControl_GetRoutingBFDSessions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentControlServer).GetRoutingBFDSessions(ctx, req.(*GetRoutingBFDSessionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentControl_GetRoutingOSPFNeighbors_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetRoutingOSPFNeighborsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentControlServer).GetRoutingOSPFNeighbors(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentControl_GetRoutingOSPFNeighbors_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentControlServer).GetRoutingOSPFNeighbors(ctx, req.(*GetRoutingOSPFNeighborsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentControl_StreamRoutingEvents_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(StreamRoutingEventsRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(AgentControlServer).StreamRoutingEvents(m, &grpc.GenericServerStream[StreamRoutingEventsRequest, RoutingEvent]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AgentControl_StreamRoutingEventsServer = grpc.ServerStreamingServer[RoutingEvent]
+
 // AgentControl_ServiceDesc is the grpc.ServiceDesc for AgentControl service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1439,11 +1613,32 @@ var AgentControl_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "ListServices",
 			Handler:    _AgentControl_ListServices_Handler,
 		},
+		{
+			MethodName: "GetRoutingPeers",
+			Handler:    _AgentControl_GetRoutingPeers_Handler,
+		},
+		{
+			MethodName: "GetRoutingPrefixes",
+			Handler:    _AgentControl_GetRoutingPrefixes_Handler,
+		},
+		{
+			MethodName: "GetRoutingBFDSessions",
+			Handler:    _AgentControl_GetRoutingBFDSessions_Handler,
+		},
+		{
+			MethodName: "GetRoutingOSPFNeighbors",
+			Handler:    _AgentControl_GetRoutingOSPFNeighbors_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "StreamAgentFlows",
 			Handler:       _AgentControl_StreamAgentFlows_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "StreamRoutingEvents",
+			Handler:       _AgentControl_StreamRoutingEvents_Handler,
 			ServerStreams: true,
 		},
 	},
