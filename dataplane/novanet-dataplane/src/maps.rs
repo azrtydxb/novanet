@@ -6,6 +6,7 @@
 
 use novanet_common::*;
 use std::collections::HashMap as StdHashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::RwLock;
 use tracing::{debug, info, warn};
 
@@ -488,6 +489,134 @@ impl MapManager {
             MapManagerInner::Real(m) => m.get_drop_counters(),
         }
     }
+
+    // -- SOCKMAP endpoint operations --
+
+    pub fn upsert_sockmap_endpoint(
+        &self,
+        key: SockmapEndpointKey,
+        value: u32,
+    ) -> anyhow::Result<()> {
+        match &self.inner {
+            MapManagerInner::Mock(m) => m.upsert_sockmap_endpoint(key, value),
+            #[cfg(target_os = "linux")]
+            MapManagerInner::Real(m) => m.upsert_sockmap_endpoint(key, value),
+        }
+    }
+
+    pub fn delete_sockmap_endpoint(&self, key: &SockmapEndpointKey) -> anyhow::Result<()> {
+        match &self.inner {
+            MapManagerInner::Mock(m) => m.delete_sockmap_endpoint(key),
+            #[cfg(target_os = "linux")]
+            MapManagerInner::Real(m) => m.delete_sockmap_endpoint(key),
+        }
+    }
+
+    pub fn count_sockmap_endpoints(&self) -> anyhow::Result<usize> {
+        match &self.inner {
+            MapManagerInner::Mock(m) => Ok(m.count_sockmap_endpoints()),
+            #[cfg(target_os = "linux")]
+            MapManagerInner::Real(m) => m.count_sockmap_endpoints(),
+        }
+    }
+
+    pub fn get_sockmap_stats(&self) -> (u64, u64) {
+        match &self.inner {
+            MapManagerInner::Mock(m) => m.get_sockmap_stats(),
+            #[cfg(target_os = "linux")]
+            MapManagerInner::Real(m) => m.get_sockmap_stats(),
+        }
+    }
+
+    // -- Mesh service operations --
+
+    pub fn upsert_mesh_service(
+        &self,
+        key: MeshServiceKey,
+        value: MeshRedirectValue,
+    ) -> anyhow::Result<()> {
+        match &self.inner {
+            MapManagerInner::Mock(m) => m.upsert_mesh_service(key, value),
+            #[cfg(target_os = "linux")]
+            MapManagerInner::Real(m) => m.upsert_mesh_service(key, value),
+        }
+    }
+
+    pub fn delete_mesh_service(&self, key: &MeshServiceKey) -> anyhow::Result<()> {
+        match &self.inner {
+            MapManagerInner::Mock(m) => m.delete_mesh_service(key),
+            #[cfg(target_os = "linux")]
+            MapManagerInner::Real(m) => m.delete_mesh_service(key),
+        }
+    }
+
+    pub fn list_mesh_services(&self) -> anyhow::Result<Vec<(MeshServiceKey, MeshRedirectValue)>> {
+        match &self.inner {
+            MapManagerInner::Mock(m) => Ok(m.list_mesh_services()),
+            #[cfg(target_os = "linux")]
+            MapManagerInner::Real(m) => m.list_mesh_services(),
+        }
+    }
+
+    pub fn count_mesh_services(&self) -> anyhow::Result<usize> {
+        match &self.inner {
+            MapManagerInner::Mock(m) => Ok(m.count_mesh_services()),
+            #[cfg(target_os = "linux")]
+            MapManagerInner::Real(m) => m.count_mesh_services(),
+        }
+    }
+
+    // -- Rate limit operations --
+
+    pub fn update_rate_limit_config(&self, config: RateLimitConfig) -> anyhow::Result<()> {
+        match &self.inner {
+            MapManagerInner::Mock(m) => m.update_rate_limit_config(config),
+            #[cfg(target_os = "linux")]
+            MapManagerInner::Real(m) => m.update_rate_limit_config(config),
+        }
+    }
+
+    pub fn get_rate_limit_config(&self) -> Option<RateLimitConfig> {
+        match &self.inner {
+            MapManagerInner::Mock(m) => m.get_rate_limit_config(),
+            #[cfg(target_os = "linux")]
+            MapManagerInner::Real(m) => m.get_rate_limit_config(),
+        }
+    }
+
+    pub fn get_rate_limit_stats(&self) -> (u64, u64) {
+        match &self.inner {
+            MapManagerInner::Mock(m) => m.get_rate_limit_stats(),
+            #[cfg(target_os = "linux")]
+            MapManagerInner::Real(m) => m.get_rate_limit_stats(),
+        }
+    }
+
+    // -- Backend health operations --
+
+    pub fn get_backend_health(&self, key: &BackendHealthKey) -> Option<BackendHealthCounters> {
+        match &self.inner {
+            MapManagerInner::Mock(m) => m.get_backend_health(key),
+            #[cfg(target_os = "linux")]
+            MapManagerInner::Real(m) => m.get_backend_health(key),
+        }
+    }
+
+    pub fn get_all_backend_health(&self) -> Vec<(BackendHealthKey, BackendHealthCounters)> {
+        match &self.inner {
+            MapManagerInner::Mock(m) => m.get_all_backend_health(),
+            #[cfg(target_os = "linux")]
+            MapManagerInner::Real(m) => m.get_all_backend_health(),
+        }
+    }
+
+    pub fn count_backend_health(&self) -> usize {
+        match &self.inner {
+            MapManagerInner::Mock(m) => m.count_backend_health(),
+            #[cfg(target_os = "linux")]
+            MapManagerInner::Real(m) => m.count_backend_health(),
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -529,6 +658,14 @@ struct MockMaps {
     next_prog_id: RwLock<u32>,
     ipcache: RwLock<StdHashMap<[u8; 16], (u32, IPCacheValue)>>,
     host_policies: RwLock<StdHashMap<HostPolicyKeyFlat, HostPolicyValue>>,
+    sockmap_endpoints: RwLock<StdHashMap<SockmapEndpointKey, u32>>,
+    mesh_services: RwLock<StdHashMap<MeshServiceKey, MeshRedirectValue>>,
+    rate_limit_config: RwLock<Option<RateLimitConfig>>,
+    backend_health: RwLock<StdHashMap<BackendHealthKey, BackendHealthCounters>>,
+    sockmap_stats_redirected: AtomicU64,
+    sockmap_stats_fallback: AtomicU64,
+    rate_limit_stats_allowed: AtomicU64,
+    rate_limit_stats_denied: AtomicU64,
 }
 
 /// Flattened policy key for use as HashMap key (needs Hash + Eq).
@@ -680,6 +817,14 @@ impl MockMaps {
             next_prog_id: RwLock::new(1),
             ipcache: RwLock::new(StdHashMap::new()),
             host_policies: RwLock::new(StdHashMap::new()),
+            sockmap_endpoints: RwLock::new(StdHashMap::new()),
+            mesh_services: RwLock::new(StdHashMap::new()),
+            rate_limit_config: RwLock::new(None),
+            backend_health: RwLock::new(StdHashMap::new()),
+            sockmap_stats_redirected: AtomicU64::new(0),
+            sockmap_stats_fallback: AtomicU64::new(0),
+            rate_limit_stats_allowed: AtomicU64::new(0),
+            rate_limit_stats_denied: AtomicU64::new(0),
         }
     }
 
@@ -1242,6 +1387,149 @@ impl MockMaps {
         }
         Ok(())
     }
+
+    // -- SOCKMAP endpoint operations --
+
+    fn upsert_sockmap_endpoint(&self, key: SockmapEndpointKey, value: u32) -> anyhow::Result<()> {
+        debug!(
+            ip = key.ip,
+            port = key.port,
+            "mock: upsert sockmap endpoint"
+        );
+        self.sockmap_endpoints
+            .write()
+            .expect("sockmap_endpoints lock poisoned")
+            .insert(key, value);
+        Ok(())
+    }
+
+    fn delete_sockmap_endpoint(&self, key: &SockmapEndpointKey) -> anyhow::Result<()> {
+        debug!(
+            ip = key.ip,
+            port = key.port,
+            "mock: delete sockmap endpoint"
+        );
+        self.sockmap_endpoints
+            .write()
+            .expect("sockmap_endpoints lock poisoned")
+            .remove(key);
+        Ok(())
+    }
+
+    fn count_sockmap_endpoints(&self) -> usize {
+        self.sockmap_endpoints
+            .read()
+            .expect("sockmap_endpoints lock poisoned")
+            .len()
+    }
+
+    fn get_sockmap_stats(&self) -> (u64, u64) {
+        (
+            self.sockmap_stats_redirected.load(Ordering::Relaxed),
+            self.sockmap_stats_fallback.load(Ordering::Relaxed),
+        )
+    }
+
+    // -- Mesh service operations --
+
+    fn upsert_mesh_service(
+        &self,
+        key: MeshServiceKey,
+        value: MeshRedirectValue,
+    ) -> anyhow::Result<()> {
+        debug!(
+            ip = key.ip,
+            port = key.port,
+            redirect_port = value.redirect_port,
+            "mock: upsert mesh service"
+        );
+        self.mesh_services
+            .write()
+            .expect("mesh_services lock poisoned")
+            .insert(key, value);
+        Ok(())
+    }
+
+    fn delete_mesh_service(&self, key: &MeshServiceKey) -> anyhow::Result<()> {
+        debug!(ip = key.ip, port = key.port, "mock: delete mesh service");
+        self.mesh_services
+            .write()
+            .expect("mesh_services lock poisoned")
+            .remove(key);
+        Ok(())
+    }
+
+    fn list_mesh_services(&self) -> Vec<(MeshServiceKey, MeshRedirectValue)> {
+        self.mesh_services
+            .read()
+            .expect("mesh_services lock poisoned")
+            .iter()
+            .map(|(k, v)| (*k, *v))
+            .collect()
+    }
+
+    fn count_mesh_services(&self) -> usize {
+        self.mesh_services
+            .read()
+            .expect("mesh_services lock poisoned")
+            .len()
+    }
+
+    // -- Rate limit operations --
+
+    fn update_rate_limit_config(&self, config: RateLimitConfig) -> anyhow::Result<()> {
+        debug!(
+            rate = config.rate,
+            burst = config.burst,
+            window_ns = config.window_ns,
+            "mock: update rate limit config"
+        );
+        *self
+            .rate_limit_config
+            .write()
+            .expect("rate_limit_config lock poisoned") = Some(config);
+        Ok(())
+    }
+
+    fn get_rate_limit_config(&self) -> Option<RateLimitConfig> {
+        *self
+            .rate_limit_config
+            .read()
+            .expect("rate_limit_config lock poisoned")
+    }
+
+    fn get_rate_limit_stats(&self) -> (u64, u64) {
+        (
+            self.rate_limit_stats_allowed.load(Ordering::Relaxed),
+            self.rate_limit_stats_denied.load(Ordering::Relaxed),
+        )
+    }
+
+    // -- Backend health operations --
+
+    fn get_backend_health(&self, key: &BackendHealthKey) -> Option<BackendHealthCounters> {
+        self.backend_health
+            .read()
+            .expect("backend_health lock poisoned")
+            .get(key)
+            .copied()
+    }
+
+    fn get_all_backend_health(&self) -> Vec<(BackendHealthKey, BackendHealthCounters)> {
+        self.backend_health
+            .read()
+            .expect("backend_health lock poisoned")
+            .iter()
+            .map(|(k, v)| (*k, *v))
+            .collect()
+    }
+
+    fn count_backend_health(&self) -> usize {
+        self.backend_health
+            .read()
+            .expect("backend_health lock poisoned")
+            .len()
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1744,6 +2032,119 @@ mod tests {
         mgr.detach_program("nv12345678901", AttachDirection::Egress)
             .unwrap();
         assert_eq!(mgr.attached_programs().len(), 0);
+    }
+
+    // -- SOCKMAP endpoint tests --
+
+    #[test]
+    fn sockmap_endpoint_crud() {
+        let mgr = mock_manager();
+        let key = SockmapEndpointKey {
+            ip: 0x0A2A0105,
+            port: 8080,
+        };
+        mgr.upsert_sockmap_endpoint(key, 1).unwrap();
+        assert_eq!(mgr.count_sockmap_endpoints().unwrap(), 1);
+        mgr.delete_sockmap_endpoint(&key).unwrap();
+        assert_eq!(mgr.count_sockmap_endpoints().unwrap(), 0);
+    }
+
+    #[test]
+    fn sockmap_stats_default_zero() {
+        let mgr = mock_manager();
+        let (redirected, fallback) = mgr.get_sockmap_stats();
+        assert_eq!(redirected, 0);
+        assert_eq!(fallback, 0);
+    }
+
+    // -- Mesh service tests --
+
+    #[test]
+    fn mesh_service_crud() {
+        let mgr = mock_manager();
+        let key = MeshServiceKey {
+            ip: 0x0A2A0105,
+            port: 8080,
+        };
+        let val = MeshRedirectValue {
+            redirect_port: 15001,
+        };
+        mgr.upsert_mesh_service(key, val).unwrap();
+        let services = mgr.list_mesh_services().unwrap();
+        assert_eq!(services.len(), 1);
+        assert_eq!(services[0].0, key);
+        assert_eq!(services[0].1.redirect_port, 15001);
+        assert_eq!(mgr.count_mesh_services().unwrap(), 1);
+
+        mgr.delete_mesh_service(&key).unwrap();
+        assert_eq!(mgr.count_mesh_services().unwrap(), 0);
+    }
+
+    #[test]
+    fn mesh_service_upsert_overwrites() {
+        let mgr = mock_manager();
+        let key = MeshServiceKey {
+            ip: 0x0A2A0105,
+            port: 8080,
+        };
+        mgr.upsert_mesh_service(
+            key,
+            MeshRedirectValue {
+                redirect_port: 15001,
+            },
+        )
+        .unwrap();
+        mgr.upsert_mesh_service(
+            key,
+            MeshRedirectValue {
+                redirect_port: 15006,
+            },
+        )
+        .unwrap();
+        assert_eq!(mgr.count_mesh_services().unwrap(), 1);
+        let services = mgr.list_mesh_services().unwrap();
+        assert_eq!(services[0].1.redirect_port, 15006);
+    }
+
+    // -- Rate limit tests --
+
+    #[test]
+    fn rate_limit_config_crud() {
+        let mgr = mock_manager();
+        assert!(mgr.get_rate_limit_config().is_none());
+
+        let config = RateLimitConfig {
+            rate: 100,
+            burst: 200,
+            window_ns: 1_000_000_000,
+        };
+        mgr.update_rate_limit_config(config).unwrap();
+        let got = mgr.get_rate_limit_config().unwrap();
+        assert_eq!(got.rate, 100);
+        assert_eq!(got.burst, 200);
+        assert_eq!(got.window_ns, 1_000_000_000);
+    }
+
+    #[test]
+    fn rate_limit_stats_default_zero() {
+        let mgr = mock_manager();
+        let (allowed, denied) = mgr.get_rate_limit_stats();
+        assert_eq!(allowed, 0);
+        assert_eq!(denied, 0);
+    }
+
+    // -- Backend health tests --
+
+    #[test]
+    fn backend_health_empty() {
+        let mgr = mock_manager();
+        let key = BackendHealthKey {
+            ip: 0x0A2A0105,
+            port: 8080,
+        };
+        assert!(mgr.get_backend_health(&key).is_none());
+        assert_eq!(mgr.count_backend_health(), 0);
+        assert!(mgr.get_all_backend_health().is_empty());
     }
 }
 
@@ -2544,5 +2945,77 @@ impl RealMaps {
         }
 
         Ok(())
+    }
+
+    // -- SOCKMAP endpoint operations --
+    // TODO: implement with aya map handles (Task 17)
+
+    fn upsert_sockmap_endpoint(&self, _key: SockmapEndpointKey, _value: u32) -> anyhow::Result<()> {
+        anyhow::bail!("sockmap endpoint maps not yet implemented")
+    }
+
+    fn delete_sockmap_endpoint(&self, _key: &SockmapEndpointKey) -> anyhow::Result<()> {
+        anyhow::bail!("sockmap endpoint maps not yet implemented")
+    }
+
+    fn count_sockmap_endpoints(&self) -> anyhow::Result<usize> {
+        anyhow::bail!("sockmap endpoint maps not yet implemented")
+    }
+
+    fn get_sockmap_stats(&self) -> (u64, u64) {
+        (0, 0)
+    }
+
+    // -- Mesh service operations --
+    // TODO: implement with aya map handles (Task 17)
+
+    fn upsert_mesh_service(
+        &self,
+        _key: MeshServiceKey,
+        _value: MeshRedirectValue,
+    ) -> anyhow::Result<()> {
+        anyhow::bail!("mesh service maps not yet implemented")
+    }
+
+    fn delete_mesh_service(&self, _key: &MeshServiceKey) -> anyhow::Result<()> {
+        anyhow::bail!("mesh service maps not yet implemented")
+    }
+
+    fn list_mesh_services(&self) -> anyhow::Result<Vec<(MeshServiceKey, MeshRedirectValue)>> {
+        anyhow::bail!("mesh service maps not yet implemented")
+    }
+
+    fn count_mesh_services(&self) -> anyhow::Result<usize> {
+        anyhow::bail!("mesh service maps not yet implemented")
+    }
+
+    // -- Rate limit operations --
+    // TODO: implement with aya map handles (Task 17)
+
+    fn update_rate_limit_config(&self, _config: RateLimitConfig) -> anyhow::Result<()> {
+        anyhow::bail!("rate limit maps not yet implemented")
+    }
+
+    fn get_rate_limit_config(&self) -> Option<RateLimitConfig> {
+        None
+    }
+
+    fn get_rate_limit_stats(&self) -> (u64, u64) {
+        (0, 0)
+    }
+
+    // -- Backend health operations --
+    // TODO: implement with aya map handles (Task 17)
+
+    fn get_backend_health(&self, _key: &BackendHealthKey) -> Option<BackendHealthCounters> {
+        None
+    }
+
+    fn get_all_backend_health(&self) -> Vec<(BackendHealthKey, BackendHealthCounters)> {
+        Vec::new()
+    }
+
+    fn count_backend_health(&self) -> usize {
+        0
     }
 }
