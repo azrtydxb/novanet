@@ -63,6 +63,7 @@ func main() {
 		newMetricsCmd(),
 		newServicesCmd(),
 		newRoutingCmd(),
+		newEBPFCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
