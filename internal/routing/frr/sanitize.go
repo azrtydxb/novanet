@@ -21,7 +21,7 @@ var ErrInvalidIPAddress = errors.New("invalid IP address")
 func sanitizeVTYParam(s string) (string, error) {
 	for i, r := range s {
 		if unicode.IsControl(r) {
-			return "", fmt.Errorf("%w: byte 0x%02x at position %d", ErrInvalidVTYParam, r, i)
+			return "", fmt.Errorf("%w: character U+%04X at byte offset %d", ErrInvalidVTYParam, r, i)
 		}
 	}
 	return s, nil

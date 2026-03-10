@@ -213,6 +213,9 @@ func (c *Client) ActivateNeighborAFI(ctx context.Context, addr string, afi strin
 	}
 
 	afiName := resolveAFICLI(afi)
+	if _, err := sanitizeVTYParam(afiName); err != nil {
+		return fmt.Errorf("frr: activate neighbor AFI: afi: %w", err)
+	}
 
 	c.logger.Info("activating BGP neighbor AFI",
 		zap.String("address", addr),
@@ -243,6 +246,9 @@ func (c *Client) AdvertiseNetwork(ctx context.Context, prefix string, afi string
 	}
 
 	afiName := resolveAFICLI(afi)
+	if _, err := sanitizeVTYParam(afiName); err != nil {
+		return fmt.Errorf("frr: advertise network: afi: %w", err)
+	}
 
 	c.logger.Info("advertising BGP network",
 		zap.String("prefix", prefix),
@@ -269,6 +275,9 @@ func (c *Client) WithdrawNetwork(ctx context.Context, prefix string, afi string)
 	}
 
 	afiName := resolveAFICLI(afi)
+	if _, err := sanitizeVTYParam(afiName); err != nil {
+		return fmt.Errorf("frr: withdraw network: afi: %w", err)
+	}
 
 	c.logger.Info("withdrawing BGP network",
 		zap.String("prefix", prefix),
@@ -308,6 +317,9 @@ func (c *Client) SetNeighborMaxPrefix(ctx context.Context, addr string, maxPrefi
 	}
 
 	afiName := resolveAFICLI(afi)
+	if _, err := sanitizeVTYParam(afiName); err != nil {
+		return fmt.Errorf("frr: set neighbor max-prefix: afi: %w", err)
+	}
 
 	c.logger.Info("setting neighbor maximum-prefix",
 		zap.String("address", addr),
@@ -376,6 +388,9 @@ func (c *Client) AdvertiseNetworkWithRouteMap(ctx context.Context, prefix, afi, 
 	}
 
 	afiName := resolveAFICLI(afi)
+	if _, err := sanitizeVTYParam(afiName); err != nil {
+		return fmt.Errorf("frr: advertise network with route-map: afi: %w", err)
+	}
 
 	c.logger.Info("advertising BGP network with route-map",
 		zap.String("prefix", prefix),
