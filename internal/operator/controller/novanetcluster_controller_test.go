@@ -458,7 +458,7 @@ func TestNovaRouteIntegrationAddsVolumeMount(t *testing.T) {
 		t.Error("agent container missing /run/novaroute mount when NovaRoute is enabled")
 	}
 
-	// Verify ConfigMap has NovaRoute socket path
+	// Verify ConfigMap has routing config with FRR socket dir
 	cm := &corev1.ConfigMap{}
 	if err := fakeClient.Get(context.Background(), types.NamespacedName{
 		Name: "test-cluster", Namespace: "nova-system",
@@ -467,8 +467,11 @@ func TestNovaRouteIntegrationAddsVolumeMount(t *testing.T) {
 	}
 
 	cfgJSON := cm.Data["novanet.json"]
-	if !containsSubstring(cfgJSON, `"socket": "/run/novaroute/novaroute.sock"`) {
-		t.Error("ConfigMap novanet.json missing NovaRoute socket path")
+	if !containsSubstring(cfgJSON, `"frr_socket_dir": "/run/frr"`) {
+		t.Error("ConfigMap novanet.json missing routing frr_socket_dir")
+	}
+	if !containsSubstring(cfgJSON, `"protocol": "bgp"`) {
+		t.Error("ConfigMap novanet.json missing routing protocol")
 	}
 }
 
