@@ -2185,7 +2185,7 @@ pub struct RealMaps {
     sockmap_stats: Option<RwLock<aya::maps::PerCpuArray<aya::maps::MapData, u64>>>,
     mesh_services:
         Option<RwLock<aya::maps::HashMap<aya::maps::MapData, MeshServiceKey, MeshRedirectValue>>>,
-    rl_tokens:
+    _rl_tokens:
         Option<RwLock<aya::maps::HashMap<aya::maps::MapData, RateLimitKey, TokenBucketState>>>,
     rl_config: Option<RwLock<aya::maps::Array<aya::maps::MapData, RateLimitConfig>>>,
     backend_health: Option<
@@ -2268,7 +2268,7 @@ impl RealMaps {
             sockmap_endpoints: sockmap_endpoints.map(RwLock::new),
             sockmap_stats: sockmap_stats.map(RwLock::new),
             mesh_services: mesh_services.map(RwLock::new),
-            rl_tokens: rl_tokens.map(RwLock::new),
+            _rl_tokens: rl_tokens.map(RwLock::new),
             rl_config: rl_config.map(RwLock::new),
             backend_health: backend_health.map(RwLock::new),
             attached: RwLock::new(Vec::new()),
@@ -3080,11 +3080,7 @@ impl RealMaps {
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("MESH_SERVICES map not loaded"))?;
         let map = map_lock.read().expect("mesh_services lock poisoned");
-        Ok(map
-            .iter()
-            .filter_map(|res| res.ok())
-            .map(|(k, v)| (k, v))
-            .collect())
+        Ok(map.iter().filter_map(|res| res.ok()).collect())
     }
 
     fn count_mesh_services(&self) -> anyhow::Result<usize> {

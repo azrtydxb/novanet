@@ -430,8 +430,8 @@ pub fn load_ebpf(bpf_object_path: &Path) -> Result<(MapManager, Option<RingBuf<M
     // Load sock_ops and sk_msg programs if present (SOCKMAP bypass).
     for prog_name in &["sockops_sockmap", "sk_msg_sockmap"] {
         if let Some(prog) = ebpf.program_mut(prog_name) {
-            match prog_name {
-                &"sockops_sockmap" => match <&mut aya::programs::SockOps>::try_from(prog) {
+            match *prog_name {
+                "sockops_sockmap" => match <&mut aya::programs::SockOps>::try_from(prog) {
                     Ok(p) => match p.load() {
                         Ok(()) => info!(program = *prog_name, "Loaded sock_ops program"),
                         Err(e) => warn!(
@@ -441,7 +441,7 @@ pub fn load_ebpf(bpf_object_path: &Path) -> Result<(MapManager, Option<RingBuf<M
                     },
                     Err(e) => warn!("{} is not a SockOps program: {}", prog_name, e),
                 },
-                &"sk_msg_sockmap" => match <&mut aya::programs::SkMsg>::try_from(prog) {
+                "sk_msg_sockmap" => match <&mut aya::programs::SkMsg>::try_from(prog) {
                     Ok(p) => match p.load() {
                         Ok(()) => info!(program = *prog_name, "Loaded sk_msg program"),
                         Err(e) => warn!(
