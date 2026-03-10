@@ -219,8 +219,14 @@ func (m *Manager) checkHealth(ctx context.Context, nodeIP string) bool {
 }
 
 // updateDataplane pushes the healthy backends and service entry to the
-// eBPF dataplane via the dataplane.ClientInterface.
+// eBPF dataplane via the dataplane.ClientInterface. If no dataplane client
+// is available (nil), the update is silently skipped.
 func (m *Manager) updateDataplane(ctx context.Context, healthyIPs []string) error {
+	if m.dpClient == nil {
+		m.logger.Debug("dataplane client not available, skipping L4 LB update")
+		return nil
+	}
+
 	backendCount := uint32(len(healthyIPs)) //nolint:gosec // len bounded by cluster size
 
 	// Build backend entries at reserved offsets.

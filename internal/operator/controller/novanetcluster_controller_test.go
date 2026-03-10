@@ -423,19 +423,19 @@ func TestNovaRouteIntegrationAddsVolumeMount(t *testing.T) {
 		t.Fatalf("DaemonSet not found: %v", err)
 	}
 
-	// Verify /run/novaroute volume exists
-	hasNovaRouteVolume := false
+	// Verify /run/frr volume exists (FRR sidecar socket directory)
+	hasFRRVolume := false
 	for _, v := range ds.Spec.Template.Spec.Volumes {
-		if v.Name == "run-novaroute" {
-			hasNovaRouteVolume = true
+		if v.Name == "run-frr" {
+			hasFRRVolume = true
 			break
 		}
 	}
-	if !hasNovaRouteVolume {
-		t.Error("DaemonSet missing run-novaroute volume when NovaRoute is enabled")
+	if !hasFRRVolume {
+		t.Error("DaemonSet missing run-frr volume when routing integration is enabled")
 	}
 
-	// Verify agent container has the mount
+	// Verify agent container has the FRR mount
 	var agentContainer *corev1.Container
 	for i := range ds.Spec.Template.Spec.Containers {
 		if ds.Spec.Template.Spec.Containers[i].Name == "agent" {
@@ -447,15 +447,15 @@ func TestNovaRouteIntegrationAddsVolumeMount(t *testing.T) {
 		t.Fatal("agent container not found")
 	}
 
-	hasNovaRouteMount := false
+	hasFRRMount := false
 	for _, vm := range agentContainer.VolumeMounts {
-		if vm.MountPath == "/run/novaroute" {
-			hasNovaRouteMount = true
+		if vm.MountPath == "/run/frr" {
+			hasFRRMount = true
 			break
 		}
 	}
-	if !hasNovaRouteMount {
-		t.Error("agent container missing /run/novaroute mount when NovaRoute is enabled")
+	if !hasFRRMount {
+		t.Error("agent container missing /run/frr mount when routing integration is enabled")
 	}
 
 	// Verify ConfigMap has routing config with FRR socket dir

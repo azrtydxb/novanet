@@ -510,10 +510,11 @@ echo "CNI binary installed."`,
 	}
 
 	// Add NovaRoute volume mount to agent if enabled
+	// Add FRR socket directory mount when routing integration is enabled.
 	if cluster.Spec.NovaRouteIntegration != nil && cluster.Spec.NovaRouteIntegration.Enabled {
 		agentContainer.VolumeMounts = append(agentContainer.VolumeMounts, corev1.VolumeMount{
-			Name:      "run-novaroute",
-			MountPath: "/run/novaroute",
+			Name:      "run-frr",
+			MountPath: "/run/frr",
 			ReadOnly:  true,
 		})
 	}
@@ -607,11 +608,11 @@ echo "CNI binary installed."`,
 		},
 	}
 
-	// Add NovaRoute volume if enabled
+	// Add FRR socket directory volume when routing integration is enabled.
 	if cluster.Spec.NovaRouteIntegration != nil && cluster.Spec.NovaRouteIntegration.Enabled {
 		volumes = append(volumes, corev1.Volume{
-			Name:         "run-novaroute",
-			VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/run/novaroute", Type: &hostPathDirectoryOrCreate}},
+			Name:         "run-frr",
+			VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/run/frr", Type: &hostPathDirectoryOrCreate}},
 		})
 	}
 
