@@ -2202,6 +2202,8 @@ pub struct RealMaps {
     _cgroup_links: std::sync::Mutex<Vec<aya::programs::cgroup_sock_addr::CgroupSockAddrLink>>,
     /// Holds XDP program links so they stay attached.
     _xdp_links: std::sync::Mutex<Vec<(String, aya::programs::xdp::XdpLink)>>,
+    /// Holds the sk_lookup link so the mesh redirect program stays attached.
+    _sk_lookup_link: Option<aya::programs::sk_lookup::SkLookupLink>,
     /// Holds references to the loaded eBPF object so programs stay loaded.
     _ebpf: std::sync::Mutex<aya::Ebpf>,
 }
@@ -2242,6 +2244,7 @@ impl RealMaps {
         backend_health: Option<
             aya::maps::PerCpuHashMap<aya::maps::MapData, BackendHealthKey, BackendHealthCounters>,
         >,
+        sk_lookup_link: Option<aya::programs::sk_lookup::SkLookupLink>,
         ebpf: aya::Ebpf,
     ) -> Self {
         Self {
@@ -2272,6 +2275,7 @@ impl RealMaps {
             _tc_links: std::sync::Mutex::new(Vec::new()),
             _cgroup_links: std::sync::Mutex::new(Vec::new()),
             _xdp_links: std::sync::Mutex::new(Vec::new()),
+            _sk_lookup_link: sk_lookup_link,
             _ebpf: std::sync::Mutex::new(ebpf),
         }
     }
