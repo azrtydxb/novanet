@@ -18,8 +18,12 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// errNotUnixConn is returned when a connection is not a Unix socket.
-var errNotUnixConn = errors.New("not a unix connection")
+var (
+	// errNotUnixConn is returned when a connection is not a Unix socket.
+	errNotUnixConn = errors.New("not a unix connection")
+	// errFDOverflow is returned when a file descriptor value overflows int.
+	errFDOverflow = errors.New("file descriptor overflows int")
+)
 
 // unixCreds stores the peer credentials obtained via SO_PEERCRED.
 type unixCreds struct {
@@ -57,7 +61,7 @@ func peerCredFromConn(conn net.Conn) (*unixCreds, error) {
 	var credErr error
 	err = raw.Control(func(fd uintptr) {
 		if fd > math.MaxInt {
-			credErr = fmt.Errorf("file descriptor %d overflows int", fd)
+			credErr = errFDOverflow
 			return
 		}
 		cred, credErr = unix.GetsockoptUcred(int(fd), unix.SOL_SOCKET, unix.SO_PEERCRED) //nolint:gosec // overflow checked above
