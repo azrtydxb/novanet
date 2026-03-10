@@ -21,7 +21,7 @@
 use aya_ebpf::{
     bindings::TC_ACT_OK as BPF_TC_ACT_OK,
     bindings::TC_ACT_SHOT as BPF_TC_ACT_SHOT,
-    bindings::{bpf_tunnel_key, BPF_F_ZERO_CSUM_TX},
+    bindings::{bpf_tunnel_key, BPF_F_ZERO_CSUM_TX, BPF_SK_LOOKUP_F_REPLACE},
     helpers::gen::{bpf_sk_assign, bpf_sk_lookup_tcp, bpf_sk_release},
     helpers::{bpf_get_socket_cookie, bpf_redirect, bpf_skb_set_tunnel_key},
     macros::{cgroup_sock_addr, classifier, map, sk_lookup, sk_msg, sock_ops},
@@ -2012,7 +2012,13 @@ fn try_sk_msg_sockmap(ctx: SkMsgContext) -> Result<u32, i64> {
 // conntrack overhead and kube-proxy priority ordering issues.
 // ===========================================================================
 
+// For BPF_PROG_TYPE_SK_LOOKUP, return 0 means "proceed with lookup" (pass),
+// return 1 means "drop the connection". This is DIFFERENT from sk_action::SK_PASS (1)
+// / sk_action::SK_DROP (0) used in sk_msg/sk_skb programs. Do not confuse them.
+// See kernel: include/uapi/linux/bpf.h, net/core/sock_map.c:sock_map_lookup_prog_run().
 const SK_PASS: u32 = 0;
+#[allow(dead_code)] // Defined for completeness; used when we add drop-on-policy-deny.
+const SK_DROP: u32 = 1;
 
 #[sk_lookup]
 pub fn sk_lookup_mesh(ctx: SkLookupContext) -> u32 {
@@ -2035,8 +2041,12 @@ unsafe fn try_sk_lookup_mesh(ctx: &SkLookupContext) -> Result<u32, i64> {
     }
 
     // local_ip4/local_port are the destination (the ClusterIP:port being connected to).
+    // NOTE: In struct bpf_sk_lookup, `local_port` is a __u32 in HOST byte order
+    // (unlike `remote_port` which is __be16 in network byte order). This is
+    // documented in include/uapi/linux/bpf.h and verified in kernel source
+    // net/core/filter.c:bpf_sk_lookup_convert_ctx_access().
     let dst_ip = lookup.local_ip4;
-    let dst_port = lookup.local_port; // host byte order
+    let dst_port = lookup.local_port;
 
     let key = MeshServiceKey {
         ip: dst_ip,
@@ -2056,12 +2066,15 @@ unsafe fn try_sk_lookup_mesh(ctx: &SkLookupContext) -> Result<u32, i64> {
     tuple.__bindgen_anon_1.ipv4.daddr = 0x0100007fu32;
     tuple.__bindgen_anon_1.ipv4.dport = (redirect.redirect_port as u16).to_be();
 
+    // BPF_F_CURRENT_NETNS is defined as ((__u64)(-1)) in include/uapi/linux/bpf.h,
+    // which equals u64::MAX (0xFFFFFFFFFFFFFFFF). The aya binding exports it as
+    // c_int (-1), so we cast explicitly to u64 for the helper signature.
     let sk = bpf_sk_lookup_tcp(
         ctx.as_ptr(),
         &mut tuple as *mut _,
         core::mem::size_of::<aya_ebpf::bindings::bpf_sock_tuple__bindgen_ty_1__bindgen_ty_1>()
             as u32,
-        u64::MAX, // BPF_F_CURRENT_NETNS
+        aya_ebpf::bindings::BPF_F_CURRENT_NETNS as u64,
         0,
     );
 
@@ -2070,13 +2083,9 @@ unsafe fn try_sk_lookup_mesh(ctx: &SkLookupContext) -> Result<u32, i64> {
         return Ok(SK_PASS);
     }
 
-    // Assign the found socket to this connection. BPF_SK_LOOKUP_F_REPLACE (1)
-    // allows overriding any previous assignment.
-    let ret = bpf_sk_assign(
-        ctx.as_ptr(),
-        sk as *mut _,
-        1, /* BPF_SK_LOOKUP_F_REPLACE */
-    );
+    // Assign the found socket to this connection. BPF_SK_LOOKUP_F_REPLACE
+    // allows overriding any previous assignment by another sk_lookup program.
+    let ret = bpf_sk_assign(ctx.as_ptr(), sk as *mut _, BPF_SK_LOOKUP_F_REPLACE as u64);
 
     // Always release the socket reference from bpf_sk_lookup_tcp.
     bpf_sk_release(sk as *mut _);
