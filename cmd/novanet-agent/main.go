@@ -236,6 +236,26 @@ func (s *agentServer) AddPod(ctx context.Context, req *pb.AddPodRequest) (*pb.Ad
 		metricCNIAddLatency.Observe(time.Since(start).Seconds())
 	}()
 
+	// Validate required fields.
+	if req.PodName == "" {
+		return nil, grpcstatus.Error(codes.InvalidArgument, "PodName is required")
+	}
+	if req.PodNamespace == "" {
+		return nil, grpcstatus.Error(codes.InvalidArgument, "PodNamespace is required")
+	}
+	if req.ContainerId == "" {
+		return nil, grpcstatus.Error(codes.InvalidArgument, "ContainerId is required")
+	}
+	if req.Netns == "" {
+		return nil, grpcstatus.Error(codes.InvalidArgument, "Netns is required")
+	}
+	if req.IfName == "" {
+		return nil, grpcstatus.Error(codes.InvalidArgument, "IfName is required")
+	}
+	if len(req.ContainerId) < 11 {
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, "ContainerId too short: must be at least 11 characters, got %d", len(req.ContainerId))
+	}
+
 	key := req.PodNamespace + "/" + req.PodName
 	s.logger.Info("AddPod request",
 		zap.String("pod", key),
