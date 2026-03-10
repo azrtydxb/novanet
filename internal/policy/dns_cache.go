@@ -12,6 +12,9 @@ import (
 // defaultDNSTTL is the default time-to-live for cached DNS entries.
 const defaultDNSTTL = 5 * time.Minute
 
+// defaultMaxEntries is the default maximum number of entries in the DNS cache.
+const defaultMaxEntries = 10000
+
 // DNSResolver is the function signature for resolving hostnames to IPs.
 // It exists to allow injection of test doubles.
 type DNSResolver func(ctx context.Context, host string) ([]net.IP, error)
@@ -30,23 +33,35 @@ func defaultResolver(ctx context.Context, host string) ([]net.IP, error) {
 	return ips, nil
 }
 
-// DNSCache caches DNS resolution results for FQDN-based policy peers.
-// It stores resolved IPs and their TTLs, and supports periodic refresh.
-type DNSCache struct {
-	mu       sync.RWMutex
-	entries  map[string][]net.IP  // FQDN -> resolved IPs
-	ttls     map[string]time.Time // FQDN -> expiry
-	logger   *zap.Logger
-	resolver DNSResolver
+// dnsCacheEntry holds a cached DNS result along with LRU tracking metadata.
+type dnsCacheEntry struct {
+	ips        []net.IP
+	expiry     time.Time
+	lastAccess time.Time
 }
 
-// NewDNSCache creates a new DNS cache.
-func NewDNSCache(logger *zap.Logger) *DNSCache {
+// DNSCache caches DNS resolution results for FQDN-based policy peers.
+// It stores resolved IPs and their TTLs, supports periodic refresh, and
+// enforces a maximum size with LRU eviction.
+type DNSCache struct {
+	mu         sync.RWMutex
+	entries    map[string]*dnsCacheEntry
+	maxEntries int
+	logger     *zap.Logger
+	resolver   DNSResolver
+}
+
+// NewDNSCache creates a new DNS cache with the given maximum number of entries.
+// If maxEntries is <= 0, defaultMaxEntries (10000) is used.
+func NewDNSCache(logger *zap.Logger, maxEntries int) *DNSCache {
+	if maxEntries <= 0 {
+		maxEntries = defaultMaxEntries
+	}
 	return &DNSCache{
-		entries:  make(map[string][]net.IP),
-		ttls:     make(map[string]time.Time),
-		logger:   logger,
-		resolver: defaultResolver,
+		entries:    make(map[string]*dnsCacheEntry),
+		maxEntries: maxEntries,
+		logger:     logger,
+		resolver:   defaultResolver,
 	}
 }
 
@@ -58,16 +73,25 @@ func (c *DNSCache) SetResolver(resolver DNSResolver) {
 	c.resolver = resolver
 }
 
+// Size returns the current number of entries in the cache.
+func (c *DNSCache) Size() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return len(c.entries)
+}
+
 // Resolve returns the cached IPs for the given FQDN, performing a lookup
 // if the entry is missing or expired.
 func (c *DNSCache) Resolve(fqdn string) []net.IP {
 	c.mu.RLock()
-	ips, ok := c.entries[fqdn]
-	expiry, hasExpiry := c.ttls[fqdn]
+	entry, ok := c.entries[fqdn]
 	c.mu.RUnlock()
 
-	if ok && hasExpiry && time.Now().Before(expiry) {
-		return ips
+	if ok && time.Now().Before(entry.expiry) {
+		c.mu.Lock()
+		entry.lastAccess = time.Now()
+		c.mu.Unlock()
+		return entry.ips
 	}
 
 	// Cache miss or expired — resolve.
@@ -82,14 +106,20 @@ func (c *DNSCache) Resolve(fqdn string) []net.IP {
 		)
 		// Return stale data if available.
 		if ok {
-			return ips
+			return entry.ips
 		}
 		return nil
 	}
 
+	now := time.Now()
+
 	c.mu.Lock()
-	c.entries[fqdn] = resolved
-	c.ttls[fqdn] = time.Now().Add(defaultDNSTTL)
+	c.entries[fqdn] = &dnsCacheEntry{
+		ips:        resolved,
+		expiry:     now.Add(defaultDNSTTL),
+		lastAccess: now,
+	}
+	c.evictLocked()
 	c.mu.Unlock()
 
 	c.logger.Debug("resolved FQDN",
@@ -98,6 +128,30 @@ func (c *DNSCache) Resolve(fqdn string) []net.IP {
 	)
 
 	return resolved
+}
+
+// evictLocked removes the least recently used entry if the cache exceeds maxEntries.
+// Must be called with c.mu held for writing.
+func (c *DNSCache) evictLocked() {
+	for len(c.entries) > c.maxEntries {
+		var oldestKey string
+		var oldestTime time.Time
+		first := true
+
+		for key, entry := range c.entries {
+			if first || entry.lastAccess.Before(oldestTime) {
+				oldestKey = key
+				oldestTime = entry.lastAccess
+				first = false
+			}
+		}
+
+		c.logger.Debug("evicting DNS cache entry (LRU)",
+			zap.String("fqdn", oldestKey),
+			zap.Int("cache_size", len(c.entries)),
+		)
+		delete(c.entries, oldestKey)
+	}
 }
 
 // Refresh re-resolves all cached FQDNs and returns the number of entries
@@ -124,8 +178,13 @@ func (c *DNSCache) Refresh() int {
 			continue
 		}
 
+		now := time.Now()
 		c.mu.Lock()
-		old := c.entries[fqdn]
+		entry := c.entries[fqdn]
+		var old []net.IP
+		if entry != nil {
+			old = entry.ips
+		}
 		if !ipsEqual(old, resolved) {
 			changed++
 			c.logger.Info("DNS entry changed on refresh",
@@ -134,8 +193,11 @@ func (c *DNSCache) Refresh() int {
 				zap.Int("new_count", len(resolved)),
 			)
 		}
-		c.entries[fqdn] = resolved
-		c.ttls[fqdn] = time.Now().Add(defaultDNSTTL)
+		c.entries[fqdn] = &dnsCacheEntry{
+			ips:        resolved,
+			expiry:     now.Add(defaultDNSTTL),
+			lastAccess: now,
+		}
 		c.mu.Unlock()
 	}
 
@@ -148,9 +210,9 @@ func (c *DNSCache) GetAll() map[string][]net.IP {
 	defer c.mu.RUnlock()
 
 	result := make(map[string][]net.IP, len(c.entries))
-	for fqdn, ips := range c.entries {
-		ipsCopy := make([]net.IP, len(ips))
-		copy(ipsCopy, ips)
+	for fqdn, entry := range c.entries {
+		ipsCopy := make([]net.IP, len(entry.ips))
+		copy(ipsCopy, entry.ips)
 		result[fqdn] = ipsCopy
 	}
 	return result
