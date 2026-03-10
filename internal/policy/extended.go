@@ -39,7 +39,7 @@ func NewExtendedCompiler(identityAllocator *identity.Allocator, logger *zap.Logg
 			identityAllocator: identityAllocator,
 			logger:            logger,
 		},
-		dnsCache: NewDNSCache(logger),
+		dnsCache: NewDNSCache(logger, defaultMaxEntries),
 	}
 }
 

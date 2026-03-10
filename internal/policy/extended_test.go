@@ -19,7 +19,7 @@ func testExtendedCompiler() *ExtendedCompiler {
 }
 
 func mockDNSCache(logger *zap.Logger) *DNSCache {
-	cache := NewDNSCache(logger)
+	cache := NewDNSCache(logger, defaultMaxEntries)
 	cache.SetResolver(func(_ context.Context, host string) ([]net.IP, error) {
 		switch host {
 		case "api.example.com":
