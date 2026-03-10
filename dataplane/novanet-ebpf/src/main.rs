@@ -27,6 +27,7 @@ use aya_ebpf::{
     macros::{cgroup_sock_addr, classifier, map, sk_lookup, sk_msg, sock_ops},
     maps::{Array, HashMap, LruHashMap, PerCpuArray, PerCpuHashMap, RingBuf, SockHash},
     programs::{SkLookupContext, SkMsgContext, SockAddrContext, SockOpsContext, TcContext},
+    EbpfContext,
 };
 use network_types::{
     eth::{EthHdr, EtherType},
