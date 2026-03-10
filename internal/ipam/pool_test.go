@@ -369,10 +369,10 @@ func TestPoolConcurrentAccess(t *testing.T) {
 	}
 	for _, ipStr := range specificIPs {
 		wg.Add(1)
-		go func() {
+		go func(ip string) {
 			defer wg.Done()
-			_ = p.AllocateSpecific(net.ParseIP(ipStr), "owner", "res")
-		}()
+			_ = p.AllocateSpecific(net.ParseIP(ip), "owner", "res")
+		}(ipStr)
 	}
 
 	wg.Wait()
