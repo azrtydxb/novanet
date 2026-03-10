@@ -39,7 +39,7 @@ func NewExtendedCompiler(identityAllocator *identity.Allocator, logger *zap.Logg
 			identityAllocator: identityAllocator,
 			logger:            logger,
 		},
-		dnsCache: NewDNSCache(logger),
+		dnsCache: NewDNSCache(logger, defaultMaxEntries),
 	}
 }
 
@@ -127,12 +127,12 @@ func (c *ExtendedCompiler) CompileAll(policies []*v1alpha1.NovaNetworkPolicy) []
 }
 
 // compileIngressRule compiles a single extended ingress rule for the target identity.
-func (c *ExtendedCompiler) compileIngressRule(rule v1alpha1.NovaNetworkPolicyIngressRule, dstIdentity uint32, namespace string) []*CompiledRule {
+func (c *ExtendedCompiler) compileIngressRule(rule v1alpha1.NovaNetworkPolicyIngressRule, dstIdentity uint64, namespace string) []*CompiledRule {
 	return c.compileDirectionalRule(rule.From, rule.Ports, dstIdentity, false, namespace)
 }
 
 // compileEgressRule compiles a single extended egress rule for the source identity.
-func (c *ExtendedCompiler) compileEgressRule(rule v1alpha1.NovaNetworkPolicyEgressRule, srcIdentity uint32, namespace string) []*CompiledRule {
+func (c *ExtendedCompiler) compileEgressRule(rule v1alpha1.NovaNetworkPolicyEgressRule, srcIdentity uint64, namespace string) []*CompiledRule {
 	return c.compileDirectionalRule(rule.To, rule.Ports, srcIdentity, true, namespace)
 }
 
@@ -142,7 +142,7 @@ func (c *ExtendedCompiler) compileEgressRule(rule v1alpha1.NovaNetworkPolicyEgre
 func (c *ExtendedCompiler) compileDirectionalRule(
 	peers []v1alpha1.NovaNetworkPolicyPeer,
 	nnpPorts []v1alpha1.NovaNetworkPolicyPort,
-	fixedID uint32,
+	fixedID uint64,
 	isEgress bool,
 	namespace string,
 ) []*CompiledRule {
@@ -155,7 +155,7 @@ func (c *ExtendedCompiler) compileDirectionalRule(
 	ports := c.resolveExtendedPorts(nnpPorts)
 
 	if len(peers) == 0 {
-		identities = []uint32{WildcardIdentity}
+		identities = []uint64{WildcardIdentity}
 	}
 
 	if len(ports) == 0 {
@@ -176,8 +176,8 @@ func (c *ExtendedCompiler) compileDirectionalRule(
 
 // resolveExtendedPeers converts NovaNetworkPolicyPeer selectors to identity IDs.
 // Handles PodSelector, NamespaceSelector, and ServiceAccount peers.
-func (c *ExtendedCompiler) resolveExtendedPeers(peers []v1alpha1.NovaNetworkPolicyPeer, namespace string) []uint32 {
-	var identities []uint32
+func (c *ExtendedCompiler) resolveExtendedPeers(peers []v1alpha1.NovaNetworkPolicyPeer, namespace string) []uint64 {
+	var identities []uint64
 
 	for _, peer := range peers {
 		if peer.IPBlock != nil || peer.FQDN != nil {
@@ -199,7 +199,7 @@ func (c *ExtendedCompiler) resolveExtendedPeers(peers []v1alpha1.NovaNetworkPoli
 
 // resolveServiceAccountPeer translates a ServiceAccount peer into an identity
 // by constructing a label selector that matches pods with the given SA.
-func (c *ExtendedCompiler) resolveServiceAccountPeer(sa *v1alpha1.ServiceAccountPeer, policyNamespace string) uint32 {
+func (c *ExtendedCompiler) resolveServiceAccountPeer(sa *v1alpha1.ServiceAccountPeer, policyNamespace string) uint64 {
 	ns := sa.Namespace
 	if ns == "" {
 		ns = policyNamespace

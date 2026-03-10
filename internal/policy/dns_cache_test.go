@@ -2,6 +2,7 @@ package policy
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"sync/atomic"
 	"testing"
@@ -12,7 +13,7 @@ import (
 
 func testDNSCache() *DNSCache {
 	logger, _ := zap.NewDevelopment()
-	return NewDNSCache(logger)
+	return NewDNSCache(logger, defaultMaxEntries)
 }
 
 func TestDNSCacheResolve(t *testing.T) {
@@ -27,7 +28,6 @@ func TestDNSCacheResolve(t *testing.T) {
 		return nil, &net.DNSError{Err: "not found", Name: host}
 	})
 
-	// First call should resolve.
 	ips := cache.Resolve("example.com")
 	if len(ips) != 1 {
 		t.Fatalf("expected 1 IP, got %d", len(ips))
@@ -39,7 +39,6 @@ func TestDNSCacheResolve(t *testing.T) {
 		t.Fatalf("expected 1 resolver call, got %d", callCount.Load())
 	}
 
-	// Second call should use cache (no additional resolver call).
 	ips = cache.Resolve("example.com")
 	if len(ips) != 1 {
 		t.Fatalf("expected 1 IP from cache, got %d", len(ips))
@@ -77,19 +76,16 @@ func TestDNSCacheRefresh(t *testing.T) {
 		return nil, &net.DNSError{Err: "not found", Name: host}
 	})
 
-	// Initial resolve.
 	ips := cache.Resolve("example.com")
 	if len(ips) != 1 || ips[0].String() != "1.1.1.1" {
 		t.Fatalf("expected 1.1.1.1, got %v", ips)
 	}
 
-	// Refresh should detect the change.
 	changed := cache.Refresh()
 	if changed != 1 {
 		t.Fatalf("expected 1 changed entry, got %d", changed)
 	}
 
-	// Verify the cache is updated.
 	all := cache.GetAll()
 	if len(all["example.com"]) != 1 || all["example.com"][0].String() != "2.2.2.2" {
 		t.Fatalf("expected 2.2.2.2 after refresh, got %v", all["example.com"])
@@ -165,7 +161,7 @@ func TestDNSCacheExpiredEntry(t *testing.T) {
 	cache := testDNSCache()
 
 	callCount := atomic.Int32{}
-	cache.SetResolver(func(_ context.Context, host string) ([]net.IP, error) {
+	cache.SetResolver(func(_ context.Context, _ string) ([]net.IP, error) {
 		c := callCount.Add(1)
 		if c == 1 {
 			return []net.IP{net.ParseIP("1.1.1.1")}, nil
@@ -173,20 +169,152 @@ func TestDNSCacheExpiredEntry(t *testing.T) {
 		return []net.IP{net.ParseIP("2.2.2.2")}, nil
 	})
 
-	// Initial resolve.
 	cache.Resolve("example.com")
 
-	// Manually expire the entry.
 	cache.mu.Lock()
-	cache.ttls["example.com"] = time.Now().Add(-1 * time.Second)
+	cache.entries["example.com"].expiry = time.Now().Add(-1 * time.Second)
 	cache.mu.Unlock()
 
-	// Should re-resolve since expired.
 	ips := cache.Resolve("example.com")
 	if len(ips) != 1 || ips[0].String() != "2.2.2.2" {
 		t.Fatalf("expected 2.2.2.2 after expiry, got %v", ips)
 	}
 	if callCount.Load() != 2 {
 		t.Fatalf("expected 2 resolver calls after expiry, got %d", callCount.Load())
+	}
+}
+
+func TestDNSCacheSize(t *testing.T) {
+	cache := testDNSCache()
+
+	cache.SetResolver(func(_ context.Context, _ string) ([]net.IP, error) {
+		return []net.IP{net.ParseIP("1.1.1.1")}, nil
+	})
+
+	if cache.Size() != 0 {
+		t.Fatalf("expected size 0, got %d", cache.Size())
+	}
+
+	cache.Resolve("a.example.com")
+	if cache.Size() != 1 {
+		t.Fatalf("expected size 1, got %d", cache.Size())
+	}
+
+	cache.Resolve("b.example.com")
+	if cache.Size() != 2 {
+		t.Fatalf("expected size 2, got %d", cache.Size())
+	}
+
+	cache.Resolve("a.example.com")
+	if cache.Size() != 2 {
+		t.Fatalf("expected size 2 after re-resolve, got %d", cache.Size())
+	}
+}
+
+func TestDNSCacheLRUEviction(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+	cache := NewDNSCache(logger, 3)
+
+	cache.SetResolver(func(_ context.Context, _ string) ([]net.IP, error) {
+		return []net.IP{net.ParseIP("1.1.1.1")}, nil
+	})
+
+	cache.Resolve("a.example.com")
+	cache.Resolve("b.example.com")
+	cache.Resolve("c.example.com")
+
+	if cache.Size() != 3 {
+		t.Fatalf("expected size 3, got %d", cache.Size())
+	}
+
+	cache.Resolve("a.example.com")
+
+	cache.Resolve("d.example.com")
+
+	if cache.Size() != 3 {
+		t.Fatalf("expected size 3 after eviction, got %d", cache.Size())
+	}
+
+	all := cache.GetAll()
+
+	if _, ok := all["d.example.com"]; !ok {
+		t.Fatal("expected d.example.com to be present after insertion")
+	}
+
+	if _, ok := all["a.example.com"]; !ok {
+		t.Fatal("expected a.example.com to be present (recently accessed)")
+	}
+
+	if _, ok := all["b.example.com"]; ok {
+		t.Fatal("expected b.example.com to be evicted (it was LRU)")
+	}
+}
+
+func TestDNSCacheLRUEvictionOrder(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+	cache := NewDNSCache(logger, 2)
+
+	cache.SetResolver(func(_ context.Context, _ string) ([]net.IP, error) {
+		return []net.IP{net.ParseIP("10.0.0.1")}, nil
+	})
+
+	cache.Resolve("first.example.com")
+	cache.Resolve("second.example.com")
+
+	cache.Resolve("first.example.com")
+
+	cache.Resolve("third.example.com")
+
+	if cache.Size() != 2 {
+		t.Fatalf("expected size 2, got %d", cache.Size())
+	}
+
+	all := cache.GetAll()
+	if _, ok := all["first.example.com"]; !ok {
+		t.Fatal("expected first.example.com to survive (recently accessed)")
+	}
+	if _, ok := all["third.example.com"]; !ok {
+		t.Fatal("expected third.example.com to be present (just added)")
+	}
+	if _, ok := all["second.example.com"]; ok {
+		t.Fatal("expected second.example.com to be evicted")
+	}
+}
+
+func TestDNSCacheMaxEntriesDefault(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+
+	cache := NewDNSCache(logger, 0)
+	if cache.maxEntries != defaultMaxEntries {
+		t.Fatalf("expected default max entries %d, got %d", defaultMaxEntries, cache.maxEntries)
+	}
+
+	cache = NewDNSCache(logger, -1)
+	if cache.maxEntries != defaultMaxEntries {
+		t.Fatalf("expected default max entries %d, got %d", defaultMaxEntries, cache.maxEntries)
+	}
+}
+
+func TestDNSCacheEvictionUnderLoad(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+	maxSize := 100
+	cache := NewDNSCache(logger, maxSize)
+
+	cache.SetResolver(func(_ context.Context, _ string) ([]net.IP, error) {
+		return []net.IP{net.ParseIP("10.0.0.1")}, nil
+	})
+
+	for i := 0; i < maxSize+50; i++ {
+		cache.Resolve(fmt.Sprintf("host-%d.example.com", i))
+	}
+
+	if cache.Size() != maxSize {
+		t.Fatalf("expected cache size %d, got %d", maxSize, cache.Size())
+	}
+
+	all := cache.GetAll()
+	lastKey := fmt.Sprintf("host-%d.example.com", maxSize+49)
+	if _, ok := all[lastKey]; !ok {
+		t.Fatalf("expected most recent entry %s to be present", lastKey)
 	}
 }

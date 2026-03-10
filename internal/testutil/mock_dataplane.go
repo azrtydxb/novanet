@@ -106,5 +106,15 @@ func (m *MockDataplane) GetBackendHealthStats(_ context.Context, _ string, _ uin
 	return nil, nil
 }
 
+// UpsertBackends implements dataplane.ClientInterface.
+func (m *MockDataplane) UpsertBackends(_ context.Context, _ []*dataplane.Backend) error {
+	return nil
+}
+
+// UpsertServiceEntry implements dataplane.ClientInterface.
+func (m *MockDataplane) UpsertServiceEntry(_ context.Context, _ *dataplane.ServiceConfig) error {
+	return nil
+}
+
 // Close implements dataplane.ClientInterface.
 func (m *MockDataplane) Close() error { return nil }
