@@ -23,7 +23,7 @@ type peerResolver struct {
 // selectorToIdentities converts a LabelSelector plus namespace into identity IDs.
 // It finds all allocated identities whose labels match the selector (including
 // MatchExpressions), falling back to hashing the MatchLabels if no matches exist yet.
-func (r *peerResolver) selectorToIdentities(selector metav1.LabelSelector, namespace string) []uint32 {
+func (r *peerResolver) selectorToIdentities(selector metav1.LabelSelector, namespace string) []uint64 {
 	scoped := selector.DeepCopy()
 	if scoped.MatchLabels == nil {
 		scoped.MatchLabels = make(map[string]string)
@@ -33,7 +33,7 @@ func (r *peerResolver) selectorToIdentities(selector metav1.LabelSelector, names
 	sel, err := metav1.LabelSelectorAsSelector(scoped)
 	if err != nil {
 		r.logger.Warn("invalid pod selector", zap.Error(err))
-		return []uint32{WildcardIdentity}
+		return []uint64{WildcardIdentity}
 	}
 
 	matches := r.identityAllocator.FindMatchingIdentities(sel)
@@ -41,12 +41,12 @@ func (r *peerResolver) selectorToIdentities(selector metav1.LabelSelector, names
 		return matches
 	}
 
-	return []uint32{identity.HashLabels(scoped.MatchLabels)}
+	return []uint64{identity.HashLabels(scoped.MatchLabels)}
 }
 
 // findOrFallback finds allocated identities matching the selector, or falls
 // back to hashing the MatchLabels if no matches exist yet.
-func (r *peerResolver) findOrFallback(selector metav1.LabelSelector) []uint32 {
+func (r *peerResolver) findOrFallback(selector metav1.LabelSelector) []uint64 {
 	sel, err := metav1.LabelSelectorAsSelector(&selector)
 	if err != nil {
 		r.logger.Warn("invalid peer label selector, skipping", zap.Error(err))
@@ -58,7 +58,7 @@ func (r *peerResolver) findOrFallback(selector metav1.LabelSelector) []uint32 {
 	}
 	fallback := make(map[string]string)
 	maps.Copy(fallback, selector.MatchLabels)
-	return []uint32{identity.HashLabels(fallback)}
+	return []uint64{identity.HashLabels(fallback)}
 }
 
 // resolveNamespaceNames resolves a namespace label selector to namespace names.
@@ -79,9 +79,9 @@ func (r *peerResolver) resolvePodAndNsPeers(
 	podSel *metav1.LabelSelector,
 	nsSel *metav1.LabelSelector,
 	namespace string,
-) []uint32 {
+) []uint64 {
 	if podSel == nil && nsSel == nil {
-		return []uint32{WildcardIdentity}
+		return []uint64{WildcardIdentity}
 	}
 
 	podSelector := metav1.LabelSelector{}
@@ -92,14 +92,14 @@ func (r *peerResolver) resolvePodAndNsPeers(
 	if nsSel != nil {
 		if len(nsSel.MatchLabels) == 0 && len(nsSel.MatchExpressions) == 0 {
 			if len(podSelector.MatchLabels) == 0 && len(podSelector.MatchExpressions) == 0 {
-				return []uint32{WildcardIdentity}
+				return []uint64{WildcardIdentity}
 			}
 			return r.findOrFallback(podSelector)
 		}
 
 		nsNames := r.resolveNamespaceNames(nsSel)
 		if len(nsNames) > 0 {
-			var identities []uint32
+			var identities []uint64
 			for _, nsName := range nsNames {
 				scoped := podSelector.DeepCopy()
 				if scoped.MatchLabels == nil {
@@ -116,7 +116,7 @@ func (r *peerResolver) resolvePodAndNsPeers(
 		for k, v := range nsSel.MatchLabels {
 			fallback["ns."+k] = v
 		}
-		return []uint32{identity.HashLabels(fallback)}
+		return []uint64{identity.HashLabels(fallback)}
 	}
 
 	// No namespace selector: scope to the policy's namespace.

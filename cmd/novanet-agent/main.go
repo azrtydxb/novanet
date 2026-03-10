@@ -160,7 +160,7 @@ type endpoint struct {
 	IP           net.IP
 	MAC          net.HardwareAddr
 	IfIndex      uint32
-	IdentityID   uint32
+	IdentityID   uint64
 	Netns        string
 	IfName       string
 	HostVeth     string
@@ -224,7 +224,7 @@ type agentServer struct {
 
 // egressMapKey identifies an entry in the eBPF EGRESS_POLICIES map.
 type egressMapKey struct {
-	srcIdentity  uint32
+	srcIdentity  uint64
 	dstCidr      string // CIDR string, e.g. "10.0.0.0/24" or "fd00::/64"
 	dstPrefixLen uint32
 }
@@ -318,7 +318,7 @@ func (s *agentServer) AddPod(ctx context.Context, req *pb.AddPodRequest) (*pb.Ad
 			Ip:         podIP.String(),
 			Ifindex:    uint32(ifindex), //nolint:gosec // ifindex from kernel, always small positive
 			Mac:        mac,
-			IdentityId: identityID,
+			IdentityId: uint32(identityID), //nolint:gosec // truncated to uint32 for proto wire format
 			PodName:    req.PodName,
 			Namespace:  req.PodNamespace,
 			NodeIp:     s.nodeIP.String(),
@@ -351,7 +351,7 @@ func (s *agentServer) AddPod(ctx context.Context, req *pb.AddPodRequest) (*pb.Ad
 		zap.String("gateway", gateway.String()),
 		zap.String("host_veth", hostVethName),
 		zap.Int("ifindex", ifindex),
-		zap.Uint32("identity_id", identityID),
+		zap.Uint64("identity_id", identityID),
 	)
 
 	// Trigger policy recompilation so that rules reference the actual pod
@@ -519,8 +519,8 @@ func (s *agentServer) ListPolicies(_ context.Context, _ *pb.ListPoliciesRequest)
 			action = pb.PolicyAction_POLICY_ACTION_ALLOW
 		}
 		resp.Rules = append(resp.Rules, &pb.PolicyRuleInfo{
-			SrcIdentity: r.SrcIdentity,
-			DstIdentity: r.DstIdentity,
+			SrcIdentity: uint32(r.SrcIdentity), //nolint:gosec // truncated to uint32 for proto wire format
+			DstIdentity: uint32(r.DstIdentity), //nolint:gosec // truncated to uint32 for proto wire format
 			Protocol:    uint32(r.Protocol),
 			DstPort:     uint32(r.DstPort),
 			Action:      action,
@@ -537,7 +537,7 @@ func (s *agentServer) ListIdentities(_ context.Context, _ *pb.ListIdentitiesRequ
 	}
 	for _, e := range entries {
 		resp.Identities = append(resp.Identities, &pb.IdentityInfo{
-			IdentityId: e.ID,
+			IdentityId: uint32(e.ID), //nolint:gosec // truncated to uint32 for proto wire format
 			Labels:     e.Labels,
 			RefCount:   uint32(e.RefCount), //nolint:gosec // bounded count
 		})
@@ -585,7 +585,7 @@ func (s *agentServer) ListEgressPolicies(_ context.Context, _ *pb.ListEgressPoli
 		resp.Rules = append(resp.Rules, &pb.EgressPolicyInfo{
 			Namespace:   r.Namespace,
 			Name:        r.Name,
-			SrcIdentity: r.SrcIdentity,
+			SrcIdentity: uint32(r.SrcIdentity), //nolint:gosec // truncated to uint32 for proto wire format
 			DstCidr:     r.DstCIDR.String(),
 			Protocol:    uint32(r.Protocol),
 			DstPort:     uint32(r.DstPort),
@@ -634,8 +634,8 @@ func (s *agentServer) onPolicyChange(rules []*policy.CompiledRule) {
 			action = pb.PolicyAction_POLICY_ACTION_ALLOW
 		}
 		entries = append(entries, &pb.PolicyEntry{
-			SrcIdentity: r.SrcIdentity,
-			DstIdentity: r.DstIdentity,
+			SrcIdentity: uint32(r.SrcIdentity), //nolint:gosec // truncated to uint32 for proto wire format
+			DstIdentity: uint32(r.DstIdentity), //nolint:gosec // truncated to uint32 for proto wire format
 			Protocol:    uint32(r.Protocol),
 			DstPort:     uint32(r.DstPort),
 			Action:      action,
@@ -730,7 +730,7 @@ func (s *agentServer) syncEgressRules(rules []*policy.CompiledRule) {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		_, err = s.dpClient.UpsertEgressPolicy(ctx, &pb.UpsertEgressPolicyRequest{
-			SrcIdentity:      r.SrcIdentity,
+			SrcIdentity:      uint32(r.SrcIdentity), //nolint:gosec // truncated to uint32 for proto wire format
 			DstCidr:          cidrStr,
 			DstCidrPrefixLen: uint32(ones), //nolint:gosec // CIDR prefix 0-128
 			Protocol:         uint32(r.Protocol),
@@ -752,14 +752,14 @@ func (s *agentServer) syncEgressRules(rules []*policy.CompiledRule) {
 			if !newKeys[oldKey] {
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				_, err := s.dpClient.DeleteEgressPolicy(ctx, &pb.DeleteEgressPolicyRequest{
-					SrcIdentity:      oldKey.srcIdentity,
+					SrcIdentity:      uint32(oldKey.srcIdentity), //nolint:gosec // truncated to uint32 for proto wire format
 					DstCidr:          oldKey.dstCidr,
 					DstCidrPrefixLen: oldKey.dstPrefixLen,
 				})
 				cancel()
 				if err != nil {
 					s.logger.Warn("failed to delete stale egress policy from dataplane",
-						zap.Uint32("src_identity", oldKey.srcIdentity),
+						zap.Uint64("src_identity", oldKey.srcIdentity),
 						zap.String("dst_cidr", oldKey.dstCidr),
 						zap.Error(err))
 				}
@@ -885,7 +885,7 @@ func upsertRemoteEndpoint(ctx context.Context, logger *zap.Logger,
 		Ip:         podIP.String(),
 		Ifindex:    0,                        // Remote pod — no local interface.
 		Mac:        []byte{0, 0, 0, 0, 0, 0}, // Remote pod — zero MAC (not used for policy).
-		IdentityId: identityID,
+		IdentityId: uint32(identityID),       //nolint:gosec // truncated to uint32 for proto wire format
 		PodName:    pod.Name,
 		Namespace:  pod.Namespace,
 		NodeIp:     hostIP.String(),
@@ -905,7 +905,7 @@ func upsertRemoteEndpoint(ctx context.Context, logger *zap.Logger,
 	logger.Debug("synced remote endpoint",
 		zap.String("pod", pod.Namespace+"/"+pod.Name),
 		zap.String("pod_ip", pod.Status.PodIP),
-		zap.Uint32("identity_id", identityID),
+		zap.Uint64("identity_id", identityID),
 	)
 	return true
 }
