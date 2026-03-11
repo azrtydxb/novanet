@@ -40,7 +40,11 @@ func TestNewAuthenticatedServer_Serves(t *testing.T) {
 
 	sockPath := shortSocketPath(t)
 
-	srv := NewAuthenticatedServer(logger, []uint32{0})
+	uid := os.Getuid()
+	if uid < 0 || uid > int(^uint32(0)) {
+		t.Fatalf("UID %d out of uint32 range", uid)
+	}
+	srv := NewAuthenticatedServer(logger, []uint32{uint32(uid)}) //#nosec G115 -- bounds checked above
 	healthpb.RegisterHealthServer(srv, health.NewServer())
 
 	var lc net.ListenConfig
