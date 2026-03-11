@@ -34,7 +34,7 @@ func SetRemoteEndpointSyncFunc(fn func(ctx context.Context, logger *zap.Logger,
 var startRemoteEndpointSyncDirect = func(ctx context.Context, logger *zap.Logger,
 	k8sClient kubernetes.Interface, dpClient pb.DataplaneControlClient, nodeName string,
 	_ prometheus.Gauge) {
-	logger.Warn("remote endpoint sync not wired — call remotesync.StartRemoteEndpointSync directly")
+	logger.Warn("remote endpoint sync not wired — ensure agent.SetRemoteEndpointSyncFunc(remotesync.StartRemoteEndpointSync) is called during initialization")
 }
 
 // StartPolicyWatcher starts the NetworkPolicy watcher if a Kubernetes client is available.
