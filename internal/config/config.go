@@ -410,6 +410,15 @@ func parseBoolEnv(envVar string, current bool) bool {
 //   - NOVANET_CLUSTER_CIDR → cluster_cidr
 //   - NOVANET_ROUTING_MODE → routing_mode
 //   - NOVANET_TUNNEL_PROTOCOL → tunnel_protocol
+//
+// Legacy NOVAROUTE_* variables are also accepted for backward compatibility
+// with older deployments that used the NOVAROUTE_ prefix:
+//   - NOVAROUTE_CLUSTER_CIDR → cluster_cidr
+//   - NOVAROUTE_ROUTING_MODE → routing_mode
+//   - NOVAROUTE_TUNNEL_PROTOCOL → tunnel_protocol
+//
+// When both NOVANET_* and NOVAROUTE_* are set for the same field, the
+// NOVANET_* value takes precedence.
 func ExpandEnvVars(cfg *Config) {
 	// No token expansion needed — routing is in-process now.
 
@@ -440,18 +449,20 @@ func ExpandEnvVars(cfg *Config) {
 
 	// Backward-compatible NOVAROUTE_ env var aliases.
 	// These are accepted for users migrating from older deployments that
-	// used the NOVAROUTE_ prefix. NOVANET_ takes precedence (applied above).
-	if cfg.RoutingMode == "" {
+	// used the NOVAROUTE_ prefix. NOVANET_ takes precedence: the legacy
+	// fallback is only applied when the corresponding NOVANET_ variable
+	// was not explicitly set in the environment.
+	if _, ok := os.LookupEnv("NOVANET_ROUTING_MODE"); !ok {
 		if v := os.Getenv("NOVAROUTE_ROUTING_MODE"); v != "" {
 			cfg.RoutingMode = v
 		}
 	}
-	if cfg.ClusterCIDR == "" {
+	if _, ok := os.LookupEnv("NOVANET_CLUSTER_CIDR"); !ok {
 		if v := os.Getenv("NOVAROUTE_CLUSTER_CIDR"); v != "" {
 			cfg.ClusterCIDR = v
 		}
 	}
-	if cfg.TunnelProtocol == "" {
+	if _, ok := os.LookupEnv("NOVANET_TUNNEL_PROTOCOL"); !ok {
 		if v := os.Getenv("NOVAROUTE_TUNNEL_PROTOCOL"); v != "" {
 			cfg.TunnelProtocol = v
 		}
