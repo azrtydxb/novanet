@@ -2,6 +2,7 @@ package frr
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,8 +33,8 @@ func TestResolveAFICLI_BGP(t *testing.T) {
 				if err == nil {
 					t.Errorf("resolveAFICLI(%q) expected error, got nil", tt.input)
 				}
-				if !strings.Contains(err.Error(), "unrecognized AFI") {
-					t.Errorf("resolveAFICLI(%q) error = %v, want to contain 'unrecognized AFI'", tt.input, err)
+				if !errors.Is(err, ErrUnrecognizedAFI) {
+					t.Errorf("resolveAFICLI(%q) error = %v, want ErrUnrecognizedAFI", tt.input, err)
 				}
 				return
 			}
