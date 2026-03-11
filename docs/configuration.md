@@ -403,8 +403,12 @@ The NovaNet operator registers validating admission webhooks for the following C
 | CRD | Webhook | Validations |
 |-----|---------|-------------|
 | `HostEndpointPolicy` | `vhostendpointpolicy.kb.io` | Action must be `Allow` or `Deny`; CIDRs must be valid and canonical; ports must be in range 1-65535; endPort must be >= port; protocol must be TCP, UDP, or SCTP |
-| `NovaNetworkPolicy` | `vnovanetworkpolicy.kb.io` | PolicyTypes must be `Ingress` or `Egress`; IPBlock CIDRs and exceptions must be valid; port numbers in range; endPort requires port; protocol must be TCP, UDP, or SCTP |
+| `NovaNetworkPolicy` | `vnovanetworkpolicy.kb.io` | PolicyTypes must be `Ingress` or `Egress`; IPBlock CIDRs and exceptions must be valid and exceptions must be contained within the parent CIDR; port numbers in range; endPort requires port; protocol must be TCP, UDP, or SCTP |
 | `IPPool` | `vippool.kb.io` | Type must be a valid IPPoolType; CIDRs must be valid and non-overlapping; addresses must be valid IPs; at least one CIDR or address is required |
+| `EgressGatewayPolicy` | `vegressgatewaypolicy.kb.io` | Destination and excluded CIDRs must be valid and canonical; egressIP must be a valid IP address |
+| `NovaNetCluster` | `vnovanetcluster.kb.io` | ClusterCIDR and ClusterCIDRv6 must be valid CIDRs; ControlPlaneVIP must be a valid IP; MTU must be 0 (auto) or 1280-9000; agent ports must be in range 1-65535 |
+
+Note: `IPAllocation` is an internal-only CRD managed exclusively by the IPAM controller and does not have a validating webhook.
 
 The webhook manifests are located at `config/webhook/manifests.yaml`. The operator wires them up automatically via controller-runtime's webhook builder.
 
