@@ -12,6 +12,9 @@ import (
 // configuring the local AS number via ConfigureBGPGlobal.
 var ErrBGPNotConfigured = errors.New("BGP local AS not configured")
 
+// ErrUnrecognizedAFI is returned when an AFI string is not a recognized address family.
+var ErrUnrecognizedAFI = errors.New("unrecognized AFI")
+
 // NeighborConfig holds optional BGP neighbor configuration fields.
 type NeighborConfig struct {
 	SourceAddress string
@@ -212,9 +215,9 @@ func (c *Client) ActivateNeighborAFI(ctx context.Context, addr string, afi strin
 		return fmt.Errorf("frr: activate neighbor AFI: %w", err)
 	}
 
-	afiName := resolveAFICLI(afi)
-	if _, err := sanitizeVTYParam(afiName); err != nil {
-		return fmt.Errorf("frr: activate neighbor AFI: afi: %w", err)
+	afiName, err := resolveAFICLI(afi)
+	if err != nil {
+		return fmt.Errorf("frr: activate neighbor AFI: %w", err)
 	}
 
 	c.logger.Info("activating BGP neighbor AFI",
@@ -245,9 +248,9 @@ func (c *Client) AdvertiseNetwork(ctx context.Context, prefix string, afi string
 		return fmt.Errorf("frr: advertise network: prefix: %w", err)
 	}
 
-	afiName := resolveAFICLI(afi)
-	if _, err := sanitizeVTYParam(afiName); err != nil {
-		return fmt.Errorf("frr: advertise network: afi: %w", err)
+	afiName, err := resolveAFICLI(afi)
+	if err != nil {
+		return fmt.Errorf("frr: advertise network: %w", err)
 	}
 
 	c.logger.Info("advertising BGP network",
@@ -274,9 +277,9 @@ func (c *Client) WithdrawNetwork(ctx context.Context, prefix string, afi string)
 		return fmt.Errorf("frr: withdraw network: prefix: %w", err)
 	}
 
-	afiName := resolveAFICLI(afi)
-	if _, err := sanitizeVTYParam(afiName); err != nil {
-		return fmt.Errorf("frr: withdraw network: afi: %w", err)
+	afiName, err := resolveAFICLI(afi)
+	if err != nil {
+		return fmt.Errorf("frr: withdraw network: %w", err)
 	}
 
 	c.logger.Info("withdrawing BGP network",
@@ -316,9 +319,9 @@ func (c *Client) SetNeighborMaxPrefix(ctx context.Context, addr string, maxPrefi
 		return fmt.Errorf("frr: set neighbor max-prefix: %w", err)
 	}
 
-	afiName := resolveAFICLI(afi)
-	if _, err := sanitizeVTYParam(afiName); err != nil {
-		return fmt.Errorf("frr: set neighbor max-prefix: afi: %w", err)
+	afiName, err := resolveAFICLI(afi)
+	if err != nil {
+		return fmt.Errorf("frr: set neighbor max-prefix: %w", err)
 	}
 
 	c.logger.Info("setting neighbor maximum-prefix",
@@ -387,9 +390,9 @@ func (c *Client) AdvertiseNetworkWithRouteMap(ctx context.Context, prefix, afi, 
 		return fmt.Errorf("frr: advertise network with route-map: route-map name: %w", err)
 	}
 
-	afiName := resolveAFICLI(afi)
-	if _, err := sanitizeVTYParam(afiName); err != nil {
-		return fmt.Errorf("frr: advertise network with route-map: afi: %w", err)
+	afiName, err := resolveAFICLI(afi)
+	if err != nil {
+		return fmt.Errorf("frr: advertise network with route-map: %w", err)
 	}
 
 	c.logger.Info("advertising BGP network with route-map",
@@ -459,13 +462,15 @@ func (c *Client) SetNeighborBFD(ctx context.Context, addr string, enabled bool) 
 }
 
 // resolveAFICLI maps AFI identifiers to FRR CLI address-family names.
-func resolveAFICLI(afi string) string {
+// It returns an error for unrecognized AFI values instead of passing them
+// through unsanitized.
+func resolveAFICLI(afi string) (string, error) {
 	switch afi {
 	case "ipv4-unicast", "ipv4":
-		return "ipv4 unicast"
+		return "ipv4 unicast", nil
 	case "ipv6-unicast", "ipv6":
-		return "ipv6 unicast"
+		return "ipv6 unicast", nil
 	default:
-		return afi
+		return "", fmt.Errorf("%w: %q", ErrUnrecognizedAFI, afi)
 	}
 }
