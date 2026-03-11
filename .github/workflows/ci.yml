@@ -28,7 +28,7 @@ env:
 jobs:
   phase1-changes:
     name: "Phase 1: Detect Changes"
-    runs-on: qnap-nas
+    runs-on: ubuntu-latest
     outputs:
       go: ${{ steps.filter.outputs.go }}
       rust: ${{ steps.filter.outputs.rust }}
@@ -57,7 +57,7 @@ jobs:
     name: "Phase 1: Lint (Go)"
     needs: phase1-changes
     if: needs.phase1-changes.outputs.go == 'true'
-    runs-on: qnap-nas
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -94,7 +94,7 @@ jobs:
     name: "Phase 1: Lint (Rust)"
     needs: phase1-changes
     if: needs.phase1-changes.outputs.rust == 'true'
-    runs-on: qnap-nas
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
@@ -140,7 +140,7 @@ jobs:
     name: "Phase 1: Lint (Helm)"
     needs: phase1-changes
     if: needs.phase1-changes.outputs.helm == 'true'
-    runs-on: qnap-nas
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
@@ -155,7 +155,7 @@ jobs:
 
   phase1-gate:
     name: "Phase 1: Gate"
-    runs-on: qnap-nas
+    runs-on: ubuntu-latest
     needs: [phase1-changes, phase1-lint-go, phase1-lint-rust, phase1-lint-helm]
     if: always()
     steps:
@@ -177,7 +177,7 @@ jobs:
     name: "Phase 2: Docs Build"
     needs: phase1-gate
     if: ${{ !cancelled() && needs.phase1-gate.result == 'success' }}
-    runs-on: qnap-nas
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
@@ -196,7 +196,7 @@ jobs:
     name: "Phase 2: Docs Freshness"
     needs: phase1-gate
     if: ${{ !cancelled() && needs.phase1-gate.result == 'success' && github.event_name == 'pull_request' }}
-    runs-on: qnap-nas
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -216,7 +216,7 @@ jobs:
     name: "Phase 2: Security"
     needs: phase1-gate
     if: ${{ !cancelled() && needs.phase1-gate.result == 'success' }}
-    runs-on: qnap-nas
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -241,7 +241,7 @@ jobs:
 
   phase2-gate:
     name: "Phase 2: Gate"
-    runs-on: qnap-nas
+    runs-on: ubuntu-latest
     needs: [phase1-gate, phase2-docs, phase2-docs-freshness, phase2-security]
     if: always()
     steps:
@@ -267,7 +267,7 @@ jobs:
     name: "Phase 3: Test (Go)"
     needs: phase2-gate
     if: ${{ !cancelled() && needs.phase2-gate.result == 'success' }}
-    runs-on: qnap-nas
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
@@ -321,7 +321,7 @@ jobs:
     name: "Phase 3: Test (Rust)"
     needs: [phase2-gate, phase1-changes]
     if: ${{ !cancelled() && needs.phase2-gate.result == 'success' && needs.phase1-changes.outputs.rust == 'true' }}
-    runs-on: qnap-nas
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
@@ -381,7 +381,7 @@ jobs:
 
   phase3-gate:
     name: "Phase 3: Gate"
-    runs-on: qnap-nas
+    runs-on: ubuntu-latest
     needs: [phase2-gate, phase3-test-go, phase3-test-rust]
     if: always()
     steps:
@@ -407,7 +407,7 @@ jobs:
     name: "Phase 4: Build (${{ matrix.binary }})"
     needs: phase3-gate
     if: ${{ !cancelled() && needs.phase3-gate.result == 'success' }}
-    runs-on: qnap-nas
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         include:
@@ -443,7 +443,7 @@ jobs:
     name: "Phase 4: Build (Rust/eBPF)"
     needs: [phase3-gate, phase1-changes]
     if: ${{ !cancelled() && needs.phase3-gate.result == 'success' && needs.phase1-changes.outputs.rust == 'true' }}
-    runs-on: qnap-nas
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
@@ -467,7 +467,7 @@ jobs:
     name: "Phase 4: Docker Test"
     needs: phase3-gate
     if: ${{ !cancelled() && needs.phase3-gate.result == 'success' }}
-    runs-on: qnap-nas
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
@@ -489,7 +489,7 @@ jobs:
 
   phase4-gate:
     name: "Phase 4: Gate"
-    runs-on: qnap-nas
+    runs-on: ubuntu-latest
     needs: [phase3-gate, phase4-build-go, phase4-build-rust, phase4-docker-test]
     if: always()
     steps:
@@ -515,7 +515,7 @@ jobs:
     name: "Phase 5: Push (${{ matrix.image }})"
     needs: phase4-gate
     if: ${{ !cancelled() && needs.phase4-gate.result == 'success' && github.ref == 'refs/heads/main' && github.event_name == 'push' }}
-    runs-on: qnap-nas
+    runs-on: ubuntu-latest
     permissions:
       actions: write
       contents: write
@@ -566,7 +566,7 @@ jobs:
     name: Status Check
     needs: phase4-gate
     if: always()
-    runs-on: qnap-nas
+    runs-on: ubuntu-latest
     steps:
       - name: Decide status
         run: |

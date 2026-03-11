@@ -13,7 +13,7 @@ permissions:
 jobs:
   trivy-fs:
     name: Trivy Filesystem Scan
-    runs-on: qnap-nas
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
@@ -71,7 +71,7 @@ jobs:
 
   trivy-images:
     name: Trivy Image Scan (${{ matrix.image }})
-    runs-on: qnap-nas
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
