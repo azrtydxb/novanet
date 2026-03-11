@@ -437,4 +437,23 @@ func ExpandEnvVars(cfg *Config) {
 	if v := os.Getenv("NOVANET_XDP_ACCELERATION"); v != "" {
 		cfg.XDPAcceleration = v
 	}
+
+	// Backward-compatible NOVAROUTE_ env var aliases.
+	// These are accepted for users migrating from older deployments that
+	// used the NOVAROUTE_ prefix. NOVANET_ takes precedence (applied above).
+	if cfg.RoutingMode == "" {
+		if v := os.Getenv("NOVAROUTE_ROUTING_MODE"); v != "" {
+			cfg.RoutingMode = v
+		}
+	}
+	if cfg.ClusterCIDR == "" {
+		if v := os.Getenv("NOVAROUTE_CLUSTER_CIDR"); v != "" {
+			cfg.ClusterCIDR = v
+		}
+	}
+	if cfg.TunnelProtocol == "" {
+		if v := os.Getenv("NOVAROUTE_TUNNEL_PROTOCOL"); v != "" {
+			cfg.TunnelProtocol = v
+		}
+	}
 }

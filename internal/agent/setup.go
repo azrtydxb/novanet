@@ -130,7 +130,7 @@ func ResolveNodeParams(logger *zap.Logger, k8sClient *kubernetes.Clientset, para
 		}
 		if params.NodeIPStr == "" {
 			for _, addr := range node.Status.Addresses {
-				if addr.Type == "InternalIP" {
+				if addr.Type == corev1.NodeInternalIP {
 					params.NodeIPStr = addr.Address
 					logger.Info("auto-detected node-ip", zap.String("node_ip", params.NodeIPStr))
 					break
@@ -722,7 +722,7 @@ func GracefulShutdown(s *ShutdownState) {
 	s.Cancel()
 	s.BgWg.Wait()
 	s.Logger.Info("background goroutines stopped")
-	ShutdownRouting(s.Logger, s.NrClient, s.PodCIDR)
+	ShutdownRouting(s.Logger, s.RoutingMgr, s.PodCIDR)
 	s.CniGRPC.GracefulStop()
 	s.Logger.Info("CNI gRPC server stopped")
 	s.AgentGRPC.GracefulStop()
@@ -943,7 +943,7 @@ func (nw *NodeWatcherState) CleanupStaleTunnels(seen map[string]bool) {
 // NodeInternalIP returns the InternalIP address of a Kubernetes node.
 func NodeInternalIP(node *corev1.Node) string {
 	for _, addr := range node.Status.Addresses {
-		if addr.Type == "InternalIP" {
+		if addr.Type == corev1.NodeInternalIP {
 			return addr.Address
 		}
 	}
@@ -973,7 +973,7 @@ func WatchNodesNative(ctx context.Context, logger *zap.Logger, k8sClient *kubern
 			}
 			remoteIP := ""
 			for _, addr := range n.Status.Addresses {
-				if addr.Type == "InternalIP" {
+				if addr.Type == corev1.NodeInternalIP {
 					remoteIP = addr.Address
 					break
 				}

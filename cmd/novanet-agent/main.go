@@ -150,7 +150,7 @@ func main() {
 	ebpfServicesGRPC := agent.StartEBPFServicesServer(logger, cfg, dpConnected, agentSrv)
 	metricsServer := agent.StartMetricsServer(logger, cfg, agentSrv)
 
-	nrClient := agent.InitRoutingMode(ctx, logger, cfg, k8sClient, agentSrv,
+	routingMgr := agent.InitRoutingMode(ctx, logger, cfg, k8sClient, agentSrv,
 		dpClient, nodeIP, params.PodCIDR, params.NodeName, &bgWg)
 
 	agent.WaitForSignal(logger)
@@ -158,7 +158,7 @@ func main() {
 		Logger: logger, Cancel: cancel, BgWg: &bgWg,
 		CniGRPC: cniGRPC, AgentGRPC: agentGRPC, IpamGRPC: ipamGRPC,
 		EbpfServicesGRPC: ebpfServicesGRPC, MetricsServer: metricsServer,
-		DpConn: dpConn, NrClient: nrClient, PodCIDR: params.PodCIDR,
+		DpConn: dpConn, RoutingMgr: routingMgr, PodCIDR: params.PodCIDR,
 		XdpMgr: xdpMgr, WgManager: wgMgr,
 	})
 }
