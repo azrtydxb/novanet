@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -292,6 +293,101 @@ func TestDNSCacheMaxEntriesDefault(t *testing.T) {
 	cache = NewDNSCache(logger, -1)
 	if cache.maxEntries != defaultMaxEntries {
 		t.Fatalf("expected default max entries %d, got %d", defaultMaxEntries, cache.maxEntries)
+	}
+}
+
+// TestDNSCacheConcurrentResolve exercises concurrent Resolve calls to verify
+// that there is no TOCTOU race between reading a cache entry and updating
+// lastAccess. Under the old RLock-then-Lock pattern, an entry could be evicted
+// between the two lock acquisitions, leading to incorrect LRU ordering.
+// This test is designed to trigger the race detector when run with -race.
+func TestDNSCacheConcurrentResolve(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+	// Small cache to force evictions.
+	cache := NewDNSCache(logger, 5)
+
+	var resolveCount atomic.Int64
+	cache.SetResolver(func(_ context.Context, _ string) ([]net.IP, error) {
+		resolveCount.Add(1)
+		return []net.IP{net.ParseIP("10.0.0.1")}, nil
+	})
+
+	const goroutines = 20
+	const iterations = 200
+
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+
+	for g := 0; g < goroutines; g++ {
+		go func(id int) {
+			defer wg.Done()
+			for i := 0; i < iterations; i++ {
+				// Mix of overlapping and unique FQDNs to trigger both
+				// cache hits (lastAccess update) and misses (insert + evict).
+				fqdn := fmt.Sprintf("host-%d.example.com", (id+i)%10)
+				ips := cache.Resolve(fqdn)
+				if len(ips) == 0 {
+					t.Errorf("expected non-empty IPs for %s", fqdn)
+					return
+				}
+			}
+		}(g)
+	}
+
+	wg.Wait()
+
+	size := cache.Size()
+	if size > 5 {
+		t.Fatalf("cache exceeded max entries: got %d, want <= 5", size)
+	}
+	if size == 0 {
+		t.Fatal("cache is unexpectedly empty after concurrent resolves")
+	}
+
+	// With singleflight, concurrent lookups for the same FQDN should be
+	// deduplicated, so we expect fewer resolver calls than total lookups.
+	totalLookups := int64(goroutines * iterations)
+	calls := resolveCount.Load()
+	t.Logf("total lookups: %d, resolver calls: %d (singleflight saved %d)",
+		totalLookups, calls, totalLookups-calls)
+}
+
+// TestDNSCacheSingleflight verifies that concurrent lookups for the same
+// FQDN result in a single resolver call via singleflight deduplication.
+func TestDNSCacheSingleflight(t *testing.T) {
+	cache := testDNSCache()
+
+	var resolveCount atomic.Int32
+	started := make(chan struct{})
+	cache.SetResolver(func(_ context.Context, _ string) ([]net.IP, error) {
+		resolveCount.Add(1)
+		// Block until all goroutines have started to ensure they all
+		// contend on the same singleflight call.
+		<-started
+		return []net.IP{net.ParseIP("5.5.5.5")}, nil
+	})
+
+	const goroutines = 10
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+
+	for i := 0; i < goroutines; i++ {
+		go func() {
+			defer wg.Done()
+			ips := cache.Resolve("dedup.example.com")
+			if len(ips) != 1 || ips[0].String() != "5.5.5.5" {
+				t.Errorf("unexpected IPs: %v", ips)
+			}
+		}()
+	}
+
+	// Give goroutines time to enter Resolve and hit singleflight.
+	time.Sleep(50 * time.Millisecond)
+	close(started)
+	wg.Wait()
+
+	if calls := resolveCount.Load(); calls != 1 {
+		t.Fatalf("expected 1 resolver call (singleflight), got %d", calls)
 	}
 }
 
