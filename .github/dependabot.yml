@@ -1,0 +1,53 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      github_actions-minor-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: cargo
+    directories:
+      - "/dataplane"
+      - "/dataplane/novanet-common"
+      - "/dataplane/novanet-dataplane"
+      - "/dataplane/novanet-ebpf"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      cargo-minor-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      docker-minor-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      gomod-minor-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: helm
+    directories:
+      - "/deploy/helm/novanet"
+      - "/deploy/helm/novanet-operator"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      helm-minor-patch:
+        update-types: [minor, patch]
