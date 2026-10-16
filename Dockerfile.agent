@@ -6,7 +6,7 @@
 #   2. Runtime stage uses the target platform's Alpine.
 
 # ---------- builder (always runs on native build platform) ----------
-FROM --platform=$BUILDPLATFORM golang:1.26.9-bookworm AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27.2-bookworm AS builder
 
 ARG TARGETARCH
 ARG TARGETOS
@@ -34,7 +34,7 @@ RUN curl -fsSL "https://github.com/containernetworking/plugins/releases/download
     | tar -xz -C /out ./loopback
 
 # ---------- runtime (target platform) ----------
-FROM alpine:3.21
+FROM alpine:3.24
 
 RUN apk add --no-cache \
     ca-certificates \
