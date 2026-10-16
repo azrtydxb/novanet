@@ -16,6 +16,7 @@ ARG TARGETARCH
 RUN apt-get update && apt-get install -y --no-install-recommends \
     clang \
     llvm \
+    llvm-dev \
     libelf-dev \
     pkg-config \
     protobuf-compiler \
