@@ -22,6 +22,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc-aarch64-linux-gnu \
     libc6-dev-arm64-cross \
     mold \
+    curl \
+    zstd \
     && rm -rf /var/lib/apt/lists/*
 
 # Install nightly toolchain (required for -Z build-std=core in eBPF builds).
@@ -34,8 +36,18 @@ RUN rustup toolchain install nightly && \
 RUN rustup target add aarch64-unknown-linux-gnu && \
     rustup target add aarch64-unknown-linux-gnu --toolchain nightly
 
-# Install bpf-linker for eBPF linking.
-RUN cargo install bpf-linker
+# Install bpf-linker for eBPF linking. Use the official prebuilt musl binary:
+# it is statically linked against LLVM, so it needs no system LLVM and avoids
+# the `-lLLVM` link failure that `cargo install bpf-linker` hits on this image.
+ARG BPF_LINKER_VERSION=v0.12.0
+RUN case "$(uname -m)" in \
+        x86_64)  bl_arch=x86_64-unknown-linux-musl ;; \
+        aarch64) bl_arch=aarch64-unknown-linux-musl ;; \
+        *) echo "unsupported build arch $(uname -m)" >&2; exit 1 ;; \
+    esac && \
+    curl -fsSL "https://github.com/aya-rs/bpf-linker/releases/download/${BPF_LINKER_VERSION}/bpf-linker-${bl_arch}.tar.zst" \
+        | tar --zstd -x -C /usr/local/bin && \
+    bpf-linker --version
 
 # Configure cross-compilation linker for arm64.
 ENV CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc

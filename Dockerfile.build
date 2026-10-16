@@ -19,14 +19,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     protobuf-compiler \
     mold \
+    curl \
+    zstd \
     && rm -rf /var/lib/apt/lists/*
 
 # Install nightly toolchain (required for -Z build-std=core in eBPF builds).
 RUN rustup toolchain install nightly && \
     rustup component add rust-src --toolchain nightly
 
-# Install bpf-linker for eBPF linking.
-RUN cargo install bpf-linker
+# Install bpf-linker for eBPF linking. Use the official prebuilt musl binary:
+# statically linked against LLVM, so no system LLVM is required.
+ARG BPF_LINKER_VERSION=v0.12.0
+RUN case "$(uname -m)" in \
+        x86_64)  bl_arch=x86_64-unknown-linux-musl ;; \
+        aarch64) bl_arch=aarch64-unknown-linux-musl ;; \
+        *) echo "unsupported build arch $(uname -m)" >&2; exit 1 ;; \
+    esac && \
+    curl -fsSL "https://github.com/aya-rs/bpf-linker/releases/download/${BPF_LINKER_VERSION}/bpf-linker-${bl_arch}.tar.zst" \
+        | tar --zstd -x -C /usr/local/bin && \
+    bpf-linker --version
 
 WORKDIR /build
 
