@@ -20,4 +20,4 @@ aya = "0.14"
 aya-log = "0.3"
 
 [build-dependencies]
-tonic-build = "0.12"
+tonic-build = "0.14"
