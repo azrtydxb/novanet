@@ -195,7 +195,7 @@ jobs:
   phase2-docs-freshness:
     name: "Phase 2: Docs Freshness"
     needs: phase1-gate
-    if: ${{ !cancelled() && needs.phase1-gate.result == 'success' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
+    if: ${{ !cancelled() && needs.phase1-gate.result == 'success' && github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
