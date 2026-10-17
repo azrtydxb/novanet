@@ -204,7 +204,11 @@ jobs:
 
       - name: Check documentation freshness
         run: |
-          CODE_CHANGED=$(git diff --name-only origin/main...HEAD -- '*.go' 'cmd/' 'internal/' 'api/' 'dataplane/' | wc -l)
+          # Dependency manifests/lockfiles are not behavioural changes and must
+          # not demand a docs update (they would block every Dependabot PR).
+          CODE_CHANGED=$(git diff --name-only origin/main...HEAD -- '*.go' 'cmd/' 'internal/' 'api/' 'dataplane/' \
+            ':(exclude)**/Cargo.toml' ':(exclude)**/Cargo.lock' ':(exclude)go.mod' ':(exclude)go.sum' \
+            ':(exclude)**/package.json' ':(exclude)**/package-lock.json' ':(exclude)**/pnpm-lock.yaml' | wc -l)
           DOCS_CHANGED=$(git diff --name-only origin/main...HEAD -- 'docs/' | wc -l)
           if [ "$CODE_CHANGED" -gt 0 ] && [ "$DOCS_CHANGED" -eq 0 ]; then
             echo "::error::Code changed but no documentation updates. Update docs/ before merging."
