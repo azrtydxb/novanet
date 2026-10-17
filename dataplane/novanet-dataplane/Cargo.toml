@@ -16,8 +16,8 @@ clap = { version = "4", features = ["derive"] }
 anyhow = "1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-aya = "0.13"
-aya-log = "0.2"
+aya = "0.14"
+aya-log = "0.3"
 
 [build-dependencies]
 tonic-build = "0.12"

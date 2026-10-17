@@ -2895,12 +2895,12 @@ impl RealMaps {
     // -- XDP operations --
 
     fn attach_xdp(&self, interface: &str, native: bool) -> anyhow::Result<()> {
-        use aya::programs::{Xdp, XdpFlags};
+        use aya::programs::{Xdp, XdpMode};
 
-        let flags = if native {
-            XdpFlags::DRV_MODE
+        let mode = if native {
+            XdpMode::Driver
         } else {
-            XdpFlags::SKB_MODE
+            XdpMode::Skb
         };
         let mode_str = if native { "native" } else { "skb" };
 
@@ -2912,7 +2912,7 @@ impl RealMaps {
             }
         };
 
-        let link_id = prog.attach(interface, flags)?;
+        let link_id = prog.attach(interface, mode)?;
         let prog_id = prog.info()?.id();
         let link = prog.take_link(link_id)?;
 
