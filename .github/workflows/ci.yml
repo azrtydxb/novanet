@@ -3,8 +3,14 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
     branches: [main]
+  # Three-tier test model (azrtydxb/.github docs/ci-standard.md §Test tiers):
+  # PR = fast unit/static tier. The nightly schedule and the v* tag run the
+  # heavier race/coverage/docker jobs (see the per-job `if:` guards below).
+  schedule:
+    - cron: "17 2 * * *"
   workflow_dispatch:
 
 permissions:
@@ -291,9 +297,20 @@ jobs:
           CGO_ENABLED=1 gotestsum \
             --junitfile test-results.xml \
             --format pkgname \
+            -- -count=1 -timeout=10m ./...
+
+      # `-race` + coverage are full-tier signals (docs/ci-standard.md §Test
+      # tiers): nightly, v* tag and manual dispatch only — never a pull_request.
+      - name: Run unit tests (race + coverage)
+        if: ${{ github.event_name != 'pull_request' }}
+        run: |
+          CGO_ENABLED=1 gotestsum \
+            --junitfile test-results-race.xml \
+            --format pkgname \
             -- -race -count=1 -timeout=10m -coverprofile=coverage.out ./...
 
       - name: Check coverage threshold
+        if: ${{ github.event_name != 'pull_request' }}
         run: |
           COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
           echo "Total coverage: ${COVERAGE}%"
@@ -314,7 +331,7 @@ jobs:
           fail-on-error: false
 
       - name: Upload coverage artifact
-        if: always()
+        if: ${{ github.event_name != 'pull_request' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: go-coverage
@@ -446,7 +463,9 @@ jobs:
   phase4-build-rust:
     name: "Phase 4: Build (Rust/eBPF)"
     needs: [phase3-gate, phase1-changes]
-    if: ${{ !cancelled() && needs.phase3-gate.result == 'success' && needs.phase1-changes.outputs.rust == 'true' }}
+    # `docker build` is a heavy signal (docs/ci-standard.md §Test tiers):
+    # nightly / v* tag / manual only, never a pull_request.
+    if: ${{ !cancelled() && needs.phase3-gate.result == 'success' && needs.phase1-changes.outputs.rust == 'true' && github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -470,7 +489,9 @@ jobs:
   phase4-docker-test:
     name: "Phase 4: Docker Test"
     needs: phase3-gate
-    if: ${{ !cancelled() && needs.phase3-gate.result == 'success' }}
+    # `docker build` is a heavy signal (docs/ci-standard.md §Test tiers):
+    # nightly / v* tag / manual only, never a pull_request.
+    if: ${{ !cancelled() && needs.phase3-gate.result == 'success' && github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
