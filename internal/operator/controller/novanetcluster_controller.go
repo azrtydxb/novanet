@@ -236,22 +236,22 @@ func (r *NovaNetClusterReconciler) reconcileClusterRole(ctx context.Context, clu
 			{
 				APIGroups: []string{""},
 				Resources: []string{"pods", "nodes", "namespaces"},
-				Verbs:     []string{"get", "list", "watch"},
+				Verbs:     []string{verbGet, verbList, verbWatch},
 			},
 			{
 				APIGroups: []string{"networking.k8s.io"},
 				Resources: []string{"networkpolicies"},
-				Verbs:     []string{"get", "list", "watch"},
+				Verbs:     []string{verbGet, verbList, verbWatch},
 			},
 			{
 				APIGroups: []string{"discovery.k8s.io"},
 				Resources: []string{"endpointslices"},
-				Verbs:     []string{"get", "list", "watch"},
+				Verbs:     []string{verbGet, verbList, verbWatch},
 			},
 			{
 				APIGroups: []string{"coordination.k8s.io"},
 				Resources: []string{"leases"},
-				Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
+				Verbs:     []string{verbGet, verbList, verbWatch, "create", "update", "patch"},
 			},
 			{
 				APIGroups: []string{""},
@@ -332,7 +332,7 @@ func (r *NovaNetClusterReconciler) reconcileConfigMap(ctx context.Context, clust
 	cfg := novanetConfig{
 		ListenSocket:    "/run/novanet/novanet.sock",
 		CNISocket:       "/run/novanet/cni.sock",
-		DataplaneSocket: "/run/novanet/dataplane.sock",
+		DataplaneSocket: dataplaneSocketPath,
 		ClusterCIDR:     cluster.Spec.Networking.ClusterCIDR,
 		NodeCIDRMask:    24,
 		TunnelProtocol:  cluster.Spec.Networking.TunnelProtocol,
@@ -526,7 +526,7 @@ echo "CNI binary installed."`,
 		Name:            "dataplane",
 		Image:           dataplaneImage,
 		ImagePullPolicy: cluster.Spec.ImagePullPolicy,
-		Command:         []string{"novanet-dataplane", "--socket", "/run/novanet/dataplane.sock"},
+		Command:         []string{"novanet-dataplane", "--socket", dataplaneSocketPath},
 		Resources:       cluster.Spec.Dataplane.Resources,
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: &privileged,
@@ -534,7 +534,7 @@ echo "CNI binary installed."`,
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
-					Command: []string{"test", "-S", "/run/novanet/dataplane.sock"},
+					Command: []string{"test", "-S", dataplaneSocketPath},
 				},
 			},
 			InitialDelaySeconds: 10,
@@ -545,7 +545,7 @@ echo "CNI binary installed."`,
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
-					Command: []string{"test", "-S", "/run/novanet/dataplane.sock"},
+					Command: []string{"test", "-S", dataplaneSocketPath},
 				},
 			},
 			InitialDelaySeconds: 5,
@@ -931,3 +931,14 @@ func (r *NovaNetClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&policyv1.PodDisruptionBudget{}).
 		Complete(r)
 }
+
+const (
+	// dataplaneSocketPath is the unix socket the dataplane container listens on.
+	dataplaneSocketPath = "/run/novanet/dataplane.sock"
+	// verbGet is the RBAC "get" verb.
+	verbGet = "get"
+	// verbList is the RBAC "list" verb.
+	verbList = "list"
+	// verbWatch is the RBAC "watch" verb.
+	verbWatch = "watch"
+)

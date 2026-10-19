@@ -20,7 +20,7 @@ var IntentsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 	Subsystem: subsystem,
 	Name:      "intents_total",
 	Help:      "Total intent operations (set, remove).",
-}, []string{"owner", "type", "operation"})
+}, []string{labelOwner, "type", "operation"})
 
 // FRRTransactionsTotal tracks FRR candidate/commit operations by result (success, failure).
 var FRRTransactionsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -36,7 +36,7 @@ var PolicyViolationsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 	Subsystem: subsystem,
 	Name:      "policy_violations_total",
 	Help:      "Policy check failures.",
-}, []string{"owner", "reason"})
+}, []string{labelOwner, "reason"})
 
 // EventsTotal tracks events emitted by type.
 var EventsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -70,7 +70,7 @@ var ActivePeers = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 	Subsystem: subsystem,
 	Name:      "active_peers",
 	Help:      "Current active BGP peers by owner.",
-}, []string{"owner"})
+}, []string{labelOwner})
 
 // ActivePrefixes tracks the current number of advertised prefixes by owner and protocol.
 var ActivePrefixes = prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -78,7 +78,7 @@ var ActivePrefixes = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 	Subsystem: subsystem,
 	Name:      "active_prefixes",
 	Help:      "Current advertised prefixes.",
-}, []string{"owner", "protocol"})
+}, []string{labelOwner, "protocol"})
 
 // ActiveBFDSessions tracks the current number of BFD sessions by owner.
 var ActiveBFDSessions = prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -86,7 +86,7 @@ var ActiveBFDSessions = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 	Subsystem: subsystem,
 	Name:      "active_bfd_sessions",
 	Help:      "Current BFD sessions.",
-}, []string{"owner"})
+}, []string{labelOwner})
 
 // ActiveOSPFInterfaces tracks the current number of OSPF interfaces by owner.
 var ActiveOSPFInterfaces = prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -94,7 +94,7 @@ var ActiveOSPFInterfaces = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 	Subsystem: subsystem,
 	Name:      "active_ospf_interfaces",
 	Help:      "Current OSPF interfaces.",
-}, []string{"owner"})
+}, []string{labelOwner})
 
 // RegisteredOwners tracks the number of registered owners.
 var RegisteredOwners = prometheus.NewGauge(prometheus.GaugeOpts{
@@ -238,3 +238,6 @@ func RecordEventDropped() {
 func RecordMonitoringError(protocol string) {
 	MonitoringErrors.WithLabelValues(protocol).Inc()
 }
+
+// labelOwner is the Prometheus label naming the intent owner.
+const labelOwner = "owner"
