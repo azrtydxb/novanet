@@ -203,7 +203,7 @@ Runs on every push to `main` and on pull requests. The pipeline is organized int
 
 **Phase 1: Lint**
 - Change detection (only runs relevant linters)
-- Go lint (`golangci-lint` with errcheck, gosec, goconst, revive, noctx, etc.)
+- Go lint (`golangci-lint` with errcheck, gosec, goconst, revive, noctx, etc.). `goconst` is not applied to `_test.go` files, where repeating a fixture literal is clearer than a constant; production code must use named constants for repeated literals.
 - Rust lint (clippy, fmt)
 - Helm lint
 
