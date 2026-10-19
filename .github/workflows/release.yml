@@ -9,6 +9,7 @@ on:
 permissions:
   contents: write
   packages: write
+  id-token: write # Kuvryn Ant OIDC (azrtydxb/ant-setup-action)
 
 env:
   REGISTRY: ghcr.io
@@ -82,6 +83,16 @@ jobs:
             type=sha,format=short,suffix=-${{ matrix.arch.name }}
             type=raw,value=latest-${{ matrix.arch.name }}
 
+      - id: ant-cache-1
+        uses: azrtydxb/ant-setup-action@549f7472cf26b0885441ed9f9a7fab0277545000 # v1
+        with:
+          build-cache: "true"
+          cache-name: agent
+          sccache: "false"
+          go: "false"
+          npm: "false"
+          cargo: "false"
+          pip: "false"
       - name: Build and push
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
@@ -91,8 +102,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: ${{ steps.ant-cache-1.outputs.cache-from }}
+          cache-to: ${{ steps.ant-cache-1.outputs.cache-to }}
           provenance: false
 
   docker-dataplane:
@@ -129,6 +140,16 @@ jobs:
             type=sha,format=short,suffix=-${{ matrix.arch.name }}
             type=raw,value=latest-${{ matrix.arch.name }}
 
+      - id: ant-cache-2
+        uses: azrtydxb/ant-setup-action@549f7472cf26b0885441ed9f9a7fab0277545000 # v1
+        with:
+          build-cache: "true"
+          cache-name: dataplane
+          sccache: "false"
+          go: "false"
+          npm: "false"
+          cargo: "false"
+          pip: "false"
       - name: Build and push
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
@@ -138,8 +159,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: ${{ steps.ant-cache-2.outputs.cache-from }}
+          cache-to: ${{ steps.ant-cache-2.outputs.cache-to }}
           provenance: false
 
   docker-manifest:

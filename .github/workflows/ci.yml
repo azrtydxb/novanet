@@ -19,6 +19,7 @@ permissions:
   pull-requests: write
   security-events: write
   packages: write
+  id-token: write # Kuvryn Ant OIDC (azrtydxb/ant-setup-action)
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -115,8 +116,15 @@ jobs:
         with:
           components: rustfmt, clippy
 
-      - name: Install sccache
-        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+      - name: Install sccache (Kuvryn Ant build cache)
+        uses: azrtydxb/ant-setup-action@549f7472cf26b0885441ed9f9a7fab0277545000 # v1
+        with:
+          build-cache: "true"
+          sccache: "true"
+          go: "false"
+          npm: "false"
+          cargo: "false"
+          pip: "false"
 
       - name: Cache cargo registry
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
@@ -141,6 +149,10 @@ jobs:
             unset RUSTFLAGS
           fi
           cargo clippy -p novanet-common -p novanet-dataplane -- -D warnings
+
+      - name: sccache stats
+        if: always()
+        uses: azrtydxb/ant-setup-action/cache-stats@549f7472cf26b0885441ed9f9a7fab0277545000 # v1
 
   phase1-lint-helm:
     name: "Phase 1: Lint (Helm)"
@@ -357,8 +369,15 @@ jobs:
         with:
           components: rust-src, llvm-tools-preview
 
-      - name: Install sccache
-        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+      - name: Install sccache (Kuvryn Ant build cache)
+        uses: azrtydxb/ant-setup-action@549f7472cf26b0885441ed9f9a7fab0277545000 # v1
+        with:
+          build-cache: "true"
+          sccache: "true"
+          go: "false"
+          npm: "false"
+          cargo: "false"
+          pip: "false"
 
       - name: Cache cargo registry
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
@@ -390,6 +409,10 @@ jobs:
             --profile ci \
             -p novanet-common \
             -p novanet-dataplane
+
+      - name: sccache stats
+        if: always()
+        uses: azrtydxb/ant-setup-action/cache-stats@549f7472cf26b0885441ed9f9a7fab0277545000 # v1
 
       - name: Upload Rust test report
         if: always()
