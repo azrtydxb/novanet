@@ -232,7 +232,7 @@ func (c *Client) ActivateNeighborAFI(ctx context.Context, addr string, afi strin
 		// Enable soft-reconfiguration inbound so we can re-evaluate routing
 		// policy without tearing down the BGP session.
 		fmt.Sprintf("neighbor %s soft-reconfiguration inbound", addr),
-		"exit-address-family",
+		exitAddressFamily,
 	}
 
 	if err := c.runConfig(ctx, commands); err != nil {
@@ -262,7 +262,7 @@ func (c *Client) AdvertiseNetwork(ctx context.Context, prefix string, afi string
 		fmt.Sprintf("router bgp %d", c.getLocalAS(ctx)),
 		fmt.Sprintf("address-family %s", afiName),
 		fmt.Sprintf("network %s", prefix),
-		"exit-address-family",
+		exitAddressFamily,
 	}
 
 	if err := c.runConfig(ctx, commands); err != nil {
@@ -291,7 +291,7 @@ func (c *Client) WithdrawNetwork(ctx context.Context, prefix string, afi string)
 		fmt.Sprintf("router bgp %d", c.getLocalAS(ctx)),
 		fmt.Sprintf("address-family %s", afiName),
 		fmt.Sprintf("no network %s", prefix),
-		"exit-address-family",
+		exitAddressFamily,
 	}
 
 	if err := c.runConfig(ctx, commands); err != nil {
@@ -340,7 +340,7 @@ func (c *Client) SetNeighborMaxPrefix(ctx context.Context, addr string, maxPrefi
 		fmt.Sprintf("router bgp %d", c.getLocalAS(ctx)),
 		fmt.Sprintf("address-family %s", afiName),
 		cmd,
-		"exit-address-family",
+		exitAddressFamily,
 	}
 
 	if err := c.runConfig(ctx, commands); err != nil {
@@ -405,7 +405,7 @@ func (c *Client) AdvertiseNetworkWithRouteMap(ctx context.Context, prefix, afi, 
 		fmt.Sprintf("router bgp %d", c.getLocalAS(ctx)),
 		fmt.Sprintf("address-family %s", afiName),
 		fmt.Sprintf("network %s route-map %s", prefix, routeMap),
-		"exit-address-family",
+		exitAddressFamily,
 	}
 
 	if err := c.runConfig(ctx, commands); err != nil {
@@ -474,3 +474,6 @@ func resolveAFICLI(afi string) (string, error) {
 		return "", fmt.Errorf("%w: %q", ErrUnrecognizedAFI, afi)
 	}
 }
+
+// exitAddressFamily closes an address-family block in FRR configuration.
+const exitAddressFamily = "exit-address-family"

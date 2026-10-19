@@ -428,7 +428,7 @@ func (r *Reconciler) ReconcileOSPF(ctx context.Context, desired []*intent.OSPFIn
 // The value should be the corresponding intent struct pointer.
 func (r *Reconciler) ApplyIntent(ctx context.Context, intentType string, value interface{}) error {
 	switch intentType {
-	case "peer":
+	case intentTypePeer:
 		pi, ok := value.(*intent.PeerIntent)
 		if !ok {
 			return fmt.Errorf("ApplyIntent: expected *intent.PeerIntent, got %T: %w", value, ErrUnexpectedIntentType)
@@ -496,7 +496,7 @@ func (r *Reconciler) RemoveIntent(ctx context.Context, intentType string, key st
 	defer r.mu.Unlock()
 
 	switch intentType {
-	case "peer":
+	case intentTypePeer:
 		mapKey := peerKey(key)
 		ap, ok := r.appliedPeers[mapKey]
 		if !ok {
@@ -687,12 +687,12 @@ func (r *Reconciler) monitorBGPNeighbors(ctx context.Context) {
 		prev, existed := r.lastBGPStates[nbr.Address]
 		if existed && prev != nbr.State {
 			if nbr.State == bgpStateEstablished {
-				r.eventPublisher.PublishRouteEvent(uint32(rtypes.EventTypePeerUp), r.findPeerOwner(nbr.Address), fmt.Sprintf("BGP peer %s is now %s (was %s)", nbr.Address, nbr.State, prev), map[string]string{"peer": nbr.Address, "state": nbr.State, "previous_state": prev})
+				r.eventPublisher.PublishRouteEvent(uint32(rtypes.EventTypePeerUp), r.findPeerOwner(nbr.Address), fmt.Sprintf("BGP peer %s is now %s (was %s)", nbr.Address, nbr.State, prev), map[string]string{eventKeyPeer: nbr.Address, eventKeyState: nbr.State, eventKeyPreviousState: prev})
 			} else if prev == bgpStateEstablished {
-				r.eventPublisher.PublishRouteEvent(uint32(rtypes.EventTypePeerDown), r.findPeerOwner(nbr.Address), fmt.Sprintf("BGP peer %s is now %s (was %s)", nbr.Address, nbr.State, prev), map[string]string{"peer": nbr.Address, "state": nbr.State, "previous_state": prev})
+				r.eventPublisher.PublishRouteEvent(uint32(rtypes.EventTypePeerDown), r.findPeerOwner(nbr.Address), fmt.Sprintf("BGP peer %s is now %s (was %s)", nbr.Address, nbr.State, prev), map[string]string{eventKeyPeer: nbr.Address, eventKeyState: nbr.State, eventKeyPreviousState: prev})
 			}
 		} else if !existed && nbr.State == bgpStateEstablished {
-			r.eventPublisher.PublishRouteEvent(uint32(rtypes.EventTypePeerUp), r.findPeerOwner(nbr.Address), fmt.Sprintf("BGP peer %s is Established", nbr.Address), map[string]string{"peer": nbr.Address, "state": nbr.State})
+			r.eventPublisher.PublishRouteEvent(uint32(rtypes.EventTypePeerUp), r.findPeerOwner(nbr.Address), fmt.Sprintf("BGP peer %s is Established", nbr.Address), map[string]string{eventKeyPeer: nbr.Address, eventKeyState: nbr.State})
 		}
 		r.lastBGPStates[nbr.Address] = nbr.State
 	}
@@ -705,7 +705,7 @@ func (r *Reconciler) monitorBGPNeighbors(ctx context.Context) {
 	for addr, prevState := range r.lastBGPStates {
 		if !currentBGP[addr] {
 			if prevState == bgpStateEstablished {
-				r.eventPublisher.PublishRouteEvent(uint32(rtypes.EventTypePeerDown), r.findPeerOwner(addr), fmt.Sprintf("BGP peer %s disappeared from FRR (was %s)", addr, prevState), map[string]string{"peer": addr, "state": "gone", "previous_state": prevState})
+				r.eventPublisher.PublishRouteEvent(uint32(rtypes.EventTypePeerDown), r.findPeerOwner(addr), fmt.Sprintf("BGP peer %s disappeared from FRR (was %s)", addr, prevState), map[string]string{eventKeyPeer: addr, eventKeyState: "gone", eventKeyPreviousState: prevState})
 			}
 			delete(r.lastBGPStates, addr)
 		}
@@ -726,12 +726,12 @@ func (r *Reconciler) monitorBFDPeers(ctx context.Context) {
 		prev, existed := r.lastBFDStates[peer.PeerAddress]
 		if existed && prev != peer.Status {
 			if peer.Status == "up" {
-				r.eventPublisher.PublishRouteEvent(uint32(rtypes.EventTypeBFDUp), r.findBFDOwner(peer.PeerAddress), fmt.Sprintf("BFD peer %s is now up (was %s)", peer.PeerAddress, prev), map[string]string{"peer": peer.PeerAddress, "status": peer.Status, "previous_status": prev})
+				r.eventPublisher.PublishRouteEvent(uint32(rtypes.EventTypeBFDUp), r.findBFDOwner(peer.PeerAddress), fmt.Sprintf("BFD peer %s is now up (was %s)", peer.PeerAddress, prev), map[string]string{eventKeyPeer: peer.PeerAddress, eventKeyStatus: peer.Status, "previous_status": prev})
 			} else {
-				r.eventPublisher.PublishRouteEvent(uint32(rtypes.EventTypeBFDDown), r.findBFDOwner(peer.PeerAddress), fmt.Sprintf("BFD peer %s is now %s (was %s)", peer.PeerAddress, peer.Status, prev), map[string]string{"peer": peer.PeerAddress, "status": peer.Status, "previous_status": prev})
+				r.eventPublisher.PublishRouteEvent(uint32(rtypes.EventTypeBFDDown), r.findBFDOwner(peer.PeerAddress), fmt.Sprintf("BFD peer %s is now %s (was %s)", peer.PeerAddress, peer.Status, prev), map[string]string{eventKeyPeer: peer.PeerAddress, eventKeyStatus: peer.Status, "previous_status": prev})
 			}
 		} else if !existed && peer.Status == "up" {
-			r.eventPublisher.PublishRouteEvent(uint32(rtypes.EventTypeBFDUp), r.findBFDOwner(peer.PeerAddress), fmt.Sprintf("BFD peer %s is up", peer.PeerAddress), map[string]string{"peer": peer.PeerAddress, "status": peer.Status})
+			r.eventPublisher.PublishRouteEvent(uint32(rtypes.EventTypeBFDUp), r.findBFDOwner(peer.PeerAddress), fmt.Sprintf("BFD peer %s is up", peer.PeerAddress), map[string]string{eventKeyPeer: peer.PeerAddress, eventKeyStatus: peer.Status})
 		}
 		r.lastBFDStates[peer.PeerAddress] = peer.Status
 	}
@@ -744,7 +744,7 @@ func (r *Reconciler) monitorBFDPeers(ctx context.Context) {
 	for addr, prevStatus := range r.lastBFDStates {
 		if !currentBFD[addr] {
 			if prevStatus == "up" {
-				r.eventPublisher.PublishRouteEvent(uint32(rtypes.EventTypeBFDDown), r.findBFDOwner(addr), fmt.Sprintf("BFD peer %s disappeared from FRR (was %s)", addr, prevStatus), map[string]string{"peer": addr, "status": "gone", "previous_status": prevStatus})
+				r.eventPublisher.PublishRouteEvent(uint32(rtypes.EventTypeBFDDown), r.findBFDOwner(addr), fmt.Sprintf("BFD peer %s disappeared from FRR (was %s)", addr, prevStatus), map[string]string{eventKeyPeer: addr, eventKeyStatus: "gone", "previous_status": prevStatus})
 			}
 			delete(r.lastBFDStates, addr)
 		}
@@ -765,12 +765,12 @@ func (r *Reconciler) monitorOSPFNeighbors(ctx context.Context) {
 		prevInfo, existed := r.lastOSPFStates[nbr.NeighborID]
 		if existed && prevInfo.State != nbr.State {
 			if nbr.State == ospfStateFull {
-				r.eventPublisher.PublishRouteEvent(uint32(rtypes.EventTypeOSPFNeighborUp), r.findOSPFOwnerByNeighbor(nbr.Interface), fmt.Sprintf("OSPF neighbor %s is now %s (was %s)", nbr.NeighborID, nbr.State, prevInfo.State), map[string]string{"neighbor_id": nbr.NeighborID, "state": nbr.State, "previous_state": prevInfo.State})
+				r.eventPublisher.PublishRouteEvent(uint32(rtypes.EventTypeOSPFNeighborUp), r.findOSPFOwnerByNeighbor(nbr.Interface), fmt.Sprintf("OSPF neighbor %s is now %s (was %s)", nbr.NeighborID, nbr.State, prevInfo.State), map[string]string{eventKeyNeighborID: nbr.NeighborID, eventKeyState: nbr.State, eventKeyPreviousState: prevInfo.State})
 			} else if prevInfo.State == ospfStateFull {
-				r.eventPublisher.PublishRouteEvent(uint32(rtypes.EventTypeOSPFNeighborDown), r.findOSPFOwnerByNeighbor(nbr.Interface), fmt.Sprintf("OSPF neighbor %s is now %s (was %s)", nbr.NeighborID, nbr.State, prevInfo.State), map[string]string{"neighbor_id": nbr.NeighborID, "state": nbr.State, "previous_state": prevInfo.State})
+				r.eventPublisher.PublishRouteEvent(uint32(rtypes.EventTypeOSPFNeighborDown), r.findOSPFOwnerByNeighbor(nbr.Interface), fmt.Sprintf("OSPF neighbor %s is now %s (was %s)", nbr.NeighborID, nbr.State, prevInfo.State), map[string]string{eventKeyNeighborID: nbr.NeighborID, eventKeyState: nbr.State, eventKeyPreviousState: prevInfo.State})
 			}
 		} else if !existed && nbr.State == ospfStateFull {
-			r.eventPublisher.PublishRouteEvent(uint32(rtypes.EventTypeOSPFNeighborUp), r.findOSPFOwnerByNeighbor(nbr.Interface), fmt.Sprintf("OSPF neighbor %s is Full", nbr.NeighborID), map[string]string{"neighbor_id": nbr.NeighborID, "state": nbr.State})
+			r.eventPublisher.PublishRouteEvent(uint32(rtypes.EventTypeOSPFNeighborUp), r.findOSPFOwnerByNeighbor(nbr.Interface), fmt.Sprintf("OSPF neighbor %s is Full", nbr.NeighborID), map[string]string{eventKeyNeighborID: nbr.NeighborID, eventKeyState: nbr.State})
 		}
 		r.lastOSPFStates[nbr.NeighborID] = ospfLastState{State: nbr.State, Interface: nbr.Interface}
 	}
@@ -783,7 +783,7 @@ func (r *Reconciler) monitorOSPFNeighbors(ctx context.Context) {
 	for nbrID, prevInfo := range r.lastOSPFStates {
 		if !currentOSPF[nbrID] {
 			if prevInfo.State == ospfStateFull {
-				r.eventPublisher.PublishRouteEvent(uint32(rtypes.EventTypeOSPFNeighborDown), r.findOSPFOwnerByNeighbor(prevInfo.Interface), fmt.Sprintf("OSPF neighbor %s disappeared from FRR (was %s)", nbrID, prevInfo.State), map[string]string{"neighbor_id": nbrID, "state": "gone", "previous_state": prevInfo.State})
+				r.eventPublisher.PublishRouteEvent(uint32(rtypes.EventTypeOSPFNeighborDown), r.findOSPFOwnerByNeighbor(prevInfo.Interface), fmt.Sprintf("OSPF neighbor %s disappeared from FRR (was %s)", nbrID, prevInfo.State), map[string]string{eventKeyNeighborID: nbrID, eventKeyState: "gone", eventKeyPreviousState: prevInfo.State})
 			}
 			delete(r.lastOSPFStates, nbrID)
 		}
@@ -850,12 +850,12 @@ func (r *Reconciler) WithdrawAll(ctx context.Context) error {
 	for key, b := range r.appliedBFD {
 		if err := r.frrClient.RemoveBFDPeer(ctx, b.PeerAddress, b.InterfaceName); err != nil {
 			r.logger.Error("WithdrawAll: failed to remove BFD peer",
-				zap.String("peer", b.PeerAddress),
+				zap.String(eventKeyPeer, b.PeerAddress),
 				zap.Error(err),
 			)
 			errs = append(errs, fmt.Errorf("remove BFD peer %s: %w", b.PeerAddress, err))
 		} else {
-			r.logger.Info("WithdrawAll: removed BFD peer", zap.String("peer", b.PeerAddress))
+			r.logger.Info("WithdrawAll: removed BFD peer", zap.String(eventKeyPeer, b.PeerAddress))
 			delete(r.appliedBFD, key)
 		}
 	}
@@ -1281,7 +1281,7 @@ func (r *Reconciler) applyBFDIntent(ctx context.Context, b *intent.BFDIntent) er
 	metrics.RecordFRRTransaction("success", duration)
 
 	r.logger.Info("applied BFD intent",
-		zap.String("peer", b.PeerAddress),
+		zap.String(eventKeyPeer, b.PeerAddress),
 		zap.String("owner", b.Owner),
 	)
 	return nil
@@ -1299,7 +1299,7 @@ func (r *Reconciler) removeBFDFromFRR(ctx context.Context, peerAddr string, ifac
 	}
 	metrics.RecordFRRTransaction("success", duration)
 
-	r.logger.Info("removed BFD peer from FRR", zap.String("peer", peerAddr))
+	r.logger.Info("removed BFD peer from FRR", zap.String(eventKeyPeer, peerAddr))
 	return nil
 }
 
@@ -1546,3 +1546,14 @@ func ospfEqual(a, b *intent.OSPFIntent) bool {
 		a.DeadInterval == b.DeadInterval &&
 		a.IPv6 == b.IPv6
 }
+
+const (
+	intentTypePeer = "peer"
+
+	// Keys of the event detail maps and structured log fields.
+	eventKeyPeer          = "peer"
+	eventKeyPreviousState = "previous_state"
+	eventKeyNeighborID    = "neighbor_id"
+	eventKeyStatus        = "status"
+	eventKeyState         = "state"
+)

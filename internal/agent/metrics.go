@@ -6,49 +6,54 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+const (
+	metricNamespace = "novanet"
+	metricSubsystem = "agent"
+)
+
 // Prometheus metrics for the agent.
 var (
 	MetricEndpoints = prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: "novanet",
-		Subsystem: "agent",
+		Namespace: metricNamespace,
+		Subsystem: metricSubsystem,
 		Name:      "endpoints_total",
 		Help:      "Number of pod endpoints managed by the agent.",
 	})
 	MetricPolicies = prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: "novanet",
-		Subsystem: "agent",
+		Namespace: metricNamespace,
+		Subsystem: metricSubsystem,
 		Name:      "policies_total",
 		Help:      "Number of compiled policy rules.",
 	})
 	MetricTunnels = prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: "novanet",
-		Subsystem: "agent",
+		Namespace: metricNamespace,
+		Subsystem: metricSubsystem,
 		Name:      "tunnels_total",
 		Help:      "Number of overlay tunnels.",
 	})
 	MetricIdentities = prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: "novanet",
-		Subsystem: "agent",
+		Namespace: metricNamespace,
+		Subsystem: metricSubsystem,
 		Name:      "identities_total",
 		Help:      "Number of distinct identities.",
 	})
 	MetricCNIAddLatency = prometheus.NewHistogram(prometheus.HistogramOpts{
-		Namespace: "novanet",
+		Namespace: metricNamespace,
 		Subsystem: "cni",
 		Name:      "add_duration_seconds",
 		Help:      "Latency of CNI ADD operations.",
 		Buckets:   prometheus.DefBuckets,
 	})
 	MetricCNIDelLatency = prometheus.NewHistogram(prometheus.HistogramOpts{
-		Namespace: "novanet",
+		Namespace: metricNamespace,
 		Subsystem: "cni",
 		Name:      "del_duration_seconds",
 		Help:      "Latency of CNI DEL operations.",
 		Buckets:   prometheus.DefBuckets,
 	})
 	MetricRemoteEndpoints = prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: "novanet",
-		Subsystem: "agent",
+		Namespace: metricNamespace,
+		Subsystem: metricSubsystem,
 		Name:      "remote_endpoints_total",
 		Help:      "Number of remote pod endpoints synced for cross-node identity resolution.",
 	})

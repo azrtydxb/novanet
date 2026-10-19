@@ -6,25 +6,28 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+// metricNamespace is the Prometheus namespace shared by all NovaNet metrics.
+const metricNamespace = "novanet"
+
 var (
 	// FlowTotal counts observed network flows by source identity, destination
 	// identity, and verdict.
 	FlowTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Namespace: "novanet",
+		Namespace: metricNamespace,
 		Name:      "flow_total",
 		Help:      "Total observed network flows.",
 	}, []string{"src_identity", "dst_identity", "verdict"})
 
 	// DropsTotal counts dropped packets by reason.
 	DropsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Namespace: "novanet",
+		Namespace: metricNamespace,
 		Name:      "drops_total",
 		Help:      "Total dropped packets by reason.",
 	}, []string{"reason"})
 
 	// PolicyVerdictTotal counts policy evaluation results by action.
 	PolicyVerdictTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Namespace: "novanet",
+		Namespace: metricNamespace,
 		Name:      "policy_verdict_total",
 		Help:      "Total policy verdict evaluations by action.",
 	}, []string{"action"})
@@ -32,7 +35,7 @@ var (
 	// TCPConnectionTotal counts TCP connection events by flag type
 	// (SYN, FIN, RST) for connection lifecycle observability.
 	TCPConnectionTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Namespace: "novanet",
+		Namespace: metricNamespace,
 		Subsystem: "dataplane",
 		Name:      "tcp_connection_total",
 		Help:      "Total TCP connection events by flag type.",
@@ -41,7 +44,7 @@ var (
 	// TCPLatencySeconds observes estimated TCP round-trip latency derived from
 	// flow events. Buckets span datacenter-range latencies (10µs to 100ms).
 	TCPLatencySeconds = prometheus.NewHistogram(prometheus.HistogramOpts{
-		Namespace: "novanet",
+		Namespace: metricNamespace,
 		Subsystem: "dataplane",
 		Name:      "tcp_latency_seconds",
 		Help:      "Estimated TCP round-trip latency from flow events.",
