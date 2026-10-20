@@ -22,7 +22,7 @@ use aya_ebpf::{
     bindings::TC_ACT_OK as BPF_TC_ACT_OK,
     bindings::TC_ACT_SHOT as BPF_TC_ACT_SHOT,
     bindings::{bpf_tunnel_key, BPF_F_ZERO_CSUM_TX, BPF_SK_LOOKUP_F_REPLACE},
-    helpers::gen::{bpf_sk_assign, bpf_sk_lookup_tcp, bpf_sk_release},
+    helpers::generated::{bpf_sk_assign, bpf_sk_lookup_tcp, bpf_sk_release},
     helpers::{bpf_get_socket_cookie, bpf_redirect, bpf_skb_set_tunnel_key},
     macros::{cgroup_sock_addr, classifier, map, sk_lookup, sk_msg, sock_ops},
     maps::{Array, HashMap, LruHashMap, PerCpuArray, PerCpuHashMap, RingBuf, SockHash},
@@ -295,7 +295,7 @@ fn parse_l4_ports(ctx: &TcContext, l4_offset: usize, protocol: u8) -> (u16, u16,
                 } else {
                     0
                 };
-                (u16::from_be(src), u16::from_be(dst), flags)
+                (u16::from_be_bytes(src), u16::from_be_bytes(dst), flags)
             } else {
                 (0, 0, 0)
             }
@@ -303,9 +303,9 @@ fn parse_l4_ports(ctx: &TcContext, l4_offset: usize, protocol: u8) -> (u16, u16,
         17 => {
             // UDP
             if let Ok(udp) = ctx.load::<UdpHdr>(l4_offset) {
-                let src = udp.source;
-                let dst = udp.dest;
-                (u16::from_be(src), u16::from_be(dst), 0)
+                let src = udp.src;
+                let dst = udp.dst;
+                (u16::from_be_bytes(src), u16::from_be_bytes(dst), 0)
             } else {
                 (0, 0, 0)
             }
@@ -918,7 +918,7 @@ fn try_tc_ingress(ctx: &mut TcContext) -> Result<i32, ()> {
     // Parse Ethernet header.
     let eth: EthHdr = ctx.load(0).map_err(|_| ())?;
     let ether_type = eth.ether_type;
-    if ether_type != EtherType::Ipv4 {
+    if ether_type != u16::from(EtherType::Ipv4) {
         return Ok(BPF_TC_ACT_OK as i32);
     }
 
@@ -926,15 +926,15 @@ fn try_tc_ingress(ctx: &mut TcContext) -> Result<i32, ()> {
     let ipv4: Ipv4Hdr = ctx.load(ETH_HLEN).map_err(|_| ())?;
     // Convert IPs from raw packet bytes to canonical big-endian u32.
     // This matches Go's binary.BigEndian.Uint32() used for map keys.
-    // u32::to_be() is a no-op on big-endian and a byte-swap on little-endian,
-    // so it works correctly on both ARM64 and AMD64.
-    let src_ip = u32::to_be(ipv4.src_addr);
-    let dst_ip = u32::to_be(ipv4.dst_addr);
+    // network-types 0.2 exposes addresses as [u8; 4] in packet (network) order;
+    // u32::from_be_bytes() yields the same value on ARM64 and AMD64.
+    let src_ip = u32::from_be_bytes(ipv4.src_addr);
+    let dst_ip = u32::from_be_bytes(ipv4.dst_addr);
     let protocol = ipv4.proto as u8;
     let ihl = (ipv4.ihl() as usize) * 4;
     let l4_offset = ETH_HLEN + ihl;
     let tot_len = ipv4.tot_len;
-    let total_len = u16::from_be(tot_len) as u64;
+    let total_len = u16::from_be_bytes(tot_len) as u64;
 
     let (src_port, dst_port, tcp_flags) = parse_l4_ports(ctx, l4_offset, protocol);
 
@@ -1072,19 +1072,19 @@ fn try_tc_egress(ctx: &mut TcContext) -> Result<i32, ()> {
     // Parse Ethernet header.
     let eth: EthHdr = ctx.load(0).map_err(|_| ())?;
     let ether_type = eth.ether_type;
-    if ether_type != EtherType::Ipv4 {
+    if ether_type != u16::from(EtherType::Ipv4) {
         return Ok(BPF_TC_ACT_OK as i32);
     }
 
     // Parse IPv4 header.
     let ipv4: Ipv4Hdr = ctx.load(ETH_HLEN).map_err(|_| ())?;
-    let src_ip = u32::to_be(ipv4.src_addr);
-    let dst_ip = u32::to_be(ipv4.dst_addr);
+    let src_ip = u32::from_be_bytes(ipv4.src_addr);
+    let dst_ip = u32::from_be_bytes(ipv4.dst_addr);
     let protocol = ipv4.proto as u8;
     let ihl = (ipv4.ihl() as usize) * 4;
     let l4_offset = ETH_HLEN + ihl;
     let tot_len = ipv4.tot_len;
-    let total_len = u16::from_be(tot_len) as u64;
+    let total_len = u16::from_be_bytes(tot_len) as u64;
 
     let (src_port, dst_port, tcp_flags) = parse_l4_ports(ctx, l4_offset, protocol);
 
@@ -1417,18 +1417,18 @@ fn try_tc_tunnel_ingress(ctx: &mut TcContext) -> Result<i32, ()> {
     // and redirect to the destination pod's veth interface.
     let eth: EthHdr = ctx.load(0).map_err(|_| ())?;
     let ether_type = eth.ether_type;
-    if ether_type != EtherType::Ipv4 {
+    if ether_type != u16::from(EtherType::Ipv4) {
         return Ok(BPF_TC_ACT_OK as i32);
     }
 
     let ipv4: Ipv4Hdr = ctx.load(ETH_HLEN).map_err(|_| ())?;
-    let src_ip = u32::to_be(ipv4.src_addr);
-    let dst_ip = u32::to_be(ipv4.dst_addr);
+    let src_ip = u32::from_be_bytes(ipv4.src_addr);
+    let dst_ip = u32::from_be_bytes(ipv4.dst_addr);
     let protocol = ipv4.proto as u8;
     let ihl = (ipv4.ihl() as usize) * 4;
     let l4_offset = ETH_HLEN + ihl;
     let tot_len = ipv4.tot_len;
-    let total_len = u16::from_be(tot_len) as u64;
+    let total_len = u16::from_be_bytes(tot_len) as u64;
 
     let (src_port, dst_port, tcp_flags) = parse_l4_ports(ctx, l4_offset, protocol);
 
@@ -1667,13 +1667,13 @@ fn try_tc_host_ingress(ctx: &mut TcContext) -> Result<i32, ()> {
 
     let eth: EthHdr = ctx.load(0).map_err(|_| ())?;
     let ether_type = eth.ether_type;
-    if ether_type != EtherType::Ipv4 {
+    if ether_type != u16::from(EtherType::Ipv4) {
         return Ok(BPF_TC_ACT_OK as i32);
     }
 
     let ipv4: Ipv4Hdr = ctx.load(ETH_HLEN).map_err(|_| ())?;
-    let src_ip = u32::to_be(ipv4.src_addr);
-    let dst_ip = u32::to_be(ipv4.dst_addr);
+    let src_ip = u32::from_be_bytes(ipv4.src_addr);
+    let dst_ip = u32::from_be_bytes(ipv4.dst_addr);
     let protocol = ipv4.proto as u8;
     let ihl = (ipv4.ihl() as usize) * 4;
     let l4_offset = ETH_HLEN + ihl;
