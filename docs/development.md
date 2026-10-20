@@ -148,6 +148,10 @@ cd dataplane && cargo test --package novanet-common
 
 Note: `novanet-ebpf` cannot be unit-tested (eBPF bytecode runs in kernel only). It is validated via integration tests.
 
+### Packet header types in `novanet-ebpf`
+
+`novanet-ebpf` uses `aya-ebpf` 0.2 and `network-types` 0.2. The `network-types` header structs expose multi-byte fields as `[u8; N]` in network byte order (for example `Ipv4Hdr::src_addr: [u8; 4]`, `UdpHdr::src`/`dst: [u8; 2]`), so convert them with `u16::from_be_bytes` / `u32::from_be_bytes` to get host-order values. `EthHdr::ether_type` is a raw `u16`; compare it with `u16::from(EtherType::Ipv4)`. The generated kernel helpers (`bpf_sk_assign`, `bpf_sk_lookup_tcp`, `bpf_sk_release`) live in `aya_ebpf::helpers::generated`. Because the Phase 4 Docker build is the only place the eBPF crate is compiled in CI, check dependency bumps for this crate with `docker build -f Dockerfile.dataplane .`.
+
 ### Linting
 
 ```bash
