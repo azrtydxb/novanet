@@ -42,8 +42,8 @@ jobs:
       helm: ${{ steps.filter.outputs.helm }}
       docs: ${{ steps.filter.outputs.docs }}
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
           filters: |
@@ -66,11 +66,11 @@ jobs:
     if: needs.phase1-changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -84,7 +84,7 @@ jobs:
           fi
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@9fae48acfc02a90574d7c304a1758ef9895495fa # v7
+        uses: golangci/golangci-lint-action@v9
         with:
           args: ${{ github.event_name == 'pull_request' && '--new-from-rev=origin/main' || '' }}
 
@@ -103,7 +103,7 @@ jobs:
     if: needs.phase1-changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@v7
 
       - name: Install system dependencies
         run: |
@@ -112,12 +112,12 @@ jobs:
           sudo apt-get install -y --no-install-recommends mold || true
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@0f1b44df7e9cbb178d781a242338dfa5e243ad7f # nightly
+        uses: dtolnay/rust-toolchain@nightly
         with:
           components: rustfmt, clippy
 
       - name: Install sccache (Kuvryn Ant build cache)
-        uses: azrtydxb/ant-setup-action@549f7472cf26b0885441ed9f9a7fab0277545000 # v1
+        uses: azrtydxb/ant-setup-action@v1
         with:
           build-cache: "true"
           sccache: "true"
@@ -127,7 +127,7 @@ jobs:
           pip: "false"
 
       - name: Cache cargo registry
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -152,7 +152,7 @@ jobs:
 
       - name: sccache stats
         if: always()
-        uses: azrtydxb/ant-setup-action/cache-stats@549f7472cf26b0885441ed9f9a7fab0277545000 # v1
+        uses: azrtydxb/ant-setup-action/cache-stats@v1
 
   phase1-lint-helm:
     name: "Phase 1: Lint (Helm)"
@@ -160,10 +160,10 @@ jobs:
     if: needs.phase1-changes.outputs.helm == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@v7
 
       - name: Install Helm
-        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        uses: azure/setup-helm@v5
 
       - name: Lint Helm chart
         run: helm lint deploy/helm/novanet/
@@ -197,10 +197,10 @@ jobs:
     if: ${{ !cancelled() && needs.phase1-gate.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.x'
 
@@ -216,7 +216,7 @@ jobs:
     if: ${{ !cancelled() && needs.phase1-gate.result == 'success' && github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -240,11 +240,11 @@ jobs:
     if: ${{ !cancelled() && needs.phase1-gate.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -256,7 +256,7 @@ jobs:
         run: govulncheck ./...
 
       - name: Run gitleaks
-        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
+        uses: gitleaks/gitleaks-action@v3
         continue-on-error: true  # requires GITLEAKS_LICENSE for org repos
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -291,9 +291,9 @@ jobs:
     if: ${{ !cancelled() && needs.phase2-gate.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -335,7 +335,7 @@ jobs:
 
       - name: Upload test report
         if: always()
-        uses: dorny/test-reporter@d61b558e8df85cb60d09ca3e5b09653b4477cea7 # v1
+        uses: dorny/test-reporter@v3
         with:
           name: "Go Test Results"
           path: test-results.xml
@@ -344,7 +344,7 @@ jobs:
 
       - name: Upload coverage artifact
         if: ${{ github.event_name != 'pull_request' }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@v7
         with:
           name: go-coverage
           path: coverage.out
@@ -356,7 +356,7 @@ jobs:
     if: ${{ !cancelled() && needs.phase2-gate.result == 'success' && needs.phase1-changes.outputs.rust == 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@v7
 
       - name: Install system dependencies
         run: |
@@ -365,12 +365,12 @@ jobs:
           sudo apt-get install -y --no-install-recommends mold || true
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@0f1b44df7e9cbb178d781a242338dfa5e243ad7f # nightly
+        uses: dtolnay/rust-toolchain@nightly
         with:
           components: rust-src, llvm-tools-preview
 
       - name: Install sccache (Kuvryn Ant build cache)
-        uses: azrtydxb/ant-setup-action@549f7472cf26b0885441ed9f9a7fab0277545000 # v1
+        uses: azrtydxb/ant-setup-action@v1
         with:
           build-cache: "true"
           sccache: "true"
@@ -380,7 +380,7 @@ jobs:
           pip: "false"
 
       - name: Cache cargo registry
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -412,11 +412,11 @@ jobs:
 
       - name: sccache stats
         if: always()
-        uses: azrtydxb/ant-setup-action/cache-stats@549f7472cf26b0885441ed9f9a7fab0277545000 # v1
+        uses: azrtydxb/ant-setup-action/cache-stats@v1
 
       - name: Upload Rust test report
         if: always()
-        uses: dorny/test-reporter@d61b558e8df85cb60d09ca3e5b09653b4477cea7 # v1
+        uses: dorny/test-reporter@v3
         with:
           name: "Rust Test Results"
           path: dataplane/target/nextest/ci/rust-test-results.xml
@@ -464,9 +464,9 @@ jobs:
           - binary: novanet-operator
             path: ./cmd/novanet-operator/
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -477,7 +477,7 @@ jobs:
           CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/${{ matrix.binary }} ${{ matrix.path }}
 
       - name: Upload binary
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.binary }}
           path: bin/${{ matrix.binary }}
@@ -491,7 +491,7 @@ jobs:
     if: ${{ !cancelled() && needs.phase3-gate.result == 'success' && needs.phase1-changes.outputs.rust == 'true' && github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@v7
 
       - name: Build Rust/eBPF via Docker
         run: |
@@ -503,7 +503,7 @@ jobs:
           docker rm novanet-extract
 
       - name: Upload dataplane binary
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@v7
         with:
           name: novanet-dataplane
           path: bin/novanet-dataplane
@@ -517,10 +517,10 @@ jobs:
     if: ${{ !cancelled() && needs.phase3-gate.result == 'success' && github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@v7
 
       - name: Build agent image (no push)
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile.agent
@@ -528,7 +528,7 @@ jobs:
           tags: novanet-agent:test
 
       - name: Build dataplane image (no push)
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile.dataplane
@@ -576,17 +576,17 @@ jobs:
           - image: novanet-dataplane
             dockerfile: Dockerfile.dataplane
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@v7
 
       - name: Log in to GHCR
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ${{ matrix.dockerfile }}
