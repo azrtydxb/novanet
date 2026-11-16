@@ -6,7 +6,7 @@ description = "NovaNet eBPF programs for TC-based packet processing"
 
 [dependencies]
 aya-ebpf = "0.2"
-aya-log-ebpf = "0.2"
+aya-log-ebpf = "0.3"
 novanet-common = { path = "../novanet-common" }
 network-types = "0.2.0"
 
